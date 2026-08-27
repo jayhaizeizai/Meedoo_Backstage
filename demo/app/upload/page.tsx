@@ -52,7 +52,7 @@ export default function UploadPage() {
   const [dragging, setDragging] = useState(false);
   const [title, setTitle] = useState("今天的办公室变身挑战 ✨");
   const [caption, setCaption] = useState("24 小时，我们把空会议室变成了创意空间。你最喜欢哪个细节？ #办公改造 #幕后");
-  const [platforms, setPlatforms] = useState<string[]>(platformOptions.map((platform) => platform.id));
+  const [platforms, setPlatforms] = useState<string[]>([]);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState("");
@@ -63,7 +63,13 @@ export default function UploadPage() {
     let cancelled = false;
     void fetch("/api/upload-post/profile", { cache: "no-store" })
       .then(async (response) => ({ response, data: await response.json() as ConnectionState }))
-      .then(({ data }) => { if (!cancelled) setConnection(data); })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setConnection(data);
+        setPlatforms(data.configured
+          ? platformOptions.filter((platform) => data.connected[platform.id]).map((platform) => platform.id)
+          : []);
+      })
       .catch(() => { if (!cancelled) setConnection({ configured: false, connected: {}, message: "Upload-Post unavailable" }); });
     return () => { cancelled = true; };
   }, [user]);
@@ -100,6 +106,7 @@ export default function UploadPage() {
   }
 
   function togglePlatform(id: string) {
+    if (connection?.configured && !connection.connected[id as keyof ConnectionState["connected"]]) return;
     setPlatforms((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
@@ -195,9 +202,12 @@ export default function UploadPage() {
             <div className="platforms">
               {platformOptions.map((platform) => {
                 const selected = platforms.includes(platform.id);
+                const unavailable = Boolean(connection?.configured && !connection.connected[platform.id]);
                 return (
-                  <button key={platform.id} className={selected ? "selected" : ""} type="button" onClick={() => togglePlatform(platform.id)} aria-pressed={selected}>
-                    <i className={`pi ${platform.className}`}>{platform.icon}</i>{platform.name}<b>{selected ? "✓" : "+"}</b>
+                  <button key={platform.id} className={`${selected ? "selected" : ""}${unavailable ? " unavailable" : ""}`} type="button" disabled={unavailable} onClick={() => togglePlatform(platform.id)} aria-pressed={selected}>
+                    <i className={`pi ${platform.className}`}>{platform.icon}</i>
+                    <span>{platform.name}<small>{connection === null ? text("检查中", "Checking") : !connection.configured ? text("等待配置", "Awaiting setup") : unavailable ? text("未连接", "Not connected") : text("已连接", "Connected")}</small></span>
+                    <b>{unavailable ? "×" : selected ? "✓" : "+"}</b>
                   </button>
                 );
               })}
