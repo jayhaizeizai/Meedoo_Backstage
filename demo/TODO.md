@@ -9,6 +9,8 @@ Last updated: 2026-08-27
 - [x] Lark OAuth login, callback, signed session, logout, and protected routes
 - [x] Linux production service with Nginx, HTTPS, and automatic certificate renewal
 - [x] Lark App ID/Secret stored only in the server environment file
+- [x] Upload-Post profile check, async publish/status APIs, and three-platform UI
+      implemented (live API-key/account validation still pending)
 
 ## P0 — Make publishing real
 
@@ -16,7 +18,7 @@ Last updated: 2026-08-27
       account-connection, rate-limit, and webhook contracts.
 - [ ] Store the Upload-Post API key and webhook secret in the server environment;
       never expose them to the browser or GitHub.
-- [ ] Replace the demo publish action with a server API that accepts one video and
+- [x] Replace the demo publish action with a server API that accepts one video and
       creates TikTok, Instagram, and YouTube Shorts publishing jobs.
 - [ ] Attribute every upload to the authenticated Lark `open_id` and save the
       uploader name, upload time, title, caption, target platforms, and job IDs.
