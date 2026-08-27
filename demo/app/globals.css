@@ -1,0 +1,57 @@
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.nav a {
+  display: block;
+}
+
+.platforms button {
+  cursor: pointer;
+}
+
+.platforms button:not(.selected) {
+  opacity: 0.5;
+  border-color: var(--line);
+  background: #fff;
+}
+
+.platforms button:not(.selected) b {
+  background: #c8ccd6;
+}
+
+.drop.dragging {
+  border-color: var(--p);
+  box-shadow: inset 0 0 0 2px #6757e81c;
+}
+
+.form input:focus,
+.form textarea:focus {
+  border-color: #9d91ef;
+  box-shadow: 0 0 0 3px #6757e812;
+}
+
+.modal {
+  border: 0;
+  padding: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+}
+
+.modal::backdrop {
+  background: #19223577;
+  backdrop-filter: blur(5px);
+}
+
+.modal[open] {
+  display: grid;
+}
