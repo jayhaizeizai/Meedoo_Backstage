@@ -4,6 +4,7 @@ import "../leaderboard.css";
 import "../video-data.css";
 import "./globals.css";
 import { LanguageProvider } from "../components/language-provider";
+import { AuthProvider } from "../components/auth-provider";
 
 export const metadata: Metadata = {
   title: {
@@ -17,7 +18,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="zh-CN">
       <body>
-        <LanguageProvider>{children}</LanguageProvider>
+        <LanguageProvider><AuthProvider>{children}</AuthProvider></LanguageProvider>
       </body>
     </html>
   );

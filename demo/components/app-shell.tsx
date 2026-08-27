@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useLanguage } from "./language-provider";
+import { useAuth } from "./auth-provider";
 
 type AppShellProps = {
   active: "upload" | "dashboard";
@@ -11,6 +12,8 @@ type AppShellProps = {
 
 export function AppShell({ active, status, children }: AppShellProps) {
   const { language, text, toggleLanguage } = useLanguage();
+  const { configured, loading, user, logout } = useAuth();
+  const userInitials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "LK";
 
   return (
     <div className="shell">
@@ -37,8 +40,12 @@ export function AppShell({ active, status, children }: AppShellProps) {
             <b aria-hidden="true">↗</b>
           </div>
           <div className="user">
-            <span className="avatar">MC</span>
-            <div><strong>Mia Chen</strong><small>{text("增长团队", "Growth Team")}</small></div>
+            {user?.avatar ? <img className="avatar auth-avatar" src={user.avatar} alt="" /> : <span className="avatar">{userInitials}</span>}
+            <div>
+              <strong>{loading ? text("检查登录状态", "Checking session") : user?.name ?? text("尚未登录", "Not signed in")}</strong>
+              <small>{user?.email ?? (configured ? "Lark workspace" : text("等待应用配置", "Awaiting app setup"))}</small>
+            </div>
+            {user ? <button className="user-action" type="button" onClick={() => void logout()} title={text("退出登录", "Sign out")}>↪</button> : <Link className="user-action" href="/login" title={text("登录", "Sign in")}>→</Link>}
           </div>
         </div>
       </aside>
