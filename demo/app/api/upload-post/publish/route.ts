@@ -41,9 +41,12 @@ export async function POST(request: NextRequest) {
   const platforms = [...new Set(requestedPlatforms)].filter((item): item is UploadPostPlatform => supportedPlatforms.includes(item as UploadPostPlatform));
   if (!(video instanceof File) || video.size === 0) return error("Choose a video file.", 400, "VIDEO_REQUIRED");
   if (video.size > MAX_VIDEO_BYTES) return error("Video exceeds the 300 MB limit.", 413, "VIDEO_TOO_LARGE");
-  if (!acceptedTypes.has(video.type)) return error("Use an MP4, MOV, or WebM video.", 415, "VIDEO_TYPE_NOT_SUPPORTED");
+  if (!acceptedTypes.has(video.type) && !/\.(mp4|mov|webm)$/i.test(video.name)) return error("Use an MP4, MOV, or WebM video.", 415, "VIDEO_TYPE_NOT_SUPPORTED");
   if (!title || title.length > 100) return error("Title must contain 1–100 characters.", 400, "INVALID_TITLE");
-  if (caption.length > 2200) return error("Caption must be 2,200 characters or fewer.", 400, "INVALID_CAPTION");
+  if (/[<>]/.test(title) || /[<>]/.test(caption)) return error("Title and caption cannot contain < or >.", 400, "INVALID_TEXT_CHARACTERS");
+  const socialText = [title, caption].filter(Boolean).join("\n\n");
+  if (socialText.length > 2200) return error("Title and caption together must be 2,200 characters or fewer.", 400, "INVALID_SOCIAL_TEXT");
+  if (Buffer.byteLength(caption, "utf8") > 5000) return error("Caption must be 5,000 UTF-8 bytes or fewer.", 400, "INVALID_CAPTION");
   if (!platforms.length) return error("Select at least one publishing platform.", 400, "PLATFORM_REQUIRED");
 
   const requestId = randomUUID();
@@ -59,11 +62,11 @@ export async function POST(request: NextRequest) {
   for (const platform of platforms) providerForm.append("platform[]", platform);
 
   if (platforms.includes("tiktok")) {
-    providerForm.append("tiktok_title", [title, caption].filter(Boolean).join("\n\n").slice(0, 2200));
+    providerForm.append("tiktok_title", socialText);
     providerForm.append("post_mode", "DIRECT_POST");
     providerForm.append("disable_inbox_fallback", "true");
   }
-  if (platforms.includes("instagram")) providerForm.append("instagram_title", [title, caption].filter(Boolean).join("\n\n").slice(0, 2200));
+  if (platforms.includes("instagram")) providerForm.append("instagram_title", socialText);
   if (platforms.includes("youtube")) {
     providerForm.append("youtube_title", title.slice(0, 100));
     providerForm.append("youtube_description", caption.slice(0, 5000));

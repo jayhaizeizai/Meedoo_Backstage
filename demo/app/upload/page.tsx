@@ -12,6 +12,12 @@ const platformOptions = [
   { id: "youtube", name: "YouTube Shorts", icon: "▶", className: "yt" },
 ] as const;
 
+const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
+const MAX_TITLE_CHARACTERS = 100;
+const MAX_SOCIAL_TEXT_CHARACTERS = 2200;
+const MAX_YOUTUBE_DESCRIPTION_BYTES = 5000;
+const acceptedVideoTypes = new Set(["video/mp4", "video/quicktime", "video/webm"]);
+
 type ConnectionState = {
   configured: boolean;
   profile?: string | null;
@@ -50,11 +56,12 @@ export default function UploadPage() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [title, setTitle] = useState("今天的办公室变身挑战 ✨");
-  const [caption, setCaption] = useState("24 小时，我们把空会议室变成了创意空间。你最喜欢哪个细节？ #办公改造 #幕后");
+  const [title, setTitle] = useState("");
+  const [caption, setCaption] = useState("");
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [publishError, setPublishError] = useState("");
   const [job, setJob] = useState<PublishJob | null>(null);
 
@@ -89,8 +96,22 @@ export default function UploadPage() {
   }, [job?.requestId, job?.status]);
 
   function chooseFile(nextFile?: File) {
-    if (nextFile) setFile(nextFile);
-    else fileInputRef.current?.click();
+    if (!nextFile) {
+      fileInputRef.current?.click();
+      return;
+    }
+    setPublishError("");
+    setUploadProgress(null);
+    if (nextFile.size > MAX_VIDEO_BYTES) {
+      setPublishError(text("视频不能超过 300 MB。", "Video must be 300 MB or smaller."));
+      return;
+    }
+    if (!acceptedVideoTypes.has(nextFile.type) && !/\.(mp4|mov|webm)$/i.test(nextFile.name)) {
+      setPublishError(text("请选择 MP4、MOV 或 WebM 视频。", "Choose an MP4, MOV, or WebM video."));
+      return;
+    }
+    setFile(nextFile);
+    setTitle(nextFile.name.replace(/\.[^.]+$/, "").slice(0, MAX_TITLE_CHARACTERS));
   }
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -112,8 +133,13 @@ export default function UploadPage() {
 
   async function publish() {
     if (!file || !user) return;
+    if (validationError) {
+      setPublishError(validationError);
+      return;
+    }
     setPublishError("");
     setPublishing(true);
+    setUploadProgress(0);
     const form = new FormData();
     form.append("video", file);
     form.append("title", title.trim());
@@ -121,9 +147,28 @@ export default function UploadPage() {
     form.append("platforms", JSON.stringify(platforms));
 
     try {
-      const response = await fetch("/api/upload-post/publish", { method: "POST", body: form });
-      const data = await response.json() as { message?: string; requestId?: string; status?: string; results?: unknown };
-      if (!response.ok || !data.requestId) throw new Error(data.message || text("发布请求失败", "Publishing request failed"));
+      const data = await new Promise<{ requestId: string; status?: string; results?: unknown }>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", "/api/upload-post/publish");
+        request.timeout = 6 * 60 * 1000;
+        request.upload.onprogress = (event) => {
+          if (event.lengthComputable) setUploadProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+        };
+        request.onload = () => {
+          let payload: { message?: string; requestId?: string; status?: string; results?: unknown } = {};
+          try { payload = JSON.parse(request.responseText || "{}"); } catch { /* Preserve the HTTP status below. */ }
+          if (request.status < 200 || request.status >= 300 || !payload.requestId) {
+            reject(new Error(payload.message || `${text("上传请求失败", "Upload request failed")} (HTTP ${request.status || "—"})`));
+            return;
+          }
+          resolve({ requestId: payload.requestId, status: payload.status, results: payload.results });
+        };
+        request.onerror = () => reject(new Error(text("上传连接中断，请检查 Lark 网络后重试。", "The upload connection was interrupted. Check the Lark network and try again.")));
+        request.ontimeout = () => reject(new Error(text("上传超过 6 分钟，请检查网络后重试。", "The upload exceeded 6 minutes. Check the network and try again.")));
+        request.onabort = () => reject(new Error(text("上传已取消。", "The upload was cancelled.")));
+        request.send(form);
+      });
+      setUploadProgress(100);
       setJob({ requestId: data.requestId, status: data.status ?? "queued", results: normalizeResults(data.results) });
       dialogRef.current?.showModal();
     } catch (cause) {
@@ -134,8 +179,21 @@ export default function UploadPage() {
   }
 
   const connectedCount = platformOptions.filter((platform) => connection?.connected[platform.id]).length;
+  const socialTextLength = title.trim().length + (caption.trim() ? caption.trim().length + 2 : 0);
+  const youtubeDescriptionBytes = new TextEncoder().encode(caption.trim()).length;
+  const validationError = !title.trim()
+    ? text("标题不能为空。", "Title is required.")
+    : title.trim().length > MAX_TITLE_CHARACTERS
+      ? text("标题不能超过 100 个字符。", "Title cannot exceed 100 characters.")
+      : /[<>]/.test(title) || /[<>]/.test(caption)
+        ? text("标题和文案不能包含 < 或 >。", "Title and caption cannot contain < or >.")
+        : socialTextLength > MAX_SOCIAL_TEXT_CHARACTERS
+          ? text("标题与文案合计不能超过 2,200 个字符。", "Title and caption together cannot exceed 2,200 characters.")
+          : youtubeDescriptionBytes > MAX_YOUTUBE_DESCRIPTION_BYTES
+            ? text("文案的 UTF-8 大小不能超过 5,000 字节。", "Caption cannot exceed 5,000 UTF-8 bytes.")
+            : "";
   const selectedPlatformsConnected = platforms.every((platform) => connection?.connected[platform as keyof ConnectionState["connected"]]);
-  const canPublish = Boolean(file && title.trim() && title.trim().length <= 100 && caption.length <= 2200 && platforms.length && user && connection?.configured && selectedPlatformsConnected && !publishing);
+  const canPublish = Boolean(file && !validationError && platforms.length && user && connection?.configured && selectedPlatformsConnected && !publishing);
   const shellStatus = connection === null
     ? { zh: "检查三平台连接", en: "Checking platform connections" }
     : connection.configured
@@ -194,10 +252,11 @@ export default function UploadPage() {
                 <small>{connection?.configured ? text(`${connectedCount} 个平台授权有效`, `${connectedCount} platform connections available`) : text("配置后无需修改前端代码", "No frontend changes needed after setup")}</small>
               </div>
             </div>
-            <label className="label" htmlFor="video-title">{text("视频标题", "Video title")}</label>
-            <input id="video-title" maxLength={100} value={title} onChange={(event) => setTitle(event.target.value)} />
-            <label className="label" htmlFor="caption">{text("文案", "Caption")}</label>
-            <textarea id="caption" maxLength={2200} value={caption} onChange={(event) => setCaption(event.target.value)} />
+            <label className="label field-label" htmlFor="video-title"><span>{text("视频标题", "Video title")}</span><small>{title.length} / 100</small></label>
+            <input id="video-title" maxLength={100} value={title} placeholder={text("选择文件后自动使用文件名", "Uses the filename after selection")} onChange={(event) => setTitle(event.target.value)} />
+            <label className="label field-label" htmlFor="caption"><span>{text("文案", "Caption")}</span><small>{socialTextLength} / 2,200 · {youtubeDescriptionBytes} / 5,000 bytes</small></label>
+            <textarea id="caption" maxLength={2200} value={caption} placeholder={text("输入三个平台共用的文案（可选）", "Shared caption for all platforms (optional)")} onChange={(event) => setCaption(event.target.value)} />
+            <small className={`field-rule${file && validationError ? " invalid" : ""}`}>{file && validationError ? `⚠ ${validationError}` : text("统一规则：标题 1–100 字；标题与文案合计 ≤2,200 字；文案 ≤5,000 UTF-8 bytes；不可包含 < 或 >。", "Combined rules: title 1–100 chars; title + caption ≤2,200 chars; caption ≤5,000 UTF-8 bytes; no < or >.")}</small>
             <span className="label">{text("发布平台", "Publish to")}</span>
             <div className="platforms">
               {platformOptions.map((platform) => {
@@ -218,8 +277,9 @@ export default function UploadPage() {
             {publishError && <div className="publish-error" role="alert">⚠ {publishError}</div>}
             {connection?.configured && !selectedPlatformsConnected && <div className="publish-error connection-warning">{text("请先在 Upload-Post 连接所有已选择的平台。", "Connect every selected platform in Upload-Post first.")}</div>}
             <button className="publish" disabled={!canPublish} onClick={() => void publish()}>
-              ↥ {publishing ? text("正在上传并创建任务…", "Uploading & creating jobs…") : text(`同步发布到 ${platforms.length} 个平台 →`, `Publish to ${platforms.length} platforms →`)}
+              ↥ {publishing ? uploadProgress === 100 ? text("视频已上传，正在创建任务…", "Video uploaded, creating jobs…") : text(`正在上传 ${uploadProgress ?? 0}%`, `Uploading ${uploadProgress ?? 0}%`) : text(`同步发布到 ${platforms.length} 个平台 →`, `Publish to ${platforms.length} platforms →`)}
             </button>
+            {uploadProgress !== null && <div className="upload-meter" aria-label={text("上传进度", "Upload progress")}><span><i style={{ width: `${uploadProgress}%` }} /></span><small>{uploadProgress === 100 && publishing ? text("服务器正在提交至 Upload-Post", "Server is submitting to Upload-Post") : `${uploadProgress}%`}</small></div>}
           </section>
         </div>
       </section>
