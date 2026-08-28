@@ -28,7 +28,13 @@ type ConnectionState = {
 type PlatformResult = {
   platform?: string;
   success?: boolean;
+  status?: string;
   message?: string;
+  error?: string;
+  error_message?: string | null;
+  error_code?: string | null;
+  failure_stage?: string | null;
+  platform_post_id?: string | null;
   post_url?: string | null;
   url?: string | null;
   fallback_to_inbox?: boolean;
@@ -55,6 +61,30 @@ function normalizeResults(value: unknown): PlatformResult[] {
     return Object.entries(value as Record<string, unknown>).map(([platform, result]) => ({ platform, ...(result && typeof result === "object" ? result as PlatformResult : {}) }));
   }
   return [];
+}
+
+function mergeResults(current: PlatformResult[], incoming: PlatformResult[]) {
+  const merged = new Map(current.filter((item) => item.platform).map((item) => [item.platform!, item]));
+  for (const item of incoming) {
+    if (!item.platform) continue;
+    merged.set(item.platform, { ...merged.get(item.platform), ...item });
+  }
+  return [...merged.values()];
+}
+
+function platformResultState(result: PlatformResult | undefined, jobStatus: string | undefined) {
+  if (!result) return "pending" as const;
+  const status = result.status?.toLowerCase();
+  const hasFailure = Boolean(result.error_message || result.error_code || result.failure_stage || result.error)
+    || ["failed", "error", "rejected"].includes(status ?? "")
+    || (["completed", "failed"].includes(jobStatus ?? "") && result.success === false);
+  if (hasFailure) return "failed" as const;
+  if (result.success === true || result.platform_post_id || result.post_url || result.url || ["completed", "success", "published"].includes(status ?? "")) return "completed" as const;
+  return "pending" as const;
+}
+
+function platformFailureReason(result: PlatformResult | undefined, fallback: string) {
+  return result?.error_message || result?.message || result?.error || result?.error_code || result?.failure_stage || fallback;
 }
 
 export default function UploadPage() {
@@ -98,7 +128,7 @@ export default function UploadPage() {
       void fetch(`/api/upload-post/status?request_id=${encodeURIComponent(job.requestId)}`, { cache: "no-store" })
         .then(async (response) => {
           const data = await response.json() as { status?: string; results?: unknown };
-          if (response.ok) setJob((current) => current ? { ...current, status: data.status ?? current.status, results: normalizeResults(data.results) } : current);
+          if (response.ok) setJob((current) => current ? { ...current, status: data.status ?? current.status, results: mergeResults(current.results, normalizeResults(data.results)) } : current);
         })
         .catch(() => undefined);
     }, delay);
@@ -335,7 +365,13 @@ export default function UploadPage() {
             {platformOptions.filter((platform) => platforms.includes(platform.id)).map((platform) => {
               const result = job?.results.find((item) => item.platform === platform.id);
               const link = result?.post_url || result?.url;
-              return <div key={platform.id}><i className={`pi ${platform.className}`}>{platform.icon}</i><span><strong>{platform.name}</strong><small>{result ? result.success === false ? result.message || text("失败", "Failed") : result.fallback_to_inbox ? text("已发送至 TikTok 草稿箱", "Sent to TikTok inbox") : result.message || text("已完成", "Completed") : text("等待结果", "Waiting for result")}</small></span>{link ? <a href={link} target="_blank" rel="noreferrer">↗</a> : <b className={result?.success === false ? "bad" : ""}>{result ? result.success === false ? "!" : "✓" : "…"}</b>}</div>;
+              const state = platformResultState(result, job?.status);
+              const message = state === "failed"
+                ? platformFailureReason(result, text("平台未提供失败原因", "The platform did not provide a failure reason"))
+                : state === "completed"
+                  ? result?.fallback_to_inbox ? text("已发送至 TikTok 草稿箱", "Sent to TikTok inbox") : text("已完成", "Completed")
+                  : text("处理中，请稍候", "Processing, please wait");
+              return <div key={platform.id}><i className={`pi ${platform.className}`}>{platform.icon}</i><span><strong>{platform.name}</strong><small>{message}</small></span>{state === "completed" && link ? <a href={link} target="_blank" rel="noreferrer">↗</a> : <b className={state === "failed" ? "bad" : ""}>{state === "failed" ? "!" : state === "completed" ? "✓" : "…"}</b>}</div>;
             })}
           </div>
           <button onClick={() => job?.status === "completed" ? router.push("/dashboard") : dialogRef.current?.close()}>{job?.status === "completed" ? text("查看 Dashboard →", "View Dashboard →") : text("关闭并稍后查看", "Close and check later")}</button>

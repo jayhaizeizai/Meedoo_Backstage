@@ -7,6 +7,8 @@ import { cleanupExpiredUploadSessions } from "./upload-staging";
 type AnyRecord = Record<string, unknown>;
 const stringValue = (value: unknown) => typeof value === "string" ? value : null;
 const boolValue = (value: unknown) => typeof value === "boolean" ? value : null;
+const failureStatuses = new Set(["failed", "error", "rejected"]);
+const successStatuses = new Set(["completed", "success", "published"]);
 
 function resultsList(value: unknown): AnyRecord[] {
   if (Array.isArray(value)) return value.filter((item): item is AnyRecord => Boolean(item && typeof item === "object"));
@@ -28,13 +30,22 @@ export async function applyStatusPayload(requestId: string, payload: AnyRecord) 
   for (const item of resultsList(payload.results ?? payload.platforms)) {
     const platform = stringValue(item.platform);
     if (!platform) continue;
-    const itemStatus = stringValue(item.status) ?? (item.success === true ? "completed" : item.success === false ? "failed" : status);
+    const rawItemStatus = stringValue(item.status)?.toLowerCase() ?? null;
+    const errorMessage = stringValue(item.error_message ?? item.error);
+    const errorCode = stringValue(item.error_code);
+    const failureStage = stringValue(item.failure_stage);
+    const hasExplicitFailure = Boolean(errorMessage || errorCode || failureStage) || failureStatuses.has(rawItemStatus ?? "");
+    const hasExplicitSuccess = item.success === true || successStatuses.has(rawItemStatus ?? "")
+      || Boolean(stringValue(item.platform_post_id ?? item.post_id ?? item.publish_id) || stringValue(item.post_url ?? item.url));
+    const terminalRequest = ["completed", "failed"].includes(status);
+    const itemStatus = hasExplicitSuccess ? "completed" : hasExplicitFailure || (terminalRequest && item.success === false) ? "failed" : "processing";
+    const itemSuccess = itemStatus === "completed" ? true : itemStatus === "failed" ? false : null;
     await query(`UPDATE publications SET status=$3,success=$4,provider_job_id=COALESCE($5,provider_job_id),
       platform_post_id=COALESCE($6,platform_post_id),post_url=COALESCE($7,post_url),error_message=$8,
       fallback_to_inbox=COALESCE($9,fallback_to_inbox),last_synced_at=now(),updated_at=now()
-      WHERE upload_id=$1 AND platform=$2`, [upload.id,platform,itemStatus,boolValue(item.success),stringValue(item.job_id),
+      WHERE upload_id=$1 AND platform=$2`, [upload.id,platform,itemStatus,itemSuccess,stringValue(item.job_id),
       stringValue(item.platform_post_id ?? item.post_id ?? item.publish_id),stringValue(item.post_url ?? item.url),
-      stringValue(item.error_message ?? item.message ?? item.error),boolValue(item.fallback_to_inbox)]);
+      itemStatus === "failed" ? errorMessage ?? stringValue(item.message) ?? errorCode ?? failureStage : null,boolValue(item.fallback_to_inbox)]);
   }
   if (["completed","failed"].includes(status) && previousStatus !== status) {
     await createNotification(upload.id, `publish_${status}`, status === "completed" ? `MeeDoo: “${upload.title}” publishing completed.` : `MeeDoo: “${upload.title}” publishing failed. Open MeeDoo to retry.`);
