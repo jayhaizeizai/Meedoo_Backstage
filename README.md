@@ -60,6 +60,48 @@ failed-platform retry; object storage remains the recommended production upgrade
 Set `UPLOAD_POST_HISTORY_AFTER` to an ISO timestamp when an environment must
 ignore older provider history, for example after intentionally clearing test data.
 
+## One-time organic history import
+
+`scripts/import-organic-history.mjs` imports videos that were published directly
+on YouTube, Instagram, or TikTok before MeeDoo existed. It is dry-run by default:
+
+```bash
+pnpm history:dry-run
+```
+
+Review `outputs/organic-history-report.json` before applying it to PostgreSQL:
+
+```bash
+node scripts/import-organic-history.mjs --apply-db \
+  --default-owner-name="Jay Lee"
+```
+
+Owners are optional. Unassigned history remains visible in team and video totals
+but is omitted from personal rankings until the member signs in with Lark and
+their `open_id` is added to the owner map.
+
+To back up, rebuild, and populate a Lark Base after granting the app
+`bitable:app`, set `LARK_BASE_APP_TOKEN` and run:
+
+```bash
+node scripts/import-organic-history.mjs --apply-db --sync-lark --reset-lark
+```
+
+A reviewed report can be replayed in another environment without giving that
+environment access to the production Upload-Post profile:
+
+```bash
+node scripts/import-organic-history.mjs \
+  --input-report=outputs/organic-history-report.json --sync-lark --reset-lark
+```
+
+Use `--regroup-input` only when intentionally re-running the automatic matching
+algorithm against the platform rows inside an earlier report.
+
+The script exports every existing table, field, and record to a timestamped JSON
+backup before creating the replacement table. Existing tables are deleted only
+after the replacement has been populated successfully.
+
 ## Lark authentication
 
 Copy `.env.example` to the server environment file and provide real values. In

@@ -123,6 +123,8 @@ export async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS uploads_status_idx ON uploads(status);
     CREATE INDEX IF NOT EXISTS upload_sessions_expiry_idx ON upload_sessions(expires_at);
     CREATE INDEX IF NOT EXISTS publications_status_idx ON publications(status);
+    CREATE UNIQUE INDEX IF NOT EXISTS publications_platform_post_unique
+      ON publications(platform,platform_post_id) WHERE platform_post_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS metric_snapshots_publication_captured_idx ON metric_snapshots(publication_id, captured_at DESC);
   `).then(() => undefined).catch((error) => { global.meedooSchemaReady = undefined; throw error; });
   return global.meedooSchemaReady;
