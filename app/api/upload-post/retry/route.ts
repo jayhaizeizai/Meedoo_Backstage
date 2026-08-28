@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { NextRequest,NextResponse } from "next/server";
 import { query } from "../../../../lib/db";
+import { createMediaUrl } from "../../../../lib/media-url";
 import { getCurrentUser } from "../../../../lib/server-auth";
 import { getUploadPostConfig,parseProviderResponse,providerMessage,supportedPlatforms,uploadPostFetch,UploadPostPlatform } from "../../../../lib/upload-post";
 
@@ -10,14 +9,12 @@ export async function POST(request:NextRequest) {
   if(!await getCurrentUser()) return NextResponse.json({success:false,message:"Authentication required."},{status:401});
   const body=await request.json().catch(()=>({})) as {uploadId?:string;platform?:string};
   if(!body.uploadId||!supportedPlatforms.includes(body.platform as UploadPostPlatform)) return NextResponse.json({success:false,message:"Invalid retry request."},{status:400});
-  const found=await query<{id:string;title:string;caption:string;media_path:string|null;platform:string;status:string}>(`SELECT u.id,u.title,u.caption,u.media_path,p.platform,p.status FROM uploads u JOIN publications p ON p.upload_id=u.id WHERE u.id=$1 AND p.platform=$2`,[body.uploadId,body.platform]);
+  const found=await query<{id:string;title:string;caption:string;original_filename:string;media_path:string|null;platform:string;status:string}>(`SELECT u.id,u.title,u.caption,u.original_filename,u.media_path,p.platform,p.status FROM uploads u JOIN publications p ON p.upload_id=u.id WHERE u.id=$1 AND p.platform=$2`,[body.uploadId,body.platform]);
   const item=found.rows[0];
   if(!item||item.status!=="failed") return NextResponse.json({success:false,message:"Only failed platform jobs can be retried."},{status:409});
   if(!item.media_path) return NextResponse.json({success:false,message:"The original video is unavailable; upload it again."},{status:410});
-  const bytes=await readFile(item.media_path).catch(()=>null);
-  if(!bytes) return NextResponse.json({success:false,message:"The original video is unavailable; upload it again."},{status:410});
   const requestId=randomUUID(); const platform=item.platform as UploadPostPlatform; const {profile}=getUploadPostConfig();
-  const form=new FormData(); form.append("video",new Blob([bytes]),path.basename(item.media_path)); form.append("title",item.title); form.append("description",item.caption); form.append("user",profile); form.append("async_upload","true"); form.append("request_id",requestId); form.append("external_id",item.id); form.append("platform[]",platform);
+  const form=new FormData(); form.append("video",createMediaUrl(item.id,item.original_filename)); form.append("title",item.title); form.append("description",item.caption); form.append("user",profile); form.append("async_upload","true"); form.append("request_id",requestId); form.append("external_id",item.id); form.append("platform[]",platform);
   if(platform==="youtube"){form.append("youtube_title",item.title.slice(0,100));form.append("youtube_description",item.caption.slice(0,5000));}
   if(platform==="instagram") form.append("instagram_title",[item.title,item.caption].filter(Boolean).join("\n\n"));
   if(platform==="tiktok"){form.append("tiktok_title",[item.title,item.caption].filter(Boolean).join("\n\n"));form.append("post_mode","DIRECT_POST");form.append("disable_inbox_fallback","true");}

@@ -38,6 +38,7 @@ UPLOAD_POST_HISTORY_AFTER=
 UPLOAD_POST_WEBHOOK_SECRET=your_webhook_secret
 DATABASE_URL=postgresql://meedoo:password@127.0.0.1:5432/meedoo
 MEEDOO_MEDIA_DIR=/var/lib/meedoo/media
+MEDIA_URL_SECRET=replace_with_a_long_random_secret
 CRON_SECRET=replace_with_a_long_random_secret
 ```
 
@@ -46,6 +47,11 @@ TikTok, Instagram, and YouTube connections. Publishing uses `async_upload=true`,
 stores the provider request/job IDs in PostgreSQL, and polls the Upload-Post
 status endpoint until completion. TikTok uses `DIRECT_POST` with
 inbox fallback disabled so a draft is not reported as a successful public post.
+
+Videos up to 1.5 GB are uploaded to MeeDoo temporary storage in 16 MB resumable
+chunks. After assembly, MeeDoo gives Upload-Post a six-hour signed media URL;
+the API key and local filesystem path never reach the browser. Ready media is
+retained for 72 hours for failed-platform retry, then removed automatically.
 
 `meedoo-sync.timer` imports Upload-Post history and refreshes Analytics every 15
 minutes. The signed `/api/upload-post/webhook` endpoint applies terminal status

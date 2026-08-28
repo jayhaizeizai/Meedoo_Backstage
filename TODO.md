@@ -25,8 +25,10 @@ Last updated: 2026-08-28
 - [x] Add per-platform states: queued, uploading, processing, published, failed,
       and retrying. Show actionable failure messages without leaking provider data.
 - [x] Add webhook signature verification and idempotent webhook processing.
-- [ ] Decide the file-storage flow. Prefer direct-to-object-storage uploads with
-      signed URLs so 300 MB videos do not pass through the Next.js process.
+- [x] Add resumable 16 MB chunk uploads to temporary server storage for videos
+      up to 1.5 GB, signed provider download URLs, and automatic expiry cleanup.
+- [ ] Move temporary media to object storage if concurrency or retention grows
+      beyond the test server's disk and bandwidth capacity.
 
 Definition of done: a signed-in Lark user uploads once, all three real platform
 jobs are created, and MeeDoo displays the final URL/status for each platform.

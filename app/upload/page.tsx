@@ -12,7 +12,7 @@ const platformOptions = [
   { id: "youtube", name: "YouTube Shorts", icon: "▶", className: "yt" },
 ] as const;
 
-const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
+const MAX_VIDEO_BYTES = Math.floor(1.5 * 1024 * 1024 * 1024);
 const MAX_TITLE_CHARACTERS = 100;
 const MAX_SOCIAL_TEXT_CHARACTERS = 2200;
 const MAX_YOUTUBE_DESCRIPTION_BYTES = 5000;
@@ -40,6 +40,15 @@ type PublishJob = {
   results: PlatformResult[];
 };
 
+type StagedUpload = {
+  id: string;
+  chunkSize: number;
+  totalChunks: number;
+  expectedSize: number;
+  receivedChunks: number[];
+  status: string;
+};
+
 function normalizeResults(value: unknown): PlatformResult[] {
   if (Array.isArray(value)) return value as PlatformResult[];
   if (value && typeof value === "object") {
@@ -64,6 +73,7 @@ export default function UploadPage() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [publishError, setPublishError] = useState("");
   const [job, setJob] = useState<PublishJob | null>(null);
+  const [stagedUpload, setStagedUpload] = useState<StagedUpload | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -103,13 +113,25 @@ export default function UploadPage() {
     setPublishError("");
     setUploadProgress(null);
     if (nextFile.size > MAX_VIDEO_BYTES) {
-      setPublishError(text("视频不能超过 300 MB。", "Video must be 300 MB or smaller."));
+      setPublishError(text("视频不能超过 1.5 GB。", "Video must be 1.5 GB or smaller."));
       return;
     }
     if (!acceptedVideoTypes.has(nextFile.type) && !/\.(mp4|mov|webm)$/i.test(nextFile.name)) {
       setPublishError(text("请选择 MP4、MOV 或 WebM 视频。", "Choose an MP4, MOV, or WebM video."));
       return;
     }
+    let restored:StagedUpload|null=null;
+    if (stagedUpload) {
+      void fetch(`/api/uploads/${stagedUpload.id}`, { method: "DELETE" }).catch(() => undefined);
+      window.localStorage.removeItem("meedoo_staged_upload");
+    } else {
+      try {
+        const saved=JSON.parse(window.localStorage.getItem("meedoo_staged_upload")??"null") as {id?:string;filename?:string;size?:number;lastModified?:number}|null;
+        if(saved?.id&&saved.filename===nextFile.name&&saved.size===nextFile.size&&saved.lastModified===nextFile.lastModified)restored={id:saved.id,chunkSize:0,totalChunks:0,expectedSize:nextFile.size,receivedChunks:[],status:"uploading"};
+        else window.localStorage.removeItem("meedoo_staged_upload");
+      } catch { window.localStorage.removeItem("meedoo_staged_upload"); }
+    }
+    setStagedUpload(restored);
     setFile(nextFile);
     setTitle(nextFile.name.replace(/\.[^.]+$/, "").slice(0, MAX_TITLE_CHARACTERS));
   }
@@ -140,36 +162,58 @@ export default function UploadPage() {
     setPublishError("");
     setPublishing(true);
     setUploadProgress(0);
-    const form = new FormData();
-    form.append("video", file);
-    form.append("title", title.trim());
-    form.append("caption", caption.trim());
-    form.append("platforms", JSON.stringify(platforms));
 
     try {
-      const data = await new Promise<{ requestId: string; status?: string; results?: unknown }>((resolve, reject) => {
-        const request = new XMLHttpRequest();
-        request.open("POST", "/api/upload-post/publish");
-        request.timeout = 6 * 60 * 1000;
-        request.upload.onprogress = (event) => {
-          if (event.lengthComputable) setUploadProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
-        };
-        request.onload = () => {
-          let payload: { message?: string; requestId?: string; status?: string; results?: unknown } = {};
-          try { payload = JSON.parse(request.responseText || "{}"); } catch { /* Preserve the HTTP status below. */ }
-          if (request.status < 200 || request.status >= 300 || !payload.requestId) {
-            reject(new Error(payload.message || `${text("上传请求失败", "Upload request failed")} (HTTP ${request.status || "—"})`));
-            return;
+      let stage=stagedUpload;
+      if(stage){
+        const response=await fetch(`/api/uploads/${stage.id}`,{cache:"no-store"});
+        const payload=await response.json() as Partial<StagedUpload>&{message?:string};
+        if(!response.ok)stage=null;else stage={...stage,...payload} as StagedUpload;
+      }
+      if(!stage){
+        const response=await fetch("/api/uploads/init",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({filename:file.name,contentType:file.type,size:file.size})});
+        const payload=await response.json() as {id?:string;chunkSize?:number;totalChunks?:number;message?:string};
+        if(!response.ok||!payload.id||!payload.chunkSize||!payload.totalChunks)throw new Error(payload.message||text("无法创建上传任务。","Could not initialize the upload."));
+        stage={id:payload.id,chunkSize:payload.chunkSize,totalChunks:payload.totalChunks,expectedSize:file.size,receivedChunks:[],status:"uploading"};
+        setStagedUpload(stage);
+        window.localStorage.setItem("meedoo_staged_upload",JSON.stringify({id:stage.id,filename:file.name,size:file.size,lastModified:file.lastModified}));
+      }
+      if(stage.status==="uploading"){
+        const received=new Set(stage.receivedChunks??[]);
+        let completedBytes=[...received].reduce((sum,index)=>sum+Math.min(stage!.chunkSize,file.size-index*stage!.chunkSize),0);
+        setUploadProgress(Math.min(100,Math.round(completedBytes/file.size*100)));
+        for(let index=0;index<stage.totalChunks;index++){
+          if(received.has(index))continue;
+          const chunk=file.slice(index*stage.chunkSize,Math.min(file.size,(index+1)*stage.chunkSize));
+          let lastError:Error|undefined;
+          for(let attempt=0;attempt<3;attempt++){
+            try{
+              await new Promise<void>((resolve,reject)=>{
+                const request=new XMLHttpRequest();request.open("PUT",`/api/uploads/${stage!.id}/chunks/${index}`);request.timeout=10*60*1000;request.setRequestHeader("Content-Type","application/octet-stream");
+                request.upload.onprogress=(event)=>{if(event.lengthComputable)setUploadProgress(Math.min(99,Math.round((completedBytes+event.loaded)/file.size*100)));};
+                request.onload=()=>request.status>=200&&request.status<300?resolve():reject(new Error(`${text("分片上传失败","Chunk upload failed")} (HTTP ${request.status})`));
+                request.onerror=()=>reject(new Error(text("网络连接中断，正在重试分片。","Connection interrupted; retrying this chunk.")));
+                request.ontimeout=()=>reject(new Error(text("单个分片上传超时。","A single chunk timed out.")));
+                request.send(chunk);
+              });
+              lastError=undefined;break;
+            }catch(cause){lastError=cause instanceof Error?cause:new Error("Chunk upload failed");if(attempt<2)await new Promise((resolve)=>window.setTimeout(resolve,1000*(attempt+1)));}
           }
-          resolve({ requestId: payload.requestId, status: payload.status, results: payload.results });
-        };
-        request.onerror = () => reject(new Error(text("上传连接中断，请检查 Lark 网络后重试。", "The upload connection was interrupted. Check the Lark network and try again.")));
-        request.ontimeout = () => reject(new Error(text("上传超过 6 分钟，请检查网络后重试。", "The upload exceeded 6 minutes. Check the network and try again.")));
-        request.onabort = () => reject(new Error(text("上传已取消。", "The upload was cancelled.")));
-        request.send(form);
-      });
+          if(lastError)throw lastError;
+          completedBytes+=chunk.size;received.add(index);setStagedUpload({...stage,receivedChunks:[...received]});
+        }
+        const completeResponse=await fetch(`/api/uploads/${stage.id}/complete`,{method:"POST"});
+        const completePayload=await completeResponse.json() as {message?:string};if(!completeResponse.ok)throw new Error(completePayload.message||text("无法合并视频。","Could not assemble the video."));
+        stage={...stage,status:"ready",receivedChunks:[...received]};setStagedUpload(stage);
+      }
+      if(stage.status!=="ready")throw new Error(text("这个视频上传任务已经被使用，请重新选择文件。","This staged upload has already been used. Choose the file again."));
+      setUploadProgress(100);
+      const publishResponse=await fetch("/api/upload-post/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({uploadSessionId:stage.id,title:title.trim(),caption:caption.trim(),platforms})});
+      const data=await publishResponse.json() as {requestId?:string;status?:string;results?:unknown;message?:string};
+      if(!publishResponse.ok||!data.requestId)throw new Error(data.message||text("发布请求失败","Publishing request failed"));
       setUploadProgress(100);
       setJob({ requestId: data.requestId, status: data.status ?? "queued", results: normalizeResults(data.results) });
+      window.localStorage.removeItem("meedoo_staged_upload");
       dialogRef.current?.showModal();
     } catch (cause) {
       setPublishError(cause instanceof Error ? cause.message : text("发布请求失败", "Publishing request failed"));
@@ -222,17 +266,17 @@ export default function UploadPage() {
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <input ref={fileInputRef} className="sr-only" type="file" accept="video/mp4,video/quicktime" onChange={onFileChange} />
+            <input ref={fileInputRef} className="sr-only" type="file" accept="video/mp4,video/quicktime,video/webm" onChange={onFileChange} />
             <div className="orbit"><b>↥</b></div>
             <h2>{file ? text("视频已就绪", "Video ready") : text("拖放视频到这里", "Drop your video here")}</h2>
-            <p>{file ? `${text("已选择", "Selected")}: ${file.name}` : text("MP4 或 MOV · 最大 300 MB · 推荐 9:16", "MP4 or MOV · Up to 300 MB · 9:16 recommended")}</p>
+            <p>{file ? `${text("已选择", "Selected")}: ${file.name}` : text("MP4、MOV 或 WebM · 最大 1.5 GB · 分片断点续传", "MP4, MOV or WebM · Up to 1.5 GB · resumable chunks")}</p>
             {!file && <button className="choose" type="button">{text("选择视频", "Choose video")}</button>}
             {file && (
               <div className="file" style={{ display: "flex" }}>
                 <span className="cover">▶</span>
                 <div>
                   <strong>{file.name}</strong>
-                  <small>{(file.size / 1024 / 1024).toFixed(1)} MB · {text("本地演示文件", "Local demo file")}</small>
+                  <small>{file.size>=1024*1024*1024?`${(file.size/1024/1024/1024).toFixed(2)} GB`:`${(file.size / 1024 / 1024).toFixed(1)} MB`} · {text("等待分片上传", "Ready for chunked upload")}</small>
                   <span className="progress"><i /></span>
                 </div>
                 <em>100%</em>

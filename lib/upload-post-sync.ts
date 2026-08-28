@@ -2,6 +2,7 @@ import { query, transaction } from "./db";
 import { createNotification } from "./notifications";
 import { syntheticUuid } from "./records";
 import { getUploadPostConfig, parseProviderResponse, uploadPostFetch } from "./upload-post";
+import { cleanupExpiredUploadSessions } from "./upload-staging";
 
 type AnyRecord = Record<string, unknown>;
 const stringValue = (value: unknown) => typeof value === "string" ? value : null;
@@ -111,8 +112,9 @@ export async function syncAnalytics() {
 }
 
 export async function syncAll() {
+  const cleaned = await cleanupExpiredUploadSessions();
   const history = await syncHistory();
   const statuses = await syncPendingStatuses();
   const analytics = await syncAnalytics();
-  return { history, statuses, analytics, syncedAt: new Date().toISOString() };
+  return { cleaned, history, statuses, analytics, syncedAt: new Date().toISOString() };
 }

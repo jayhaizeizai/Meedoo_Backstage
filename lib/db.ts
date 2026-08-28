@@ -53,6 +53,30 @@ export async function ensureSchema() {
       updated_at timestamptz NOT NULL DEFAULT now(),
       completed_at timestamptz
     );
+    CREATE TABLE IF NOT EXISTS upload_sessions (
+      id uuid PRIMARY KEY,
+      uploader_open_id text NOT NULL REFERENCES meedoo_users(open_id) ON DELETE CASCADE,
+      uploader_name text NOT NULL,
+      original_filename text NOT NULL,
+      content_type text NOT NULL,
+      expected_size bigint NOT NULL,
+      chunk_size integer NOT NULL,
+      total_chunks integer NOT NULL,
+      media_path text,
+      status text NOT NULL DEFAULT 'uploading',
+      error_message text,
+      expires_at timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      completed_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS upload_session_chunks (
+      session_id uuid NOT NULL REFERENCES upload_sessions(id) ON DELETE CASCADE,
+      chunk_index integer NOT NULL,
+      size_bytes integer NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY(session_id, chunk_index)
+    );
     CREATE TABLE IF NOT EXISTS publications (
       id bigserial PRIMARY KEY,
       upload_id uuid NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
@@ -97,6 +121,7 @@ export async function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS uploads_uploader_created_idx ON uploads(uploader_open_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS uploads_status_idx ON uploads(status);
+    CREATE INDEX IF NOT EXISTS upload_sessions_expiry_idx ON upload_sessions(expires_at);
     CREATE INDEX IF NOT EXISTS publications_status_idx ON publications(status);
     CREATE INDEX IF NOT EXISTS metric_snapshots_publication_captured_idx ON metric_snapshots(publication_id, captured_at DESC);
   `).then(() => undefined).catch((error) => { global.meedooSchemaReady = undefined; throw error; });
