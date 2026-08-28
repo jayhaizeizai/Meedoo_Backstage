@@ -190,7 +190,6 @@
 .coverage-track { height: 9px; overflow: hidden; border-radius: 99px; background: #eceef4; }
 .coverage-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--p),var(--green)); }
 .coverage > small { display: block; margin-top: 10px; color: var(--muted); }
-.live-data { border-color: #bfeadd; background: #f0fbf7; color: #16775c; }
 .notification-wrap { position: relative; }
 .notification-button { position: relative; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
 .notification-button b { position: absolute; right: -5px; top: -5px; min-width: 16px; height: 16px; padding: 0 4px; display: grid; place-items: center; border-radius: 99px; background: #dc4a55; color: #fff; font-size: 8px; }

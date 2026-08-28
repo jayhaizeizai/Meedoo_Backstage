@@ -40,11 +40,6 @@ export function AppShell({ active, status, children }: AppShellProps) {
           </Link>
         </nav>
         <div className="side-bottom">
-          <div className="lark">
-            <span aria-hidden="true">⚡</span>
-            <div><b>{text("Lark 工作台", "Lark workspace")}</b><small>ACME Media</small></div>
-            <b aria-hidden="true">↗</b>
-          </div>
           <div className="user">
             {user?.avatar ? <img className="avatar auth-avatar" src={user.avatar} alt="" /> : <span className="avatar">{userInitials}</span>}
             <div>
@@ -59,7 +54,6 @@ export function AppShell({ active, status, children }: AppShellProps) {
         <header className="topbar">
           <div className="live"><i /><span>{text(status.zh, status.en)}</span></div>
           <div className="top-actions">
-            <span className="demo live-data">{text("真实数据", "Live data")}</span>
             <div className="notification-wrap"><button className="notification-button" onClick={toggleNotifications} aria-label={text("状态通知","Status notifications")}>♢{unread>0&&<b>{unread}</b>}</button>{notificationsOpen&&<div className="notification-menu"><strong>{text("状态通知","Status notifications")}</strong>{notifications.length?notifications.map((item)=><div key={item.id}><span>{item.message}</span><small>{new Date(item.created_at).toLocaleString(language==="zh"?"zh-CN":"en-US")}</small></div>):<p>{text("暂无通知","No notifications yet")}</p>}</div>}</div>
             <button className="lang" onClick={toggleLanguage} aria-label={text("切换到英文", "Switch to Chinese")}>
               <b>{language === "zh" ? "中" : "EN"}</b>

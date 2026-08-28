@@ -315,9 +315,6 @@ export default function UploadPage() {
                 );
               })}
             </div>
-            <div className="row2">
-              <div><span className="label">{text("发布时间", "Publishing time")}</span><button className="select" type="button">◉ <span>{text("立即发布", "Publish now")}</span><b>⌄</b></button></div>
-            </div>
             {publishError && <div className="publish-error" role="alert">⚠ {publishError}</div>}
             {connection?.configured && !selectedPlatformsConnected && <div className="publish-error connection-warning">{text("请先在 Upload-Post 连接所有已选择的平台。", "Connect every selected platform in Upload-Post first.")}</div>}
             <button className="publish" disabled={!canPublish} onClick={() => void publish()}>
