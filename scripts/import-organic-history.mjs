@@ -381,13 +381,20 @@ async function createLarkTable(token, appToken) {
   const suffix = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
   const payload = await fetchJson(`${LARK_ORIGIN}/open-apis/bitable/v1/apps/${appToken}/tables`, {
     method: "POST", headers: larkHeaders(token),
-    body: JSON.stringify({ table: { name: `${DEFAULT_BASE_TABLE} ${suffix}`, default_view_name: "All Videos" } }),
+    body: JSON.stringify({
+      table: {
+        name: `${DEFAULT_BASE_TABLE} ${suffix}`,
+        default_view_name: "All Videos",
+        // Lark requires at least one field when a table is created by API.
+        fields: [{ field_name: "Video Key", type: 1 }],
+      },
+    }),
   });
   const tableId = payload.data?.table_id ?? payload.data?.table?.table_id;
   if (!tableId) throw new Error("Lark did not return the new table ID");
   const existingFields = await larkList(token, `/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/fields`, "items");
   const primary = existingFields.find((field) => field.is_primary) ?? existingFields[0];
-  if (primary) {
+  if (primary && primary.field_name !== "Video Key") {
     await fetchJson(`${LARK_ORIGIN}/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/fields/${primary.field_id}`, {
       method: "PUT", headers: larkHeaders(token), body: JSON.stringify({ field_name: "Video Key", type: 1 }),
     });
