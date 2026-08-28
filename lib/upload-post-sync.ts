@@ -46,10 +46,14 @@ export async function syncHistory() {
   const payload = await parseProviderResponse(response);
   if (!response.ok) throw new Error("UPLOAD_POST_HISTORY_FAILED");
   const rows = Array.isArray(payload.history) ? payload.history as AnyRecord[] : [];
+  const historyAfter = Date.parse(process.env.UPLOAD_POST_HISTORY_AFTER ?? "");
+  let imported = 0;
   for (const row of rows) {
     const requestId = stringValue(row.request_id) ?? stringValue(row.external_id) ?? stringValue(row.job_id);
     const platform = stringValue(row.platform);
     if (!requestId || !platform) continue;
+    const uploadTimestamp = Date.parse(stringValue(row.upload_timestamp) ?? "");
+    if (Number.isFinite(historyAfter) && (!Number.isFinite(uploadTimestamp) || uploadTimestamp < historyAfter)) continue;
     const uploadId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(stringValue(row.external_id) ?? "")
       ? stringValue(row.external_id)! : syntheticUuid(requestId);
     const createdAt = stringValue(row.upload_timestamp) ?? new Date().toISOString();
@@ -70,8 +74,9 @@ export async function syncHistory() {
       [actualUploadId,platform,requestId,stringValue(row.job_id),stringValue(row.platform_post_id),row.success === false ? "failed" : "completed",
        boolValue(row.success),stringValue(row.post_url),stringValue(row.error_message),Boolean(row.fallback_to_inbox),createdAt]);
     });
+    imported++;
   }
-  return rows.length;
+  return imported;
 }
 
 export async function syncPendingStatuses() {

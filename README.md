@@ -34,6 +34,7 @@ The server reads these values from `/etc/meedoo/meedoo.env`:
 ```text
 UPLOAD_POST_API_KEY=your_api_key
 UPLOAD_POST_PROFILE=meedoo_team
+UPLOAD_POST_HISTORY_AFTER=
 UPLOAD_POST_WEBHOOK_SECRET=your_webhook_secret
 DATABASE_URL=postgresql://meedoo:password@127.0.0.1:5432/meedoo
 MEEDOO_MEDIA_DIR=/var/lib/meedoo/media
@@ -50,6 +51,8 @@ inbox fallback disabled so a draft is not reported as a successful public post.
 minutes. The signed `/api/upload-post/webhook` endpoint applies terminal status
 updates idempotently. Original files are retained under `MEEDOO_MEDIA_DIR` for
 failed-platform retry; object storage remains the recommended production upgrade.
+Set `UPLOAD_POST_HISTORY_AFTER` to an ISO timestamp when an environment must
+ignore older provider history, for example after intentionally clearing test data.
 
 ## Lark authentication
 
