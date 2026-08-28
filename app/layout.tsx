@@ -8,8 +8,8 @@ import { AuthProvider } from "../components/auth-provider";
 
 export const metadata: Metadata = {
   title: {
-    default: "MeeDoo",
-    template: "%s · MeeDoo",
+    default: "MeeDoo Backstage",
+    template: "%s · MeeDoo Backstage",
   },
   description: "Publish short videos and understand team performance across TikTok, Instagram and YouTube Shorts.",
 };
