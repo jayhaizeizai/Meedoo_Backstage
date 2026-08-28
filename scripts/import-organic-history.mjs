@@ -20,6 +20,7 @@ function parseArgs(argv) {
     defaultOwnerName: null,
     inputReport: null,
     regroupInput: false,
+    excludePostIds: new Set(),
     from: null,
   };
   for (const value of argv) {
@@ -33,6 +34,7 @@ function parseArgs(argv) {
     else if (value.startsWith("--default-owner-name=")) args.defaultOwnerName = value.slice(21).trim();
     else if (value.startsWith("--input-report=")) args.inputReport = path.resolve(value.slice(15));
     else if (value === "--regroup-input") args.regroupInput = true;
+    else if (value.startsWith("--exclude-post-id=")) args.excludePostIds.add(value.slice(18).trim());
     else if (value.startsWith("--from=")) args.from = value.slice(7);
     else throw new Error(`Unknown option: ${value}`);
   }
@@ -466,7 +468,10 @@ async function main() {
     const input = JSON.parse(await readFile(args.inputReport, "utf8"));
     if (!Array.isArray(input.groups)) throw new Error("Input report does not contain groups");
     allMedia = input.groups.flatMap((group) => group.items ?? []);
-    groups = args.regroupInput ? groupMedia(allMedia) : input.groups;
+    const beforeExclusions = allMedia.length;
+    allMedia = allMedia.filter((item) => !args.excludePostIds.has(item.platformPostId)
+      && !args.excludePostIds.has(`${item.platform}:${item.platformPostId}`));
+    groups = args.regroupInput || allMedia.length !== beforeExclusions ? groupMedia(allMedia) : input.groups;
   } else {
     const from = args.from ? new Date(args.from).toISOString() : null;
     allMedia = (await Promise.all(PLATFORMS.map((platform) => fetchAllMedia(platform, profile, from)))).flat();
@@ -476,12 +481,15 @@ async function main() {
         if (index < allMedia.length - 1) await sleep(150);
       }
     }
+    allMedia = allMedia.filter((item) => !args.excludePostIds.has(item.platformPostId)
+      && !args.excludePostIds.has(`${item.platform}:${item.platformPostId}`));
     groups = groupMedia(allMedia);
   }
   applyOwnerMap(groups, await loadOwnerMap(args.ownerMap), args.defaultOwnerName);
   const report = {
     mode: args.applyDb || args.syncLark ? "apply" : "dry-run",
     generatedAt: new Date().toISOString(), profile,
+    excludedPostIds: [...args.excludePostIds],
     counts: {
       platformPosts: allMedia.length,
       byPlatform: Object.fromEntries(PLATFORMS.map((platform) => [platform, allMedia.filter((item) => item.platform === platform).length])),

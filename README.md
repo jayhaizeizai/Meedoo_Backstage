@@ -98,6 +98,14 @@ node scripts/import-organic-history.mjs \
 Use `--regroup-input` only when intentionally re-running the automatic matching
 algorithm against the platform rows inside an earlier report.
 
+Exclude a known deleted, private, test, or otherwise out-of-scope platform post
+by its ID (optionally prefixed with the platform):
+
+```bash
+node scripts/import-organic-history.mjs \
+  --exclude-post-id=youtube:OxKTqJLWN3U
+```
+
 The script exports every existing table, field, and record to a timestamped JSON
 backup before creating the replacement table. Existing tables are deleted only
 after the replacement has been populated successfully.
