@@ -331,7 +331,7 @@ export default function UploadPage() {
       <dialog ref={dialogRef} className="modal" onClick={(event) => { if (event.target === dialogRef.current) dialogRef.current.close(); }}>
         <div className="dialog">
           <div className={`success${job?.status === "failed" ? " failed" : ""}`}>{job?.status === "failed" ? "!" : job?.status === "completed" ? "✓" : "↻"}</div>
-          <h2>{job?.status === "completed" ? text("三平台任务已完成", "Publishing complete") : job?.status === "failed" ? text("发布任务失败", "Publishing failed") : text("发布任务已创建", "Publishing task created")}</h2>
+          <h2>{job?.status === "completed" ? text("提交已完成", "Submission complete") : job?.status === "failed" ? text("发布任务失败", "Publishing failed") : text("发布任务已创建", "Publishing task created")}</h2>
           <p>{job?.status === "completed" ? text("平台结果已经返回。", "Platform results are ready.") : text("Upload-Post 正在后台处理视频，页面会自动更新。", "Upload-Post is processing the video in the background. This view updates automatically.")}</p>
           <div className="job-id">Request ID · {job?.requestId ?? "—"}</div>
           <div className="platform-results">
