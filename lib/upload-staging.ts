@@ -44,6 +44,7 @@ export async function createUploadSession(user: MeeDooUser, input: { filename: s
   const active=await query<{active_count:string;reserved_bytes:string}>(`SELECT count(*) active_count,COALESCE(sum(expected_size),0) reserved_bytes FROM upload_sessions WHERE uploader_open_id=$1 AND expires_at>now() AND status IN ('uploading','assembling','ready','publishing')`,[user.openId]);
   if(Number(active.rows[0]?.active_count??0)>=3)throw new Error("TOO_MANY_UPLOAD_SESSIONS");
   const disk=await statfs(mediaRoot());const freeBytes=Number(disk.bavail)*Number(disk.bsize);const reserved=Number(active.rows[0]?.reserved_bytes??0);
+  if(Number(disk.bavail)/Number(disk.blocks)<=0.05)throw new Error("INSUFFICIENT_STORAGE");
   if(freeBytes<(reserved+input.size)*2+1024*1024*1024)throw new Error("INSUFFICIENT_STORAGE");
   await mkdir(chunkDirectory(id), { recursive: true, mode: 0o700 });
   await transaction(async (client) => {
@@ -121,7 +122,7 @@ export async function assembleUploadSession(session: UploadSession) {
 }
 
 export async function cleanupExpiredUploadSessions() {
-  const expired = await query<{ id:string; media_path:string|null }>(`SELECT id,media_path FROM upload_sessions WHERE expires_at<now() LIMIT 100`);
+  const expired = await query<{ id:string; media_path:string|null }>(`SELECT id,media_path FROM upload_sessions WHERE expires_at<now() AND status IN ('uploading','assembling','ready','failed') LIMIT 100`);
   for (const item of expired.rows) {
     if (item.media_path) await rm(item.media_path,{force:true}).catch(()=>undefined);
     await rm(chunkDirectory(item.id),{recursive:true,force:true}).catch(()=>undefined);

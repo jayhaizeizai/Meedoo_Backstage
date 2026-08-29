@@ -119,6 +119,32 @@ export async function ensureSchema() {
       read_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS review_status text NOT NULL DEFAULT 'approved';
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS submitted_at timestamptz;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS reviewed_at timestamptz;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS reviewed_by text REFERENCES meedoo_users(open_id) ON DELETE SET NULL;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS review_comment text;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS parent_upload_id uuid REFERENCES uploads(id) ON DELETE SET NULL;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS media_delete_after timestamptz;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS file_deleted_at timestamptz;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_width integer;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_height integer;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_duration_seconds numeric;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_codec text;
+    CREATE TABLE IF NOT EXISTS upload_reviews (
+      id bigserial PRIMARY KEY,
+      upload_id uuid NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+      reviewer_open_id text NOT NULL REFERENCES meedoo_users(open_id) ON DELETE RESTRICT,
+      decision text NOT NULL,
+      comment text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS maintenance_state (
+      key text PRIMARY KEY,
+      value jsonb NOT NULL DEFAULT '{}',
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE INDEX IF NOT EXISTS uploads_uploader_created_idx ON uploads(uploader_open_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS uploads_status_idx ON uploads(status);
     CREATE INDEX IF NOT EXISTS upload_sessions_expiry_idx ON upload_sessions(expires_at);
@@ -126,6 +152,8 @@ export async function ensureSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS publications_platform_post_unique
       ON publications(platform,platform_post_id) WHERE platform_post_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS metric_snapshots_publication_captured_idx ON metric_snapshots(publication_id, captured_at DESC);
+    CREATE INDEX IF NOT EXISTS uploads_review_status_submitted_idx ON uploads(review_status, submitted_at DESC);
+    CREATE INDEX IF NOT EXISTS upload_reviews_upload_created_idx ON upload_reviews(upload_id, created_at DESC);
   `).then(() => undefined).catch((error) => { global.meedooSchemaReady = undefined; throw error; });
   return global.meedooSchemaReady;
 }

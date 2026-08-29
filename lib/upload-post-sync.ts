@@ -3,6 +3,7 @@ import { createNotification } from "./notifications";
 import { syntheticUuid } from "./records";
 import { getUploadPostConfig, parseProviderResponse, uploadPostFetch } from "./upload-post";
 import { cleanupExpiredUploadSessions } from "./upload-staging";
+import { runMaintenance } from "./maintenance";
 
 type AnyRecord = Record<string, unknown>;
 const stringValue = (value: unknown) => typeof value === "string" ? value : null;
@@ -23,7 +24,8 @@ export async function applyStatusPayload(requestId: string, payload: AnyRecord) 
   const before = await query<{ id:string;status:string;title:string }>(`SELECT DISTINCT u.id,u.status,u.title FROM uploads u LEFT JOIN publications p ON p.upload_id=u.id WHERE u.request_id=$1 OR p.request_id=$1 LIMIT 1`,[requestId]);
   const previousStatus = before.rows[0]?.status;
   const uploadResult = await query<{ id: string; status: string; title: string }>(`UPDATE uploads SET status=$2,provider_job_id=COALESCE($3,provider_job_id),
-    updated_at=now(),completed_at=CASE WHEN $2 IN ('completed','failed') THEN COALESCE(completed_at,now()) ELSE completed_at END
+    updated_at=now(),completed_at=CASE WHEN $2 IN ('completed','failed') THEN COALESCE(completed_at,now()) ELSE completed_at END,
+    media_delete_after=CASE WHEN $2='completed' THEN COALESCE(media_delete_after,now()+interval '3 days') ELSE media_delete_after END
     WHERE id=(SELECT DISTINCT u.id FROM uploads u LEFT JOIN publications p ON p.upload_id=u.id WHERE u.request_id=$1 OR p.request_id=$1 LIMIT 1) RETURNING id,status,title`, [requestId,status,stringValue(payload.job_id)]);
   const upload = uploadResult.rows[0];
   if (!upload) return;
@@ -124,8 +126,9 @@ export async function syncAnalytics() {
 
 export async function syncAll() {
   const cleaned = await cleanupExpiredUploadSessions();
+  const maintenance=await runMaintenance();
   const history = await syncHistory();
   const statuses = await syncPendingStatuses();
   const analytics = await syncAnalytics();
-  return { cleaned, history, statuses, analytics, syncedAt: new Date().toISOString() };
+  return { cleaned, history, statuses, analytics, maintenance, syncedAt: new Date().toISOString() };
 }

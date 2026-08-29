@@ -6,10 +6,10 @@ import { getCurrentUser } from "../../../../lib/server-auth";
 import { getUploadPostConfig,parseProviderResponse,providerMessage,supportedPlatforms,uploadPostFetch,UploadPostPlatform } from "../../../../lib/upload-post";
 
 export async function POST(request:NextRequest) {
-  if(!await getCurrentUser()) return NextResponse.json({success:false,message:"Authentication required."},{status:401});
+  const user=await getCurrentUser();if(!user) return NextResponse.json({success:false,message:"Authentication required."},{status:401});
   const body=await request.json().catch(()=>({})) as {uploadId?:string;platform?:string};
   if(!body.uploadId||!supportedPlatforms.includes(body.platform as UploadPostPlatform)) return NextResponse.json({success:false,message:"Invalid retry request."},{status:400});
-  const found=await query<{id:string;title:string;caption:string;original_filename:string;media_path:string|null;platform:string;status:string}>(`SELECT u.id,u.title,u.caption,u.original_filename,u.media_path,p.platform,p.status FROM uploads u JOIN publications p ON p.upload_id=u.id WHERE u.id=$1 AND p.platform=$2`,[body.uploadId,body.platform]);
+  const found=await query<{id:string;title:string;caption:string;original_filename:string;media_path:string|null;platform:string;status:string}>(`SELECT u.id,u.title,u.caption,u.original_filename,u.media_path,p.platform,p.status FROM uploads u JOIN publications p ON p.upload_id=u.id LEFT JOIN meedoo_users actor ON actor.open_id=$3 WHERE u.id=$1 AND p.platform=$2 AND (u.uploader_open_id=$3 OR actor.role='approver')`,[body.uploadId,body.platform,user.openId]);
   const item=found.rows[0];
   if(!item||item.status!=="failed") return NextResponse.json({success:false,message:"Only failed platform jobs can be retried."},{status:409});
   if(!item.media_path) return NextResponse.json({success:false,message:"The original video is unavailable; upload it again."},{status:410});

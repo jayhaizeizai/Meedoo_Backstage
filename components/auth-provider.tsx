@@ -8,6 +8,7 @@ type AuthState = {
   required: boolean;
   loading: boolean;
   user: MeeDooUser | null;
+  role: "member" | "approver";
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -19,14 +20,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [required, setRequired] = useState(false);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<MeeDooUser | null>(null);
+  const [role,setRole]=useState<"member"|"approver">("member");
 
   const refresh = useCallback(async () => {
     try {
       const response = await fetch("/api/auth/me", { cache: "no-store" });
-      const data = await response.json() as { configured: boolean; required: boolean; user: MeeDooUser | null };
+      const data = await response.json() as { configured: boolean; required: boolean; user: MeeDooUser | null; role?: "member"|"approver" };
       setConfigured(data.configured);
       setRequired(data.required);
       setUser(data.user);
+      setRole(data.role??"member");
     } finally {
       setLoading(false);
     }
@@ -40,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const value = useMemo(() => ({ configured, required, loading, user, refresh, logout }), [configured, required, loading, user, refresh, logout]);
+  const value = useMemo(() => ({ configured, required, loading, user, role, refresh, logout }), [configured, required, loading, user, role, refresh, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

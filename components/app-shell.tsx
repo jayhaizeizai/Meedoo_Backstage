@@ -6,14 +6,14 @@ import { useLanguage } from "./language-provider";
 import { useAuth } from "./auth-provider";
 
 type AppShellProps = {
-  active: "upload" | "dashboard";
+  active: "upload" | "dashboard" | "records" | "approvals";
   status: { zh: string; en: string };
   children: React.ReactNode;
 };
 
 export function AppShell({ active, status, children }: AppShellProps) {
   const { language, text, toggleLanguage } = useLanguage();
-  const { configured, loading, user, logout } = useAuth();
+  const { configured, loading, user, role, logout } = useAuth();
   const userInitials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "LK";
   const [notifications,setNotifications]=useState<{id:string;message:string;created_at:string;read_at:string|null}[]>([]);
   const [notificationsOpen,setNotificationsOpen]=useState(false);
@@ -38,6 +38,8 @@ export function AppShell({ active, status, children }: AppShellProps) {
           <Link className={active === "dashboard" ? "active" : ""} href="/dashboard">
             <span aria-hidden="true">⌁</span><i>{text("数据看板", "Dashboard")}</i>
           </Link>
+          <Link className={active === "records" ? "active" : ""} href="/records"><span aria-hidden="true">☷</span><i>{text("上传记录", "Upload records")}</i></Link>
+          {role==="approver"&&<Link className={active === "approvals" ? "active" : ""} href="/approvals"><span aria-hidden="true">✓</span><i>{text("视频审批", "Video approvals")}</i></Link>}
         </nav>
         <div className="side-bottom">
           <div className="user">

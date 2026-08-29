@@ -5,6 +5,8 @@ Next.js application for Lark-authenticated short-video publishing and analytics.
 ## Routes
 
 - `/upload` — video selection and cross-platform publishing
+- `/records` — the signed-in member's upload, review, and publishing history
+- `/approvals` — pending review queue for approvers
 - `/dashboard` — team overview, leaderboard, video data, and personal score views
 - `/login` — Lark OAuth sign-in entry
 - `/api/auth/lark/callback` — Lark OAuth callback
@@ -43,20 +45,24 @@ CRON_SECRET=replace_with_a_long_random_secret
 ```
 
 After restarting `meedoo.service`, the upload page verifies the profile's
-TikTok, Instagram, and YouTube connections. Publishing uses `async_upload=true`,
+TikTok, Instagram, and YouTube connections. A completed upload first enters the
+approval queue; Upload-Post is called only after an approver accepts the submission.
+Publishing uses `async_upload=true`,
 stores the provider request/job IDs in PostgreSQL, and polls the Upload-Post
 status endpoint until completion. TikTok uses `DIRECT_POST` with
 inbox fallback disabled so a draft is not reported as a successful public post.
 
 Videos up to 1.5 GB are uploaded to MeeDoo temporary storage in 16 MB resumable
-chunks. After assembly, MeeDoo gives Upload-Post a six-hour signed media URL;
-the API key and local filesystem path never reach the browser. Ready media is
-retained for 72 hours for failed-platform retry, then removed automatically.
+chunks. The server validates a vertical 9:16 video with `ffprobe`. After approval,
+MeeDoo gives Upload-Post a six-hour signed media URL; the API key and local
+filesystem path never reach the browser.
 
 `meedoo-sync.timer` imports Upload-Post history and refreshes Analytics every 15
 minutes. The signed `/api/upload-post/webhook` endpoint applies terminal status
-updates idempotently. Original files are retained under `MEEDOO_MEDIA_DIR` for
-failed-platform retry; object storage remains the recommended production upgrade.
+updates idempotently. Pending files are retained for 60 days, rejected or withdrawn
+files for 7 days, and successfully published files for 3 days. Approved files with
+a failed platform are retained for retry. Database records and platform links remain
+after media cleanup; object storage remains the recommended production upgrade.
 Set `UPLOAD_POST_HISTORY_AFTER` to an ISO timestamp when an environment must
 ignore older provider history, for example after intentionally clearing test data.
 

@@ -1,6 +1,6 @@
 # MeeDoo implementation TODO
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 ## Current foundation
 
@@ -16,7 +16,7 @@ Last updated: 2026-08-28
 
 - [x] Finalize the Upload-Post API plan and confirm its upload, publish, analytics,
       account-connection, rate-limit, and webhook contracts.
-- [ ] Store the Upload-Post API key and webhook secret in the server environment;
+- [x] Store the Upload-Post API key and webhook secret in the server environment;
       never expose them to the browser or GitHub.
 - [x] Replace the demo publish action with a server API that accepts one video and
       creates TikTok, Instagram, and YouTube Shorts publishing jobs.
@@ -38,7 +38,7 @@ jobs are created, and MeeDoo displays the final URL/status for each platform.
 - [x] Provision PostgreSQL and create an idempotent schema migration for users, videos, platform
       publications, publishing jobs, metric snapshots, and audit logs.
 - [x] Upsert Lark users by `open_id`; update their display name and avatar at login.
-- [ ] Define roles: member, team lead, and administrator.
+- [x] Define and enforce the current `member` and `approver` roles.
 - [ ] Restrict access to approved Lark tenants, departments, or an explicit user
       allowlist instead of accepting every valid Lark account.
 - [ ] Add server-side authorization to all write APIs, not only page redirects.
@@ -46,6 +46,27 @@ jobs are created, and MeeDoo displays the final URL/status for each platform.
 
 Definition of done: application data survives restarts, every write has an actor,
 and unauthorized users cannot view or mutate team data.
+
+## P0 — Video approval workflow
+
+- [x] Submit uploaded videos to a staging queue without calling Upload-Post.
+- [x] Let members view only their own upload history and review comments.
+- [x] Let approvers view all pending submissions and securely play the retained video.
+- [x] Approve all selected platforms in one decision, or reject with a required comment.
+- [x] Allow rejected submissions to be revised and resubmitted with versioned audit history.
+- [x] Validate the vertical 9:16 video format before accepting a submission.
+- [x] Exclude unapproved submissions from every analytics dashboard query.
+- [x] Retain pending media for 60 days, rejected/withdrawn media for 7 days, and
+      successfully published media for 3 days while retaining database records and links.
+- [x] Add 24-hour reminders, a 10:00 AM Puerto Rico daily summary, and 70/85/95%
+      disk alerts; block new uploads at 95% disk usage.
+- [ ] Have Jay sign out and back in through the current test Lark App so its bot can
+      address the new App-specific `open_id`, then verify direct-message delivery.
+- [ ] Grant Albert the `approver` role after his first production login.
+
+Definition of done: a member submits a valid 9:16 video, an approver can preview
+and decide it, only approval starts publishing, and both parties receive the agreed
+Lark notifications.
 
 ## P1 — Real dashboard data
 

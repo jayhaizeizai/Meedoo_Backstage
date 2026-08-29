@@ -38,7 +38,7 @@ export async function POST(request:NextRequest) {
           [found.rows[0].upload_id,platform,success?"completed":"failed",success,typeof result.url==="string"?result.url:null,typeof (result.post_id??result.publish_id)==="string"?result.post_id??result.publish_id:null,typeof result.error==="string"?result.error:null]);
         const counts=await client.query<{pending:string;failed:string}>(`SELECT count(*) FILTER(WHERE status NOT IN ('completed','failed')) pending,count(*) FILTER(WHERE status='failed') failed FROM publications WHERE upload_id=$1`,[found.rows[0].upload_id]);
         const next=Number(counts.rows[0].pending)?"processing":Number(counts.rows[0].failed)?"failed":"completed";
-        await client.query(`UPDATE uploads SET status=$2,updated_at=now(),completed_at=CASE WHEN $2 IN ('completed','failed') THEN now() ELSE completed_at END WHERE id=$1`,[found.rows[0].upload_id,next]);
+        await client.query(`UPDATE uploads SET status=$2,updated_at=now(),completed_at=CASE WHEN $2 IN ('completed','failed') THEN now() ELSE completed_at END,media_delete_after=CASE WHEN $2='completed' THEN COALESCE(media_delete_after,now()+interval '3 days') ELSE media_delete_after END WHERE id=$1`,[found.rows[0].upload_id,next]);
         return {...found.rows[0],next};
       });
       if(changed&&changed.old_status!==changed.next&&["completed","failed"].includes(changed.next)) await createNotification(changed.upload_id,`publish_${changed.next}`,changed.next==="completed"?`MeeDoo: “${changed.title}” publishing completed.`:`MeeDoo: “${changed.title}” publishing failed. Open MeeDoo to retry.`);

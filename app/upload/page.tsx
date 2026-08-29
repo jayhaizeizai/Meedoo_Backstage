@@ -122,7 +122,7 @@ export default function UploadPage() {
   }, [user]);
 
   useEffect(() => {
-    if (!job?.requestId || ["completed", "failed"].includes(job.status)) return;
+    if (!job?.requestId || ["completed", "failed", "pending_review"].includes(job.status)) return;
     const delay = ["pending", "queued"].includes(job.status) ? 6000 : 10000;
     const timer = window.setInterval(() => {
       void fetch(`/api/upload-post/status?request_id=${encodeURIComponent(job.requestId)}`, { cache: "no-store" })
@@ -280,8 +280,8 @@ export default function UploadPage() {
         <div className="head">
           <div>
             <p className="eyebrow">ONE VIDEO · EVERY CHANNEL</p>
-            <h1>{text("上传并同步发布", "Upload & publish everywhere")}</h1>
-            <p>{text("一次上传，同步至 TikTok、Instagram 和 YouTube Shorts。", "Upload once to TikTok, Instagram and YouTube Shorts.")}</p>
+            <h1>{text("上传并提交审批", "Upload & submit for review")}</h1>
+            <p>{text("审批通过后，系统才会发布到所选平台。", "Your video is published to the selected platforms only after approval.")}</p>
           </div>
           <div className="platform-flow" aria-label="TikTok, Instagram, YouTube Shorts">
             <i className="pi tt">♪</i><span /><i className="pi ig">◎</i><span /><i className="pi yt">▶</i>
@@ -348,20 +348,20 @@ export default function UploadPage() {
             {publishError && <div className="publish-error" role="alert">⚠ {publishError}</div>}
             {connection?.configured && !selectedPlatformsConnected && <div className="publish-error connection-warning">{text("请先在 Upload-Post 连接所有已选择的平台。", "Connect every selected platform in Upload-Post first.")}</div>}
             <button className="publish" disabled={!canPublish} onClick={() => void publish()}>
-              ↥ {publishing ? uploadProgress === 100 ? text("视频已上传，正在创建任务…", "Video uploaded, creating jobs…") : text(`正在上传 ${uploadProgress ?? 0}%`, `Uploading ${uploadProgress ?? 0}%`) : text(`同步发布到 ${platforms.length} 个平台 →`, `Publish to ${platforms.length} platforms →`)}
+              ↥ {publishing ? uploadProgress === 100 ? text("视频已上传，正在提交审批…", "Video uploaded, submitting for review…") : text(`正在上传 ${uploadProgress ?? 0}%`, `Uploading ${uploadProgress ?? 0}%`) : text(`提交审批 · ${platforms.length} 个平台 →`, `Submit for review · ${platforms.length} platforms →`)}
             </button>
-            {uploadProgress !== null && <div className="upload-meter" aria-label={text("上传进度", "Upload progress")}><span><i style={{ width: `${uploadProgress}%` }} /></span><small>{uploadProgress === 100 && publishing ? text("服务器正在提交至 Upload-Post", "Server is submitting to Upload-Post") : `${uploadProgress}%`}</small></div>}
+            {uploadProgress !== null && <div className="upload-meter" aria-label={text("上传进度", "Upload progress")}><span><i style={{ width: `${uploadProgress}%` }} /></span><small>{uploadProgress === 100 && publishing ? text("服务器正在创建待审批记录", "Server is creating the review submission") : `${uploadProgress}%`}</small></div>}
           </section>
         </div>
       </section>
 
       <dialog ref={dialogRef} className="modal" onClick={(event) => { if (event.target === dialogRef.current) dialogRef.current.close(); }}>
         <div className="dialog">
-          <div className={`success${job?.status === "failed" ? " failed" : ""}`}>{job?.status === "failed" ? "!" : job?.status === "completed" ? "✓" : "↻"}</div>
-          <h2>{job?.status === "completed" ? text("提交已完成", "Submission complete") : job?.status === "failed" ? text("发布任务失败", "Publishing failed") : text("发布任务已创建", "Publishing task created")}</h2>
-          <p>{job?.status === "completed" ? text("平台结果已经返回。", "Platform results are ready.") : text("Upload-Post 正在后台处理视频，页面会自动更新。", "Upload-Post is processing the video in the background. This view updates automatically.")}</p>
-          <div className="job-id">Request ID · {job?.requestId ?? "—"}</div>
-          <div className="platform-results">
+          <div className={`success${job?.status === "failed" ? " failed" : ""}`}>{job?.status === "failed" ? "!" : "✓"}</div>
+          <h2>{job?.status === "pending_review" ? text("已提交审批", "Submitted for review") : job?.status === "failed" ? text("提交失败", "Submission failed") : text("提交已完成", "Submission complete")}</h2>
+          <p>{job?.status === "pending_review" ? text("审批通过前不会发布到任何平台。你可以在上传记录中查看状态。", "Nothing will be published until the video is approved. Track it in Upload records.") : text("处理结果已经返回。", "The result is ready.")}</p>
+          <div className="job-id">Submission ID · {job?.requestId ?? "—"}</div>
+          {job?.status !== "pending_review" && <div className="platform-results">
             {platformOptions.filter((platform) => platforms.includes(platform.id)).map((platform) => {
               const result = job?.results.find((item) => item.platform === platform.id);
               const link = result?.post_url || result?.url;
@@ -373,8 +373,8 @@ export default function UploadPage() {
                   : text("处理中，请稍候", "Processing, please wait");
               return <div key={platform.id}><i className={`pi ${platform.className}`}>{platform.icon}</i><span><strong>{platform.name}</strong><small>{message}</small></span>{state === "completed" && link ? <a href={link} target="_blank" rel="noreferrer">↗</a> : <b className={state === "failed" ? "bad" : ""}>{state === "failed" ? "!" : state === "completed" ? "✓" : "…"}</b>}</div>;
             })}
-          </div>
-          <button onClick={() => job?.status === "completed" ? router.push("/dashboard") : dialogRef.current?.close()}>{job?.status === "completed" ? text("查看 Dashboard →", "View Dashboard →") : text("关闭并稍后查看", "Close and check later")}</button>
+          </div>}
+          <button onClick={() => job?.status === "pending_review" ? router.push("/records") : dialogRef.current?.close()}>{job?.status === "pending_review" ? text("查看上传记录 →", "View upload records →") : text("关闭", "Close")}</button>
         </div>
       </dialog>
     </AppShell>
