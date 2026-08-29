@@ -17,7 +17,11 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const saved = window.localStorage.getItem("meedoo-language");
-    if (saved === "zh" || saved === "en") setLanguage(saved);
+    if (saved === "zh" || saved === "en") {
+      setLanguage(saved);
+      return;
+    }
+    setLanguage(window.navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
   }, []);
 
   const value = useMemo<LanguageContextValue>(() => ({

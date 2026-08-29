@@ -114,7 +114,7 @@ export async function syncAnalytics() {
       const publication = await query<{ id: string }>(`UPDATE publications SET platform_post_id=COALESCE($3,platform_post_id),post_url=COALESCE($4,post_url),last_synced_at=now(),updated_at=now()
         WHERE upload_id=$1 AND platform=$2 RETURNING id`, [upload.id,platform,stringValue(item.platform_post_id),stringValue(item.post_url)]);
       if (!publication.rows[0]) continue;
-      await query(`INSERT INTO metric_snapshots(publication_id,captured_at,metrics) VALUES($1,date_trunc('minute',now()),$2::jsonb)
+      await query(`INSERT INTO metric_snapshots(publication_id,captured_at,metrics) VALUES($1,clock_timestamp(),$2::jsonb)
         ON CONFLICT(publication_id,captured_at) DO UPDATE SET metrics=excluded.metrics`, [publication.rows[0].id,JSON.stringify(metrics)]);
       updated++;
     }
