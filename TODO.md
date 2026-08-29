@@ -60,7 +60,7 @@ and unauthorized users cannot view or mutate team data.
       successfully published media for 3 days while retaining database records and links.
 - [x] Add 24-hour reminders, a 10:00 AM Puerto Rico daily summary, and 70/85/95%
       disk alerts; block new uploads at 95% disk usage.
-- [ ] Have Jay sign out and back in through the current test Lark App so its bot can
+- [x] Have Jay sign out and back in through the current test Lark App so its bot can
       address the new App-specific `open_id`, then verify direct-message delivery.
 - [ ] Grant Albert the `approver` role after his first production login.
 
