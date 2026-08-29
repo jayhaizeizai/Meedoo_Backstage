@@ -52,15 +52,6 @@ export async function getReviewRecord(id: string, user: MeeDooUser) {
   return { approver, record: result.rows[0] ?? null,history:history.rows };
 }
 
-export async function resubmitReview(id:string,user:MeeDooUser,input:{title:string;caption:string;platforms:string[]}){
-  const platforms=[...new Set(input.platforms)].filter((item):item is UploadPostPlatform=>supportedPlatforms.includes(item as UploadPostPlatform));
-  const title=input.title.trim();const caption=input.caption.trim();
-  if(!title||title.length>100||!platforms.length)throw new Error("INVALID_SUBMISSION");
-  if(/[<>]/.test(title)||/[<>]/.test(caption))throw new Error("INVALID_TEXT_CHARACTERS");
-  if([title,caption].filter(Boolean).join("\n\n").length>2200||Buffer.byteLength(caption,"utf8")>5000)throw new Error("INVALID_SOCIAL_TEXT");
-  const result=await transaction(async(client)=>{const changed=await client.query(`UPDATE uploads SET title=$3,caption=$4,target_platforms=$5,review_status='pending',status='pending_review',review_comment=NULL,reviewed_at=NULL,reviewed_by=NULL,submitted_at=now(),media_delete_after=NULL,version=version+1,updated_at=now() WHERE id=$1 AND uploader_open_id=$2 AND review_status='rejected' AND file_deleted_at IS NULL RETURNING id`,[id,user.openId,title,caption,platforms]);if(!changed.rowCount)throw new Error("RESUBMIT_NOT_ALLOWED");await client.query(`INSERT INTO upload_reviews(upload_id,reviewer_open_id,decision,comment) VALUES($1,$2,'resubmitted',NULL)`,[id,user.openId]);await client.query(`UPDATE upload_sessions SET status='submitted',expires_at=now()+interval '60 days',updated_at=now() WHERE id=$1`,[id]);return id;});return result;
-}
-
 export async function decideReview(id: string, reviewer: MeeDooUser, decision: "approved" | "rejected", comment: string) {
   if (!await isApprover(reviewer.openId)) throw new Error("APPROVER_REQUIRED");
   return transaction(async (client) => {

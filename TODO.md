@@ -53,7 +53,7 @@ and unauthorized users cannot view or mutate team data.
 - [x] Let members view only their own upload history and review comments.
 - [x] Let approvers view all pending submissions and securely play the retained video.
 - [x] Approve all selected platforms in one decision, or reject with a required comment.
-- [x] Allow rejected submissions to be revised and resubmitted with versioned audit history.
+- [x] Treat rejected submissions as final while retaining the rejection comment and audit history.
 - [x] Validate the vertical 9:16 video format before accepting a submission.
 - [x] Exclude unapproved submissions from every analytics dashboard query.
 - [x] Retain pending media for 60 days, rejected/withdrawn media for 7 days, and
