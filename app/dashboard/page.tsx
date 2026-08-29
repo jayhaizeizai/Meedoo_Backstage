@@ -84,7 +84,7 @@ export default function DashboardPage() {
   const person = useMemo(() => data?.people.find((item) => item.id === active) ?? null, [data, active]);
   const status = data ? { zh: `更新于 ${new Date(data.updatedAt).toLocaleString("zh-CN")}`, en: `Updated ${new Date(data.updatedAt).toLocaleString("en-US")}` } : { zh: "正在读取数据", en: "Loading data" };
   return <AppShell active="dashboard" status={status}><section className="page">
-    <div className="head"><div><p className="eyebrow">CROSS-PLATFORM INTELLIGENCE</p><h1>{text("数据看板", "Performance dashboard")}</h1><p>{text("查看团队、成员和视频在不同时间与平台上的表现。", "Explore performance by team, member, video, time and platform.")}</p></div><div className="filters"><select value={days} onChange={(event) => setDays(Number(event.target.value))} aria-label={text("时间范围", "Date range")}><option value={7}>{text("过去 7 天", "Last 7 days")}</option><option value={30}>{text("过去 30 天", "Last 30 days")}</option><option value={90}>{text("过去 90 天", "Last 90 days")}</option><option value={365}>{text("过去一年", "Last year")}</option></select><button disabled={syncing} onClick={() => void sync()}>{syncing ? "…" : "↻"} {text("同步", "Sync")}</button></div></div>
+    <div className="head"><div><p className="eyebrow">CROSS-PLATFORM INTELLIGENCE</p><h1>{text("数据看板", "Performance dashboard")}</h1><p>{text("查看团队、成员和视频在不同时间与平台上的表现。", "Explore performance by team, member, video, time and platform.")}</p></div><div className="filters"><select value={days} onChange={(event) => setDays(Number(event.target.value))} aria-label={text("时间范围", "Date range")}><option value={1}>{text("过去 24 小时", "Last 24 hours")}</option><option value={7}>{text("过去 7 天", "Last 7 days")}</option><option value={30}>{text("过去 30 天", "Last 30 days")}</option><option value={90}>{text("过去 90 天", "Last 90 days")}</option><option value={365}>{text("过去一年", "Last year")}</option></select><button disabled={syncing} onClick={() => void sync()}>{syncing ? "…" : "↻"} {text("同步", "Sync")}</button></div></div>
     {error && <div className="data-message error">⚠ {error}</div>}
     {!data && !error && <div className="data-message">{text("正在载入团队数据…", "Loading team data…")}</div>}
     {data && <>
@@ -121,14 +121,14 @@ function TrendCard({ metric, title, icon, data, language }: { metric: TrendMetri
     const combined = combinePlatforms(selected.map((platform) => point.platforms[platform]));
     return { at: point.capturedAt, value: metric === "engagementRate" ? combined.engagementRate : combined.metrics[metric] };
   });
-  return <article className="card trend-card"><header><span className="kicon">{icon}</span><div><p>{title}</p><strong>{format(currentValue, metric, language)}</strong></div></header><PlatformSelector selected={selected} toggle={toggle} /><LineChart points={points} language={language} /></article>;
+  return <article className="card trend-card"><header><span className="kicon">{icon}</span><div><p>{title}</p><strong>{format(currentValue, metric, language)}</strong></div></header><PlatformSelector selected={selected} toggle={toggle} /><LineChart points={points} language={language} showTime={data.days === 1} /></article>;
 }
 
 function PlatformSelector({ selected, toggle }: { selected: Platform[]; toggle: (platform: Platform) => void }) {
   return <div className="platform-selector">{allPlatforms.map((platform) => <button key={platform} className={selected.includes(platform) ? "active" : ""} onClick={() => toggle(platform)}><i className={`pi ${platformMeta[platform].className}`}>{platformMeta[platform].icon}</i>{platformMeta[platform].name}</button>)}</div>;
 }
 
-function LineChart({ points, language }: { points: { at: string; value: number | null }[]; language: "zh" | "en" }) {
+function LineChart({ points, language, showTime = false }: { points: { at: string; value: number | null }[]; language: "zh" | "en"; showTime?: boolean }) {
   const available = points.map((point, index) => ({ ...point, index })).filter((point): point is { at: string; value: number; index: number } => point.value !== null && Number.isFinite(point.value));
   if (!available.length) return <div className="empty-chart">{language === "zh" ? "暂无历史数据" : "No history yet"}</div>;
   const width = 560, height = 150, padding = 12;
@@ -138,8 +138,9 @@ function LineChart({ points, language }: { points: { at: string; value: number |
   const x = (index: number) => padding + (points.length === 1 ? (width - padding * 2) / 2 : index / (points.length - 1) * (width - padding * 2));
   const y = (value: number) => height - padding - (value - minimum) / range * (height - padding * 2);
   const coordinates = available.map((point) => `${x(point.index)},${y(point.value)}`).join(" ");
-  const first = new Date(available[0].at).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric" });
-  const last = new Date(available.at(-1)!.at).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric" });
+  const dateOptions: Intl.DateTimeFormatOptions = showTime ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" };
+  const first = new Date(available[0].at).toLocaleString(language === "zh" ? "zh-CN" : "en-US", dateOptions);
+  const last = new Date(available.at(-1)!.at).toLocaleString(language === "zh" ? "zh-CN" : "en-US", dateOptions);
   return <div className="line-chart"><svg viewBox={`0 0 ${width} ${height}`} role="img"><line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} /><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} /><polyline points={coordinates} />{available.length === 1 && <circle cx={x(available[0].index)} cy={y(available[0].value)} r="4" />}</svg><span>{first}</span><span>{last}</span></div>;
 }
 
