@@ -39,7 +39,7 @@ export function AppShell({ active, status, children }: AppShellProps) {
             <span aria-hidden="true">⌁</span><i>{text("数据看板", "Dashboard")}</i>
           </Link>
           <Link className={active === "records" ? "active" : ""} href="/records"><span aria-hidden="true">☷</span><i>{text("上传记录", "Upload records")}</i></Link>
-          {role==="approver"&&<Link className={active === "approvals" ? "active" : ""} href="/approvals"><span aria-hidden="true">✓</span><i>{text("视频审批", "Video approvals")}</i></Link>}
+          {role === "approver" && <Link className={active === "approvals" ? "active" : ""} href="/approvals"><span aria-hidden="true">✓</span><i>{text("视频审批", "Video approvals")}</i></Link>}
         </nav>
         <div className="side-bottom">
           <div className="user">
