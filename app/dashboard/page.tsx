@@ -17,7 +17,7 @@ type DashboardData = {
   updatedAt: string;
   days: number;
   metricDefinitions: { key: MetricKey; zh: string; en: string; weight: number }[];
-  team: { metrics: Metrics; videoCount: number; newFollowers: number | null; mix: number[]; engagementRate: number | null; byPlatform: Record<Platform, PlatformAggregate>; trend: TrendPoint[] };
+  team: { metrics: Metrics; videoCount: number; newFollowers: number | null; mix: number[]; engagementRate: number | null; byPlatform: Record<Platform, PlatformAggregate>; trend: TrendPoint[]; dailyViewsTrend: TrendPoint[] };
   people: Person[];
   videos: Video[];
 };
@@ -102,7 +102,7 @@ type TrendMetric = "views" | "retention" | "engagementRate" | "followers";
 function Overview({ data, language }: { data: DashboardData; language: "zh" | "en" }) {
   const t = (zh: string, en: string) => language === "zh" ? zh : en;
   const cards: { key: TrendMetric; title: string; icon: string }[] = [
-    { key: "views", title: t("团队总浏览 / 触达", "Team views / reach"), icon: "◉" },
+    { key: "views", title: t("当天团队总浏览 / 触达", "Today's team views / reach"), icon: "◉" },
     { key: "retention", title: t("观看 / 留存", "Watch / retention"), icon: "◷" },
     { key: "engagementRate", title: t("团队互动率", "Team engagement rate"), icon: "⌁" },
     { key: "followers", title: t("新增粉丝 / 订阅", "New followers / subscribers"), icon: "↗" },
@@ -115,9 +115,13 @@ function TrendCard({ metric, title, icon, data, language }: { metric: TrendMetri
   function toggle(platform: Platform) {
     setSelected((current) => current.includes(platform) ? current.length === 1 ? current : current.filter((item) => item !== platform) : [...current, platform]);
   }
-  const current = combinePlatforms(selected.map((platform) => data.team.byPlatform[platform]));
+  const trend = metric === "views" ? data.team.dailyViewsTrend : data.team.trend;
+  const latestDaily = data.team.dailyViewsTrend.at(-1);
+  const current = metric === "views" && latestDaily
+    ? combinePlatforms(selected.map((platform) => latestDaily.platforms[platform]))
+    : combinePlatforms(selected.map((platform) => data.team.byPlatform[platform]));
   const currentValue = metric === "engagementRate" ? current.engagementRate : current.metrics[metric];
-  const points = data.team.trend.map((point) => {
+  const points = trend.map((point) => {
     const combined = combinePlatforms(selected.map((platform) => point.platforms[platform]));
     return { at: point.capturedAt, value: metric === "engagementRate" ? combined.engagementRate : combined.metrics[metric] };
   });

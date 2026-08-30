@@ -127,7 +127,7 @@ function downsample<T>(items: T[], maximum = 240) {
   return sampled;
 }
 
-function buildTrend(snapshotRows: SnapshotRow[], currentRows: Row[], updatedAt: string) {
+function buildTrend(snapshotRows: SnapshotRow[], currentRows: Row[], updatedAt: string, maximum = 240) {
   const state = new Map<string, Row>();
   for (const row of snapshotRows.filter((item) => item.is_seed)) state.set(row.publication_id, row);
   const buckets = new Map<string, SnapshotRow[]>();
@@ -141,7 +141,39 @@ function buildTrend(snapshotRows: SnapshotRow[], currentRows: Row[], updatedAt: 
   });
   points.push({ capturedAt: updatedAt, platforms: byPlatform(currentRows) });
   const unique = points.filter((point, index) => index === points.length - 1 || point.capturedAt !== points[index + 1].capturedAt);
-  return downsample(unique);
+  return downsample(unique, maximum);
+}
+
+function singaporeDay(value: string) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Singapore", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+}
+
+function buildDailyViewsTrend(points: ReturnType<typeof buildTrend>, days: number, updatedAt: string) {
+  if (!points.length) return [];
+  const groups = new Map<string, typeof points>();
+  for (const point of points) {
+    const key = singaporeDay(point.capturedAt);
+    groups.set(key, [...(groups.get(key) ?? []), point]);
+  }
+  const today = singaporeDay(updatedAt);
+  let previous = Object.fromEntries(platforms.map((platform) => [platform, groups.values().next().value?.[0]?.platforms[platform].metrics.views ?? null])) as Record<typeof platforms[number], number | null>;
+  const result: typeof points = [];
+  for (const [day, dayPoints] of groups) {
+    const baseline = { ...previous };
+    const selected = days === 1 ? day === today ? dayPoints : [] : [dayPoints.at(-1)!];
+    for (const point of selected) {
+      const adjusted = Object.fromEntries(platforms.map((platform) => {
+        const aggregate = point.platforms[platform];
+        const current = aggregate.metrics.views;
+        const dailyViews = current === null ? null : Math.max(0, current - (baseline[platform] ?? 0));
+        return [platform, { ...aggregate, metrics: { ...aggregate.metrics, views: dailyViews } }];
+      })) as typeof point.platforms;
+      result.push({ ...point, platforms: adjusted });
+    }
+    const last = dayPoints.at(-1)!;
+    previous = Object.fromEntries(platforms.map((platform) => [platform, last.platforms[platform].metrics.views])) as typeof previous;
+  }
+  return result;
 }
 
 export async function getDashboardData(days = 30) {
@@ -151,15 +183,17 @@ export async function getDashboardData(days = 30) {
     FROM uploads u JOIN publications p ON p.upload_id=u.id
     LEFT JOIN meedoo_users mu ON mu.open_id=u.uploader_open_id
     LEFT JOIN LATERAL (SELECT metrics FROM metric_snapshots ms WHERE ms.publication_id=p.id ORDER BY captured_at DESC LIMIT 1) latest ON true
-    WHERE u.review_status='approved' AND u.created_at >= now() - ($1::text || ' days')::interval ORDER BY u.created_at DESC`, [safeDays]);
-  const rows = current.rows;
+    WHERE u.review_status='approved' ORDER BY u.created_at DESC`);
+  const allRows = current.rows;
+  const cutoff = Date.now() - safeDays * 24 * 60 * 60 * 1000;
+  const rows = allRows.filter((row) => Date.parse(row.created_at) >= cutoff);
 
   const snapshots = await query<SnapshotRow>(`WITH eligible AS (
       SELECT p.id publication_id,u.id upload_id,u.title,u.uploader_open_id,u.uploader_name,u.created_at,u.status,
         p.platform,p.post_url,p.platform_post_id,p.status publication_status,p.error_message,mu.avatar_url,mu.role
       FROM uploads u JOIN publications p ON p.upload_id=u.id
       LEFT JOIN meedoo_users mu ON mu.open_id=u.uploader_open_id
-      WHERE u.review_status='approved' AND u.created_at >= now() - ($1::text || ' days')::interval
+      WHERE u.review_status='approved'
     ), seed AS (
       SELECT DISTINCT ON (e.publication_id) e.publication_id::text,e.upload_id,e.title,e.uploader_open_id,e.uploader_name,e.created_at,e.status,
         e.platform,e.post_url,e.platform_post_id,e.publication_status,e.error_message,ms.metrics,e.avatar_url,e.role,ms.captured_at,true is_seed
@@ -174,6 +208,9 @@ export async function getDashboardData(days = 30) {
     ) SELECT * FROM seed UNION ALL SELECT * FROM timeline ORDER BY captured_at`, [safeDays]);
 
   const updatedAt = new Date().toISOString();
+  const cumulativeTrend = buildTrend(snapshots.rows, allRows, updatedAt, safeDays * 96 + 10);
+  const teamTrend = downsample(cumulativeTrend);
+  const dailyViewsTrend = buildDailyViewsTrend(cumulativeTrend, safeDays, updatedAt);
   const teamAggregate = aggregate(rows);
   const memberGroups = new Map<string, Row[]>();
   for (const row of rows) if (row.uploader_open_id) memberGroups.set(row.uploader_open_id, [...(memberGroups.get(row.uploader_open_id) ?? []), row]);
@@ -203,7 +240,7 @@ export async function getDashboardData(days = 30) {
   return {
     updatedAt, days: safeDays, metricDefinitions,
     team: { ...teamAggregate, videoCount: new Set(rows.map((row) => row.upload_id)).size, newFollowers: teamAggregate.metrics.followers,
-      byPlatform: byPlatform(rows), trend: buildTrend(snapshots.rows, rows, updatedAt) },
+      byPlatform: byPlatform(rows), trend: teamTrend, dailyViewsTrend },
     people, videos,
     leaderboard: { overall: people.map((person) => person.id),
       byMetric: Object.fromEntries(metricDefinitions.map(({ key }) => [key, [...people].sort((left, right) => (right.metrics[key] ?? -1) - (left.metrics[key] ?? -1)).map((person) => person.id)])) },
