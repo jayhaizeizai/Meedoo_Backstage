@@ -331,12 +331,18 @@
 .platform-selector button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--muted); cursor: pointer; }
 .platform-selector button.active { border-color: #6a5ae044; background: #f0edff; color: #5546d8; }
 .platform-selector button i { font-style: normal; }
-.line-chart { display: grid; grid-template-columns: 1fr 1fr; align-items: end; min-height: 175px; color: var(--muted); font-size: 10px; }
-.line-chart svg { grid-column: 1 / -1; width: 100%; overflow: visible; }
+.line-chart { position: relative; display: grid; grid-template-columns: 1fr 1fr; align-items: end; min-height: 175px; color: var(--muted); font-size: 10px; }
+.line-chart svg { grid-column: 1 / -1; width: 100%; overflow: visible; cursor: crosshair; }
 .line-chart svg line { stroke: #edf0f6; stroke-width: 1; }
 .line-chart svg polyline { fill: none; stroke: #6655e8; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.line-chart svg circle { fill: #6655e8; }
+.line-chart svg circle { fill: #6655e8; pointer-events: none; transition: r .12s ease; }
+.line-chart svg .hover-guide,.comparison-chart svg .hover-guide { stroke: #7b6ee8; stroke-width: 1; stroke-dasharray: 4 4; pointer-events: none; }
 .line-chart span:last-child { text-align: right; }
+.chart-tooltip { position: absolute; z-index: 8; min-width: 150px; padding: 10px 12px; border: 1px solid #ddd9fb; border-radius: 10px; background: #fff; box-shadow: 0 12px 30px #23273c24; color: var(--ink); pointer-events: none; transform: translate(-50%, calc(-100% - 10px)); }
+.chart-tooltip time,.chart-tooltip strong,.chart-tooltip>b { display: block; }
+.chart-tooltip time { color: var(--muted); font-size: 9px; }
+.chart-tooltip strong { margin: 3px 0; font-size: 10px; }
+.chart-tooltip>b { color: #5c4ee0; font-size: 16px; }
 .empty-chart { min-height: 150px; display: grid; place-items: center; color: var(--muted); }
 
 .sort-controls { display: flex; gap: 8px; align-items: center; }
@@ -416,13 +422,26 @@
 .comparison-chart header small, .comparison-chart header > span { color: var(--muted); }
 .comparison-chart header strong { margin-top: 5px; font-size: 24px; }
 .comparison-chart svg { width: 100%; margin-top: 8px; overflow: visible; }
+.comparison-chart-plot { position: relative; }
+.comparison-chart-plot svg { cursor: crosshair; }
 .comparison-chart svg polyline { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .comparison-chart svg polyline.target { stroke: #6556e8; }
 .comparison-chart svg polyline.owner { stroke: #00a884; stroke-dasharray: 7 5; }
 .comparison-chart svg polyline.team { stroke: #ee8c43; stroke-dasharray: 3 5; }
+.comparison-chart svg circle { pointer-events: none; stroke: #fff; stroke-width: 1.5; }
+.comparison-chart svg circle.target { fill: #6556e8; }
+.comparison-chart svg circle.owner { fill: #00a884; }
+.comparison-chart svg circle.team { fill: #ee8c43; }
 .comparison-chart .grid-line { stroke: #e8ebf2; stroke-width: 1; }
 .comparison-chart .tick-line { stroke: #f1f2f6; stroke-width: 1; }
 .comparison-chart text { fill: #98a0b2; font-size: 9px; text-anchor: middle; }
+.comparison-tooltip { min-width: 190px; }
+.comparison-tooltip>span { display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: 6px; margin-top: 5px; font-size: 9px; }
+.comparison-tooltip>span i { width: 7px; height: 7px; border-radius: 50%; }
+.comparison-tooltip>span.target i { background: #6556e8; }
+.comparison-tooltip>span.owner i { background: #00a884; }
+.comparison-tooltip>span.team i { background: #ee8c43; }
+.comparison-tooltip>span b { font-size: 10px; }
 .benchmark-footnote { color: var(--muted); line-height: 1.6; }
 
 @media (max-width: 1050px) {

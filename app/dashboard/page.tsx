@@ -121,14 +121,15 @@ function TrendCard({ metric, title, icon, data, language }: { metric: TrendMetri
     const combined = combinePlatforms(selected.map((platform) => point.platforms[platform]));
     return { at: point.capturedAt, value: metric === "engagementRate" ? combined.engagementRate : combined.metrics[metric] };
   });
-  return <article className="card trend-card"><header><span className="kicon">{icon}</span><div><p>{title}</p><strong>{format(currentValue, metric, language)}</strong></div></header><PlatformSelector selected={selected} toggle={toggle} /><LineChart points={points} language={language} showTime={data.days === 1} /></article>;
+  return <article className="card trend-card"><header><span className="kicon">{icon}</span><div><p>{title}</p><strong>{format(currentValue, metric, language)}</strong></div></header><PlatformSelector selected={selected} toggle={toggle} /><LineChart points={points} metric={metric} label={title} language={language} showTime={data.days === 1} /></article>;
 }
 
 function PlatformSelector({ selected, toggle }: { selected: Platform[]; toggle: (platform: Platform) => void }) {
   return <div className="platform-selector">{allPlatforms.map((platform) => <button key={platform} className={selected.includes(platform) ? "active" : ""} onClick={() => toggle(platform)}><i className={`pi ${platformMeta[platform].className}`}>{platformMeta[platform].icon}</i>{platformMeta[platform].name}</button>)}</div>;
 }
 
-function LineChart({ points, language, showTime = false }: { points: { at: string; value: number | null }[]; language: "zh" | "en"; showTime?: boolean }) {
+function LineChart({ points, metric, label, language, showTime = false }: { points: { at: string; value: number | null }[]; metric: TrendMetric; label: string; language: "zh" | "en"; showTime?: boolean }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const available = points.map((point, index) => ({ ...point, index })).filter((point): point is { at: string; value: number; index: number } => point.value !== null && Number.isFinite(point.value));
   if (!available.length) return <div className="empty-chart">{language === "zh" ? "暂无历史数据" : "No history yet"}</div>;
   const width = 560, height = 150, padding = 12;
@@ -141,7 +142,15 @@ function LineChart({ points, language, showTime = false }: { points: { at: strin
   const dateOptions: Intl.DateTimeFormatOptions = showTime ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" };
   const first = new Date(available[0].at).toLocaleString(language === "zh" ? "zh-CN" : "en-US", dateOptions);
   const last = new Date(available.at(-1)!.at).toLocaleString(language === "zh" ? "zh-CN" : "en-US", dateOptions);
-  return <div className="line-chart"><svg viewBox={`0 0 ${width} ${height}`} role="img"><line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} /><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} /><polyline points={coordinates} />{available.length === 1 && <circle cx={x(available[0].index)} cy={y(available[0].value)} r="4" />}</svg><span>{first}</span><span>{last}</span></div>;
+  const hovered = hoveredIndex === null ? null : available.find((point) => point.index === hoveredIndex) ?? null;
+  function hover(event: React.MouseEvent<SVGSVGElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const chartX = (event.clientX - bounds.left) / bounds.width * width;
+    const nearest = available.reduce((best, point) => Math.abs(x(point.index) - chartX) < Math.abs(x(best.index) - chartX) ? point : best);
+    setHoveredIndex(nearest.index);
+  }
+  const tooltipDate = hovered ? new Date(hovered.at).toLocaleString(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  return <div className="line-chart" onMouseLeave={() => setHoveredIndex(null)}><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} onMouseMove={hover}><line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} /><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} /><polyline points={coordinates} />{available.map((point) => <circle className={hovered?.index === point.index ? "chart-point active" : "chart-point"} key={point.index} cx={x(point.index)} cy={y(point.value)} r={hovered?.index === point.index ? 5 : 3} />)}{hovered && <line className="hover-guide" x1={x(hovered.index)} x2={x(hovered.index)} y1={padding} y2={height - padding} />}</svg>{hovered && <div className="chart-tooltip" style={{ left: `${Math.min(88, Math.max(12, x(hovered.index) / width * 100))}%`, top: `${Math.max(12, y(hovered.value) / height * 100)}%` }}><time>{tooltipDate}</time><strong>{label}</strong><b>{format(hovered.value, metric, language)}</b></div>}<span>{first}</span><span>{last}</span></div>;
 }
 
 function PersonView({ person, data, language }: { person: Person; data: DashboardData; language: "zh" | "en" }) {
