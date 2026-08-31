@@ -96,14 +96,14 @@ function benchmark(timelines: Timeline[]) {
 }
 
 export async function getVideoDetailData(uploadId: string) {
-  const targetResult = await query<UploadRow>(`SELECT id::text,title,uploader_open_id,uploader_name,created_at,status FROM uploads WHERE id=$1`, [uploadId]);
+  const targetResult = await query<UploadRow>(`SELECT id::text,title,uploader_open_id,uploader_name,created_at,status FROM uploads WHERE id=$1 AND removed_at IS NULL`, [uploadId]);
   const video = targetResult.rows[0];
   if (!video) return null;
-  const cohortResult = await query<{ id: string; cohort: string }>(`WITH target AS (SELECT uploader_open_id,uploader_name FROM uploads WHERE id=$1),
-    owner_recent AS (SELECT u.id::text,'owner' cohort FROM uploads u,target t WHERE u.id<>$1 AND
+  const cohortResult = await query<{ id: string; cohort: string }>(`WITH target AS (SELECT uploader_open_id,uploader_name FROM uploads WHERE id=$1 AND removed_at IS NULL),
+    owner_recent AS (SELECT u.id::text,'owner' cohort FROM uploads u,target t WHERE u.id<>$1 AND u.removed_at IS NULL AND
       ((t.uploader_open_id IS NOT NULL AND u.uploader_open_id=t.uploader_open_id) OR (t.uploader_open_id IS NULL AND u.uploader_open_id IS NULL AND u.uploader_name IS NOT DISTINCT FROM t.uploader_name))
       ORDER BY u.created_at DESC LIMIT 10),
-    team_recent AS (SELECT id::text,'team' cohort FROM uploads WHERE id<>$1 ORDER BY created_at DESC LIMIT 30)
+    team_recent AS (SELECT id::text,'team' cohort FROM uploads WHERE id<>$1 AND removed_at IS NULL ORDER BY created_at DESC LIMIT 30)
     SELECT * FROM owner_recent UNION ALL SELECT * FROM team_recent`, [uploadId]);
   const ownerIds = cohortResult.rows.filter((row) => row.cohort === "owner").map((row) => row.id);
   const teamIds = cohortResult.rows.filter((row) => row.cohort === "team").map((row) => row.id);
@@ -112,7 +112,7 @@ export async function getVideoDetailData(uploadId: string) {
       p.id::text publication_id,p.platform,p.post_url,p.status publication_status,ms.captured_at,ms.metrics
     FROM uploads u JOIN publications p ON p.upload_id=u.id
     LEFT JOIN metric_snapshots ms ON ms.publication_id=p.id
-    WHERE u.id=ANY($1::uuid[]) ORDER BY u.created_at DESC,p.id,ms.captured_at`, [ids]);
+    WHERE u.removed_at IS NULL AND p.removed_at IS NULL AND u.id=ANY($1::uuid[]) ORDER BY u.created_at DESC,p.id,ms.captured_at`, [ids]);
   const grouped = new Map<string, SnapshotRow[]>();
   for (const row of snapshotResult.rows) grouped.set(row.id, [...(grouped.get(row.id) ?? []), row]);
   const elapsedMinutes = Math.max(1, Math.min(1440, Math.floor((Date.now() - Date.parse(video.created_at)) / 60_000)));

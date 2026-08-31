@@ -4,6 +4,7 @@ import { MeeDooUser } from "./auth";
 import { getUploadPostConfig, supportedPlatforms, UploadPostPlatform } from "./upload-post";
 import { UploadSession } from "./upload-staging";
 import {isVerticalNineSixteen,probeVideo} from "./video-probe";
+import { PlatformContent } from "./platform-content";
 
 export async function getUserRole(openId: string) {
   const result = await query<{ role: string }>(`SELECT role FROM meedoo_users WHERE open_id=$1`, [openId]);
@@ -14,13 +15,14 @@ export async function isApprover(openId: string) {
   return (await getUserRole(openId)) === "approver";
 }
 
-export async function submitForReview(input: { session: UploadSession; user: MeeDooUser; title: string; caption: string; platforms: UploadPostPlatform[] }) {
+export async function submitForReview(input: { session: UploadSession; user: MeeDooUser; platformContent: PlatformContent; platforms: UploadPostPlatform[] }) {
   const { profile } = getUploadPostConfig();
   const probe=await probeVideo(input.session.media_path!);if(probe.width&&probe.height&&!isVerticalNineSixteen(probe.width,probe.height))throw new Error("INVALID_ASPECT_RATIO");
+  const display=input.platformContent.youtube;
   await transaction(async (client) => {
-    await client.query(`INSERT INTO uploads(id,profile_username,title,caption,original_filename,media_size_bytes,media_path,uploader_open_id,uploader_name,status,target_platforms,review_status,submitted_at,video_width,video_height,video_duration_seconds,video_codec)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending_review',$10,'pending',now(),$11,$12,$13,$14)`,
-    [input.session.id,profile || "pending",input.title,input.caption,input.session.original_filename,Number(input.session.expected_size),input.session.media_path,input.user.openId,input.user.name,input.platforms,probe.width,probe.height,probe.duration,probe.codec]);
+    await client.query(`INSERT INTO uploads(id,profile_username,title,caption,platform_content,original_filename,media_size_bytes,media_path,uploader_open_id,uploader_name,status,target_platforms,review_status,submitted_at,video_width,video_height,video_duration_seconds,video_codec)
+      VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,'pending_review',$11,'pending',now(),$12,$13,$14,$15)`,
+    [input.session.id,profile || "pending",display.title,display.caption,JSON.stringify(input.platformContent),input.session.original_filename,Number(input.session.expected_size),input.session.media_path,input.user.openId,input.user.name,input.platforms,probe.width,probe.height,probe.duration,probe.codec]);
     await client.query(`UPDATE upload_sessions SET status='submitted',expires_at=now()+interval '60 days',updated_at=now() WHERE id=$1 AND status='ready'`, [input.session.id]);
   });
   return input.session.id;
@@ -32,13 +34,16 @@ export type ReviewRecord = {
   target_platforms: string[]; original_filename: string | null; media_size_bytes: string | null; media_path: string | null;
   reviewer_name: string | null; version: number;
   video_width:number|null;video_height:number|null;video_duration_seconds:string|null;video_codec:string|null;
+  platform_content: PlatformContent | Record<string, never>;
+  published_platforms: string[];
 };
 
 export async function listReviewRecords(user: MeeDooUser, pendingOnly = false) {
   const approver = await isApprover(user.openId);
-  const conditions = ["($1::boolean OR u.uploader_open_id=$2)", pendingOnly ? "u.review_status='pending'" : "true"];
+  const conditions = ["u.removed_at IS NULL", "($1::boolean OR u.uploader_open_id=$2)", pendingOnly ? "u.review_status='pending'" : "true"];
   const result = await query<ReviewRecord>(`SELECT u.id::text,u.title,u.caption,u.uploader_open_id,u.uploader_name,u.status,u.review_status,u.review_comment,
-      u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,r.name reviewer_name
+      u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,u.platform_content,r.name reviewer_name,
+      ARRAY(SELECT p.platform FROM publications p WHERE p.upload_id=u.id AND p.status='completed' AND p.removed_at IS NULL ORDER BY p.platform) published_platforms
     FROM uploads u LEFT JOIN meedoo_users r ON r.open_id=u.reviewed_by WHERE ${conditions.join(" AND ")} ORDER BY COALESCE(u.submitted_at,u.created_at) DESC LIMIT 200`, [approver,user.openId]);
   return { approver, records: result.rows };
 }
@@ -46,8 +51,9 @@ export async function listReviewRecords(user: MeeDooUser, pendingOnly = false) {
 export async function getReviewRecord(id: string, user: MeeDooUser) {
   const approver = await isApprover(user.openId);
   const result = await query<ReviewRecord>(`SELECT u.id::text,u.title,u.caption,u.uploader_open_id,u.uploader_name,u.status,u.review_status,u.review_comment,
-      u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,r.name reviewer_name
-    FROM uploads u LEFT JOIN meedoo_users r ON r.open_id=u.reviewed_by WHERE u.id=$1 AND ($2::boolean OR u.uploader_open_id=$3)`, [id,approver,user.openId]);
+      u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,u.platform_content,r.name reviewer_name,
+      ARRAY(SELECT p.platform FROM publications p WHERE p.upload_id=u.id AND p.status='completed' AND p.removed_at IS NULL ORDER BY p.platform) published_platforms
+    FROM uploads u LEFT JOIN meedoo_users r ON r.open_id=u.reviewed_by WHERE u.id=$1 AND u.removed_at IS NULL AND ($2::boolean OR u.uploader_open_id=$3)`, [id,approver,user.openId]);
   const history=result.rows[0]?await query<{decision:string;comment:string|null;created_at:string;reviewer_name:string}>(`SELECT ur.decision,ur.comment,ur.created_at,mu.name reviewer_name FROM upload_reviews ur JOIN meedoo_users mu ON mu.open_id=ur.reviewer_open_id WHERE ur.upload_id=$1 ORDER BY ur.created_at DESC`,[id]):{rows:[]};
   return { approver, record: result.rows[0] ?? null,history:history.rows };
 }
@@ -55,7 +61,7 @@ export async function getReviewRecord(id: string, user: MeeDooUser) {
 export async function decideReview(id: string, reviewer: MeeDooUser, decision: "approved" | "rejected", comment: string) {
   if (!await isApprover(reviewer.openId)) throw new Error("APPROVER_REQUIRED");
   return transaction(async (client) => {
-    const locked = await client.query<ReviewRecord>(`SELECT * FROM uploads WHERE id=$1 FOR UPDATE`, [id]);
+    const locked = await client.query<ReviewRecord>(`SELECT * FROM uploads WHERE id=$1 AND removed_at IS NULL FOR UPDATE`, [id]);
     const upload = locked.rows[0];
     if (!upload || upload.review_status !== "pending") throw new Error("REVIEW_NOT_PENDING");
     if (decision === "rejected" && !comment.trim()) throw new Error("COMMENT_REQUIRED");

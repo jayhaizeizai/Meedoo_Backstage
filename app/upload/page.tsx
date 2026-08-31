@@ -17,6 +17,14 @@ const MAX_TITLE_CHARACTERS = 100;
 const MAX_SOCIAL_TEXT_CHARACTERS = 2200;
 const MAX_YOUTUBE_DESCRIPTION_BYTES = 5000;
 const acceptedVideoTypes = new Set(["video/mp4", "video/quicktime", "video/webm"]);
+type PlatformId = (typeof platformOptions)[number]["id"];
+type PlatformPostContent = { title: string; caption: string };
+type PlatformContentState = Record<PlatformId, PlatformPostContent>;
+const emptyPlatformContent = (): PlatformContentState => ({
+  tiktok: { title: "", caption: "" },
+  instagram: { title: "", caption: "" },
+  youtube: { title: "", caption: "" },
+});
 
 type ConnectionState = {
   configured: boolean;
@@ -95,8 +103,8 @@ export default function UploadPage() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [title, setTitle] = useState("");
-  const [caption, setCaption] = useState("");
+  const [platformContent, setPlatformContent] = useState<PlatformContentState>(emptyPlatformContent);
+  const [syncPlatformContent,setSyncPlatformContent]=useState(true);
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   const [publishing, setPublishing] = useState(false);
@@ -163,7 +171,8 @@ export default function UploadPage() {
     }
     setStagedUpload(restored);
     setFile(nextFile);
-    setTitle(nextFile.name.replace(/\.[^.]+$/, "").slice(0, MAX_TITLE_CHARACTERS));
+    const filenameTitle=nextFile.name.replace(/\.[^.]+$/, "").slice(0, MAX_TITLE_CHARACTERS);
+    setPlatformContent((current)=>Object.fromEntries(platformOptions.map(({id})=>[id,{...current[id],title:filenameTitle}])) as PlatformContentState);
   }
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -178,10 +187,13 @@ export default function UploadPage() {
     if (nextFile) chooseFile(nextFile);
   }
 
-  function togglePlatform(id: string) {
-    if (connection?.configured && !connection.connected[id as keyof ConnectionState["connected"]]) return;
-    setPlatforms((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  function updatePlatformContent(platform:PlatformId,field:keyof PlatformPostContent,value:string){
+    setPlatformContent((current)=>syncPlatformContent
+      ? Object.fromEntries(platformOptions.map(({id})=>[id,{...current[id],[field]:value}])) as PlatformContentState
+      : {...current,[platform]:{...current[platform],[field]:value}});
   }
+
+  function toggleContentSync(){setSyncPlatformContent((current)=>{const next=!current;if(next)setPlatformContent((content)=>Object.fromEntries(platformOptions.map(({id})=>[id,{...content.tiktok}])) as PlatformContentState);return next;});}
 
   async function publish() {
     if (!file || !user) return;
@@ -238,7 +250,7 @@ export default function UploadPage() {
       }
       if(stage.status!=="ready")throw new Error(text("这个视频上传任务已经被使用，请重新选择文件。","This staged upload has already been used. Choose the file again."));
       setUploadProgress(100);
-      const publishResponse=await fetch("/api/upload-post/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({uploadSessionId:stage.id,title:title.trim(),caption:caption.trim(),platforms})});
+      const publishResponse=await fetch("/api/upload-post/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({uploadSessionId:stage.id,platformContent,platforms})});
       const data=await publishResponse.json() as {requestId?:string;status?:string;results?:unknown;message?:string};
       if(!publishResponse.ok||!data.requestId)throw new Error(data.message||text("发布请求失败","Publishing request failed"));
       setUploadProgress(100);
@@ -253,21 +265,14 @@ export default function UploadPage() {
   }
 
   const connectedCount = platformOptions.filter((platform) => connection?.connected[platform.id]).length;
-  const socialTextLength = title.trim().length + (caption.trim() ? caption.trim().length + 2 : 0);
-  const youtubeDescriptionBytes = new TextEncoder().encode(caption.trim()).length;
-  const validationError = !title.trim()
-    ? text("标题不能为空。", "Title is required.")
-    : title.trim().length > MAX_TITLE_CHARACTERS
-      ? text("标题不能超过 100 个字符。", "Title cannot exceed 100 characters.")
-      : /[<>]/.test(title) || /[<>]/.test(caption)
-        ? text("标题和文案不能包含 < 或 >。", "Title and caption cannot contain < or >.")
-        : socialTextLength > MAX_SOCIAL_TEXT_CHARACTERS
-          ? text("标题与文案合计不能超过 2,200 个字符。", "Title and caption together cannot exceed 2,200 characters.")
-          : youtubeDescriptionBytes > MAX_YOUTUBE_DESCRIPTION_BYTES
-            ? text("文案的 UTF-8 大小不能超过 5,000 字节。", "Caption cannot exceed 5,000 UTF-8 bytes.")
-            : "";
+  const invalidPlatform=platformOptions.find(({id})=>{const content=platformContent[id];const combined=content.title.trim().length+(content.caption.trim()?2+content.caption.trim().length:0);return !content.title.trim()||!content.caption.trim()||content.title.trim().length>MAX_TITLE_CHARACTERS||/[<>]/.test(content.title)||/[<>]/.test(content.caption)||combined>MAX_SOCIAL_TEXT_CHARACTERS||new TextEncoder().encode(content.caption.trim()).length>MAX_YOUTUBE_DESCRIPTION_BYTES;});
+  const validationError = invalidPlatform
+    ? text(`${invalidPlatform.name} 的标题和文案均为必填，并且必须符合长度与字符规则。`, `${invalidPlatform.name} requires both a valid title and caption.`)
+    : platforms.length!==platformOptions.length
+      ? text("必须连接 TikTok、Instagram 和 YouTube 后才能提交审批。","TikTok, Instagram, and YouTube must all be connected before review submission.")
+      : "";
   const selectedPlatformsConnected = platforms.every((platform) => connection?.connected[platform as keyof ConnectionState["connected"]]);
-  const canPublish = Boolean(file && !validationError && platforms.length && user && connection?.configured && selectedPlatformsConnected && !publishing);
+  const canPublish = Boolean(file && !validationError && platforms.length===platformOptions.length && user && connection?.configured && selectedPlatformsConnected && !publishing);
   const shellStatus = connection === null
     ? { zh: "检查三平台连接", en: "Checking platform connections" }
     : connection.configured
@@ -316,7 +321,7 @@ export default function UploadPage() {
 
           <section className="card form">
             <div className="ctitle">
-              <div><span>✦</span><div><h2>{text("发布设置", "Publishing details")}</h2><p>{text("为三个平台配置统一内容", "Configure once for all channels")}</p></div></div>
+              <div><span>✦</span><div><h2>{text("三平台发布内容", "Content for each platform")}</h2><p>{text("每个平台的标题和文案均为必填", "A title and caption are required for every platform")}</p></div></div>
               <small>{platforms.length} / 3</small>
             </div>
             <div className={`provider-state${connection?.configured ? " ready" : ""}`}>
@@ -326,29 +331,21 @@ export default function UploadPage() {
                 <small>{connection?.configured ? text(`${connectedCount} 个平台授权有效`, `${connectedCount} platform connections available`) : text("配置后无需修改前端代码", "No frontend changes needed after setup")}</small>
               </div>
             </div>
-            <label className="label field-label" htmlFor="video-title"><span>{text("视频标题", "Video title")}</span><small>{title.length} / 100</small></label>
-            <input id="video-title" maxLength={100} value={title} placeholder={text("选择文件后自动使用文件名", "Uses the filename after selection")} onChange={(event) => setTitle(event.target.value)} />
-            <label className="label field-label" htmlFor="caption"><span>{text("文案", "Caption")}</span><small>{socialTextLength} / 2,200 · {youtubeDescriptionBytes} / 5,000 bytes</small></label>
-            <textarea id="caption" maxLength={2200} value={caption} placeholder={text("输入三个平台共用的文案（可选）", "Shared caption for all platforms (optional)")} onChange={(event) => setCaption(event.target.value)} />
-            <small className={`field-rule${file && validationError ? " invalid" : ""}`}>{file && validationError ? `⚠ ${validationError}` : text("统一规则：标题 1–100 字；标题与文案合计 ≤2,200 字；文案 ≤5,000 UTF-8 bytes；不可包含 < 或 >。", "Combined rules: title 1–100 chars; title + caption ≤2,200 chars; caption ≤5,000 UTF-8 bytes; no < or >.")}</small>
-            <span className="label">{text("发布平台", "Publish to")}</span>
-            <div className="platforms">
-              {platformOptions.map((platform) => {
-                const selected = platforms.includes(platform.id);
-                const unavailable = Boolean(connection?.configured && !connection.connected[platform.id]);
-                return (
-                  <button key={platform.id} className={`${selected ? "selected" : ""}${unavailable ? " unavailable" : ""}`} type="button" disabled={unavailable} onClick={() => togglePlatform(platform.id)} aria-pressed={selected}>
-                    <i className={`pi ${platform.className}`}>{platform.icon}</i>
-                    <span>{platform.name}<small>{connection === null ? text("检查中", "Checking") : !connection.configured ? text("等待配置", "Awaiting setup") : unavailable ? text("未连接", "Not connected") : text("已连接", "Connected")}</small></span>
-                    <b>{unavailable ? "×" : selected ? "✓" : "+"}</b>
-                  </button>
-                );
-              })}
+            <button className={`content-sync-toggle${syncPlatformContent?" active":""}`} type="button" onClick={toggleContentSync} aria-pressed={syncPlatformContent}><span>{syncPlatformContent?"✓":""}</span><div><strong>{text("同步三平台内容","Keep platform content in sync")}</strong><small>{syncPlatformContent?text("编辑任意一项会同步到三个平台","Edits apply to all three platforms"):text("已开启独立编辑","Platform fields can now differ")}</small></div></button>
+            <div className="platform-content-list">
+              {platformOptions.map((platform)=>{const content=platformContent[platform.id];const combined=content.title.trim().length+(content.caption.trim()?2+content.caption.trim().length:0);const captionBytes=new TextEncoder().encode(content.caption.trim()).length;const connected=Boolean(connection?.connected[platform.id]);return <section className="platform-content-card" key={platform.id}>
+                <header><i className={`pi ${platform.className}`}>{platform.icon}</i><strong>{platform.name}</strong><span className={connected?"connected":"disconnected"}>{connected?text("已连接","Connected"):text("未连接","Not connected")}</span></header>
+                <label className="label field-label" htmlFor={`${platform.id}-title`}><span>{text("标题（必填）","Title (required)")}</span><small>{content.title.length} / 100</small></label>
+                <input id={`${platform.id}-title`} maxLength={100} value={content.title} placeholder={text("选择文件后自动使用文件名","Uses the filename after selection")} onChange={(event)=>updatePlatformContent(platform.id,"title",event.target.value)}/>
+                <label className="label field-label" htmlFor={`${platform.id}-caption`}><span>{text("文案（必填）","Caption (required)")}</span><small>{combined} / 2,200 · {captionBytes} / 5,000 bytes</small></label>
+                <textarea id={`${platform.id}-caption`} maxLength={2200} value={content.caption} placeholder={text(`输入 ${platform.name} 文案`,`Enter the ${platform.name} caption`)} onChange={(event)=>updatePlatformContent(platform.id,"caption",event.target.value)}/>
+              </section>})}
             </div>
+            <small className={`field-rule${file && validationError ? " invalid" : ""}`}>{file && validationError ? `⚠ ${validationError}` : text("三个标题和三段文案必须全部填写。标题 1–100 字；每组标题与文案合计 ≤2,200 字；不可包含 < 或 >。", "All three titles and captions are required. Each title is 1–100 chars; each title + caption is ≤2,200 chars; no < or >.")}</small>
             {publishError && <div className="publish-error" role="alert">⚠ {publishError}</div>}
             {connection?.configured && !selectedPlatformsConnected && <div className="publish-error connection-warning">{text("请先在 Upload-Post 连接所有已选择的平台。", "Connect every selected platform in Upload-Post first.")}</div>}
             <button className="publish" disabled={!canPublish} onClick={() => void publish()}>
-              ↥ {publishing ? uploadProgress === 100 ? text("视频已上传，正在提交审批…", "Video uploaded, submitting for review…") : text(`正在上传 ${uploadProgress ?? 0}%`, `Uploading ${uploadProgress ?? 0}%`) : text(`提交审批 · ${platforms.length} 个平台 →`, `Submit for review · ${platforms.length} platforms →`)}
+              ↥ {publishing ? uploadProgress === 100 ? text("视频已上传，正在提交审批…", "Video uploaded, submitting for review…") : text(`正在上传 ${uploadProgress ?? 0}%`, `Uploading ${uploadProgress ?? 0}%`) : text("提交三平台审批 →", "Submit all three for review →")}
             </button>
             {uploadProgress !== null && <div className="upload-meter" aria-label={text("上传进度", "Upload progress")}><span><i style={{ width: `${uploadProgress}%` }} /></span><small>{uploadProgress === 100 && publishing ? text("服务器正在创建待审批记录", "Server is creating the review submission") : `${uploadProgress}%`}</small></div>}
           </section>

@@ -183,7 +183,7 @@ export async function getDashboardData(days = 30) {
     FROM uploads u JOIN publications p ON p.upload_id=u.id
     LEFT JOIN meedoo_users mu ON mu.open_id=u.uploader_open_id
     LEFT JOIN LATERAL (SELECT metrics FROM metric_snapshots ms WHERE ms.publication_id=p.id ORDER BY captured_at DESC LIMIT 1) latest ON true
-    WHERE u.review_status='approved' ORDER BY u.created_at DESC`);
+    WHERE u.review_status='approved' AND u.removed_at IS NULL AND p.removed_at IS NULL ORDER BY u.created_at DESC`);
   const allRows = current.rows;
   const cutoff = Date.now() - safeDays * 24 * 60 * 60 * 1000;
   const rows = allRows.filter((row) => Date.parse(row.created_at) >= cutoff);
@@ -193,7 +193,7 @@ export async function getDashboardData(days = 30) {
         p.platform,p.post_url,p.platform_post_id,p.status publication_status,p.error_message,mu.avatar_url,mu.role
       FROM uploads u JOIN publications p ON p.upload_id=u.id
       LEFT JOIN meedoo_users mu ON mu.open_id=u.uploader_open_id
-      WHERE u.review_status='approved'
+      WHERE u.review_status='approved' AND u.removed_at IS NULL AND p.removed_at IS NULL
     ), seed AS (
       SELECT DISTINCT ON (e.publication_id) e.publication_id::text,e.upload_id,e.title,e.uploader_open_id,e.uploader_name,e.created_at,e.status,
         e.platform,e.post_url,e.platform_post_id,e.publication_status,e.error_message,ms.metrics,e.avatar_url,e.role,ms.captured_at,true is_seed

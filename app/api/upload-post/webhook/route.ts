@@ -31,12 +31,12 @@ export async function POST(request:NextRequest) {
     const result=payload.result&&typeof payload.result==="object"?payload.result as Record<string,unknown>:{};
     if(jobId&&platform) {
       const changed=await transaction(async(client)=>{
-        const found=await client.query<{upload_id:string;old_status:string;title:string}>(`SELECT p.upload_id,u.status old_status,u.title FROM publications p JOIN uploads u ON u.id=p.upload_id WHERE p.provider_job_id=$1 OR u.provider_job_id=$1 LIMIT 1`,[jobId]);
+        const found=await client.query<{upload_id:string;old_status:string;title:string}>(`SELECT p.upload_id,u.status old_status,u.title FROM publications p JOIN uploads u ON u.id=p.upload_id WHERE u.removed_at IS NULL AND p.removed_at IS NULL AND (p.provider_job_id=$1 OR u.provider_job_id=$1) LIMIT 1`,[jobId]);
         if(!found.rows[0]) return null;
         const success=result.success===true;
-        await client.query(`UPDATE publications SET status=$3,success=$4,post_url=COALESCE($5,post_url),platform_post_id=COALESCE($6,platform_post_id),error_message=$7,last_synced_at=now(),updated_at=now() WHERE upload_id=$1 AND platform=$2`,
+        await client.query(`UPDATE publications SET status=$3,success=$4,post_url=COALESCE($5,post_url),platform_post_id=COALESCE($6,platform_post_id),error_message=$7,last_synced_at=now(),updated_at=now() WHERE upload_id=$1 AND platform=$2 AND removed_at IS NULL`,
           [found.rows[0].upload_id,platform,success?"completed":"failed",success,typeof result.url==="string"?result.url:null,typeof (result.post_id??result.publish_id)==="string"?result.post_id??result.publish_id:null,typeof result.error==="string"?result.error:null]);
-        const counts=await client.query<{pending:string;failed:string}>(`SELECT count(*) FILTER(WHERE status NOT IN ('completed','failed')) pending,count(*) FILTER(WHERE status='failed') failed FROM publications WHERE upload_id=$1`,[found.rows[0].upload_id]);
+        const counts=await client.query<{pending:string;failed:string}>(`SELECT count(*) FILTER(WHERE status NOT IN ('completed','failed')) pending,count(*) FILTER(WHERE status='failed') failed FROM publications WHERE upload_id=$1 AND removed_at IS NULL`,[found.rows[0].upload_id]);
         const next=Number(counts.rows[0].pending)?"processing":Number(counts.rows[0].failed)?"failed":"completed";
         await client.query(`UPDATE uploads SET status=$2,updated_at=now(),completed_at=CASE WHEN $2 IN ('completed','failed') THEN now() ELSE completed_at END,media_delete_after=CASE WHEN $2='completed' THEN COALESCE(media_delete_after,now()+interval '3 days') ELSE media_delete_after END WHERE id=$1`,[found.rows[0].upload_id,next]);
         return {...found.rows[0],next};

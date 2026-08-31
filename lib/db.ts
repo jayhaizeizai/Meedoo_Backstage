@@ -132,6 +132,11 @@ export async function ensureSchema() {
     ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_height integer;
     ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_duration_seconds numeric;
     ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_codec text;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS platform_content jsonb NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS removed_at timestamptz;
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS removed_by text REFERENCES meedoo_users(open_id) ON DELETE SET NULL;
+    ALTER TABLE publications ADD COLUMN IF NOT EXISTS removed_at timestamptz;
+    ALTER TABLE publications ADD COLUMN IF NOT EXISTS removed_by text REFERENCES meedoo_users(open_id) ON DELETE SET NULL;
     CREATE TABLE IF NOT EXISTS upload_reviews (
       id bigserial PRIMARY KEY,
       upload_id uuid NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
