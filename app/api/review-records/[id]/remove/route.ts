@@ -15,7 +15,7 @@ export async function DELETE(request: NextRequest, { params }: Context) {
   try {
     const result=await transaction(async(client)=>{
       const allowed=await client.query<{id:string}>(`SELECT u.id::text FROM uploads u LEFT JOIN meedoo_users actor ON actor.open_id=$2
-        WHERE u.id=$1 AND u.removed_at IS NULL AND u.review_status='approved' AND (u.uploader_open_id=$2 OR actor.role='approver') FOR UPDATE OF u`,[id,user.openId]);
+        WHERE u.id=$1 AND u.removed_at IS NULL AND u.review_status='approved' AND actor.role='approver' FOR UPDATE OF u`,[id,user.openId]);
       if(!allowed.rowCount)return null;
       const removed=await client.query<{platform:string}>(`UPDATE publications SET removed_at=now(),removed_by=$2,updated_at=now()
         WHERE upload_id=$1 AND removed_at IS NULL AND ($3::text IS NULL OR (platform=$3 AND status='completed')) RETURNING platform`,[id,user.openId,platform]);
