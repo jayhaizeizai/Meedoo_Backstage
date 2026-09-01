@@ -321,7 +321,7 @@ export default function UploadPage() {
 
           <section className="card form">
             <div className="ctitle">
-              <div><span>✦</span><div><h2>{text("三平台发布内容", "Content for each platform")}</h2><p>{text("每个平台的标题和文案均为必填", "A title and caption are required for every platform")}</p></div></div>
+              <div><span>✦</span><div><h2>{syncPlatformContent?text("三平台共用内容","Shared content for all platforms"):text("各平台独立内容", "Content for each platform")}</h2><p>{syncPlatformContent?text("填写一次，同时用于三个平台","Enter once and use it across all three platforms"):text("分别填写三个平台的标题和文案", "Customize the title and caption for each platform")}</p></div></div>
               <small>{platforms.length} / 3</small>
             </div>
             <div className={`provider-state${connection?.configured ? " ready" : ""}`}>
@@ -332,7 +332,13 @@ export default function UploadPage() {
               </div>
             </div>
             <button className={`content-sync-toggle${syncPlatformContent?" active":""}`} type="button" onClick={toggleContentSync} aria-pressed={syncPlatformContent}><span>{syncPlatformContent?"✓":""}</span><div><strong>{text("同步三平台内容","Keep platform content in sync")}</strong><small>{syncPlatformContent?text("编辑任意一项会同步到三个平台","Edits apply to all three platforms"):text("已开启独立编辑","Platform fields can now differ")}</small></div></button>
-            <div className="platform-content-list">
+            {syncPlatformContent?(()=>{const content=platformContent.tiktok;const combined=content.title.trim().length+(content.caption.trim()?2+content.caption.trim().length:0);const captionBytes=new TextEncoder().encode(content.caption.trim()).length;return <section className="platform-content-card shared-content-card">
+              <header><span className="shared-platform-icons">{platformOptions.map(platform=><i className={`pi ${platform.className}`} key={platform.id}>{platform.icon}</i>)}</span><strong>{text("TikTok、Instagram、YouTube 共用","Shared by TikTok, Instagram and YouTube")}</strong></header>
+              <label className="label field-label" htmlFor="shared-title"><span>{text("标题（必填）","Title (required)")}</span><small>{content.title.length} / 100</small></label>
+              <input id="shared-title" maxLength={100} value={content.title} placeholder={text("选择文件后自动使用文件名","Uses the filename after selection")} onChange={(event)=>updatePlatformContent("tiktok","title",event.target.value)}/>
+              <label className="label field-label" htmlFor="shared-caption"><span>{text("文案（必填）","Caption (required)")}</span><small>{combined} / 2,200 · {captionBytes} / 5,000 bytes</small></label>
+              <textarea id="shared-caption" maxLength={2200} value={content.caption} placeholder={text("输入三平台共用文案","Enter the shared caption")} onChange={(event)=>updatePlatformContent("tiktok","caption",event.target.value)}/>
+            </section>})():<div className="platform-content-list">
               {platformOptions.map((platform)=>{const content=platformContent[platform.id];const combined=content.title.trim().length+(content.caption.trim()?2+content.caption.trim().length:0);const captionBytes=new TextEncoder().encode(content.caption.trim()).length;const connected=Boolean(connection?.connected[platform.id]);return <section className="platform-content-card" key={platform.id}>
                 <header><i className={`pi ${platform.className}`}>{platform.icon}</i><strong>{platform.name}</strong><span className={connected?"connected":"disconnected"}>{connected?text("已连接","Connected"):text("未连接","Not connected")}</span></header>
                 <label className="label field-label" htmlFor={`${platform.id}-title`}><span>{text("标题（必填）","Title (required)")}</span><small>{content.title.length} / 100</small></label>
@@ -340,8 +346,8 @@ export default function UploadPage() {
                 <label className="label field-label" htmlFor={`${platform.id}-caption`}><span>{text("文案（必填）","Caption (required)")}</span><small>{combined} / 2,200 · {captionBytes} / 5,000 bytes</small></label>
                 <textarea id={`${platform.id}-caption`} maxLength={2200} value={content.caption} placeholder={text(`输入 ${platform.name} 文案`,`Enter the ${platform.name} caption`)} onChange={(event)=>updatePlatformContent(platform.id,"caption",event.target.value)}/>
               </section>})}
-            </div>
-            <small className={`field-rule${file && validationError ? " invalid" : ""}`}>{file && validationError ? `⚠ ${validationError}` : text("三个标题和三段文案必须全部填写。标题 1–100 字；每组标题与文案合计 ≤2,200 字；不可包含 < 或 >。", "All three titles and captions are required. Each title is 1–100 chars; each title + caption is ≤2,200 chars; no < or >.")}</small>
+            </div>}
+            <small className={`field-rule${file && validationError ? " invalid" : ""}`}>{file && validationError ? `⚠ ${validationError}` : syncPlatformContent?text("共用标题和文案会保存为三份平台内容；取消勾选后可分别修改。","The shared title and caption are saved for all three platforms; turn sync off to customize them."):text("三个标题和三段文案必须全部填写。标题 1–100 字；每组标题与文案合计 ≤2,200 字；不可包含 < 或 >。", "All three titles and captions are required. Each title is 1–100 chars; each title + caption is ≤2,200 chars; no < or >.")}</small>
             {publishError && <div className="publish-error" role="alert">⚠ {publishError}</div>}
             {connection?.configured && !selectedPlatformsConnected && <div className="publish-error connection-warning">{text("请先在 Upload-Post 连接所有已选择的平台。", "Connect every selected platform in Upload-Post first.")}</div>}
             <button className="publish" disabled={!canPublish} onClick={() => void publish()}>
