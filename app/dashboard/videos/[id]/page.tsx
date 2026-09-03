@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../../../../components/app-shell";
 import { useLanguage } from "../../../../components/language-provider";
 
-type MetricKey = "views" | "likes" | "retention" | "reposts" | "shares" | "followers" | "saves" | "comments";
+type MetricKey = "views" | "likes" | "retention" | "shares" | "followers" | "saves" | "comments";
 type Platform = "tiktok" | "instagram" | "youtube";
 type PlatformKey = "all" | Platform;
 type Metrics = Record<MetricKey, number | null>;

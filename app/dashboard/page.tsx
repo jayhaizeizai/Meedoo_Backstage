@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
 
-type MetricKey = "views" | "likes" | "retention" | "reposts" | "shares" | "followers" | "saves" | "comments";
+type MetricKey = "views" | "likes" | "retention" | "shares" | "followers" | "saves" | "comments";
 type Platform = "tiktok" | "instagram" | "youtube";
 type Metrics = Record<MetricKey, number | null>;
 type PlatformAggregate = { metrics: Metrics; engagementRate: number | null; videoCount: number; mix: number[] };
@@ -39,7 +39,7 @@ function format(value: number | null, key?: MetricKey | "engagementRate" | "tota
 }
 
 function combinePlatforms(values: PlatformAggregate[]) {
-  const metrics = Object.fromEntries((["views", "likes", "retention", "reposts", "shares", "followers", "saves", "comments"] as MetricKey[]).map((key) => {
+  const metrics = Object.fromEntries((["views", "likes", "retention", "shares", "followers", "saves", "comments"] as MetricKey[]).map((key) => {
     const available = values.map((item) => ({ value: item.metrics[key], views: item.metrics.views })).filter((item): item is { value: number; views: number | null } => item.value !== null);
     if (!available.length) return [key, null];
     if (key === "retention") {
@@ -48,7 +48,7 @@ function combinePlatforms(values: PlatformAggregate[]) {
     }
     return [key, available.reduce((sum, item) => sum + item.value, 0)];
   })) as Metrics;
-  const engagement = [metrics.likes, metrics.comments, metrics.shares, metrics.saves, metrics.reposts].filter((value): value is number => value !== null);
+  const engagement = [metrics.likes, metrics.comments, metrics.shares, metrics.saves].filter((value): value is number => value !== null);
   return { metrics, engagementRate: metrics.views && engagement.length ? engagement.reduce((sum, value) => sum + value, 0) / metrics.views * 100 : null };
 }
 
@@ -105,7 +105,7 @@ function Overview({ data, language }: { data: DashboardData; language: "zh" | "e
     { key: "views", title: t("当天团队总浏览 / 触达", "Today's team views / reach"), icon: "◉" },
     { key: "retention", title: t("观看 / 留存", "Watch / retention"), icon: "◷" },
     { key: "engagementRate", title: t("团队互动率", "Team engagement rate"), icon: "⌁" },
-    { key: "followers", title: t("新增粉丝 / 订阅", "New followers / subscribers"), icon: "↗" },
+    { key: "followers", title: t("估算新增粉丝 / 订阅", "Estimated new followers / subscribers"), icon: "↗" },
   ];
   return <section className="trend-grid">{cards.map((card) => <TrendCard key={card.key} metric={card.key} title={card.title} icon={card.icon} data={data} language={language} />)}</section>;
 }

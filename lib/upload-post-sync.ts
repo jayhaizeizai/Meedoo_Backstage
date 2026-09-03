@@ -4,6 +4,7 @@ import { syntheticUuid } from "./records";
 import { getUploadPostConfig, parseProviderResponse, uploadPostFetch } from "./upload-post";
 import { cleanupExpiredUploadSessions } from "./upload-staging";
 import { runMaintenance } from "./maintenance";
+import { syncProfileAnalytics } from "./profile-analytics";
 
 type AnyRecord = Record<string, unknown>;
 const stringValue = (value: unknown) => typeof value === "string" ? value : null;
@@ -133,5 +134,8 @@ export async function syncAll() {
   const history = await syncHistory();
   const statuses = await syncPendingStatuses();
   const analytics = await syncAnalytics();
-  return { cleaned, history, statuses, analytics, maintenance, syncedAt: new Date().toISOString() };
+  let profileAnalytics: unknown;
+  try { profileAnalytics = await syncProfileAnalytics(); }
+  catch (error) { profileAnalytics = { error: error instanceof Error ? error.message : "PROFILE_ANALYTICS_FAILED" }; }
+  return { cleaned, history, statuses, analytics, profileAnalytics, maintenance, syncedAt: new Date().toISOString() };
 }

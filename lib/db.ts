@@ -103,6 +103,24 @@ export async function ensureSchema() {
       source text NOT NULL DEFAULT 'upload-post',
       UNIQUE(publication_id, captured_at)
     );
+    CREATE TABLE IF NOT EXISTS profile_metric_snapshots (
+      id bigserial PRIMARY KEY,
+      platform text NOT NULL,
+      captured_at timestamptz NOT NULL DEFAULT now(),
+      followers bigint,
+      metrics jsonb NOT NULL DEFAULT '{}',
+      source text NOT NULL DEFAULT 'upload-post-profile',
+      UNIQUE(platform, captured_at)
+    );
+    CREATE TABLE IF NOT EXISTS publication_follower_attributions (
+      id bigserial PRIMARY KEY,
+      publication_id bigint NOT NULL REFERENCES publications(id) ON DELETE CASCADE,
+      profile_snapshot_id bigint NOT NULL REFERENCES profile_metric_snapshots(id) ON DELETE CASCADE,
+      attributed_followers integer NOT NULL CHECK (attributed_followers >= 0),
+      method text NOT NULL DEFAULT '24h-view-weighted',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE(publication_id, profile_snapshot_id)
+    );
     CREATE TABLE IF NOT EXISTS webhook_deliveries (
       delivery_id text PRIMARY KEY,
       event text NOT NULL,
@@ -157,6 +175,8 @@ export async function ensureSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS publications_platform_post_unique
       ON publications(platform,platform_post_id) WHERE platform_post_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS metric_snapshots_publication_captured_idx ON metric_snapshots(publication_id, captured_at DESC);
+    CREATE INDEX IF NOT EXISTS profile_metric_snapshots_platform_captured_idx ON profile_metric_snapshots(platform, captured_at DESC);
+    CREATE INDEX IF NOT EXISTS publication_follower_attributions_publication_idx ON publication_follower_attributions(publication_id);
     CREATE INDEX IF NOT EXISTS uploads_review_status_submitted_idx ON uploads(review_status, submitted_at DESC);
     CREATE INDEX IF NOT EXISTS upload_reviews_upload_created_idx ON upload_reviews(upload_id, created_at DESC);
   `).then(() => undefined).catch((error) => { global.meedooSchemaReady = undefined; throw error; });

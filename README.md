@@ -86,6 +86,17 @@ Owners are optional. Unassigned history remains visible in team and video totals
 but is omitted from personal rankings until the member signs in with Lark and
 their `open_id` is added to the owner map.
 
+### Follower attribution
+
+MeeDoo stores the current follower total for each connected platform during every
+scheduled sync. Positive follower changes are attributed only to videos that were
+inside their first 24 hours during that interval. Allocation is weighted by each
+eligible video's incremental views; when no view delta is available, the increase
+is split evenly. Direct per-post `new_followers` metrics take precedence when a
+platform provides them. This preserves the account-level total without claiming
+that the attribution is exact, and older videos without a pre-publication baseline
+remain unavailable.
+
 To back up, rebuild, and populate a Lark Base after granting the app
 `bitable:app`, set `LARK_BASE_APP_TOKEN` and run:
 
