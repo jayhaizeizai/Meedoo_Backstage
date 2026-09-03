@@ -58,13 +58,18 @@ export async function getReviewRecord(id: string, user: MeeDooUser) {
   return { approver, record: result.rows[0] ?? null,history:history.rows };
 }
 
-export async function decideReview(id: string, reviewer: MeeDooUser, decision: "approved" | "rejected", comment: string) {
+export async function decideReview(id: string, reviewer: MeeDooUser, decision: "approved" | "rejected", comment: string, platformContent?: PlatformContent) {
   if (!await isApprover(reviewer.openId)) throw new Error("APPROVER_REQUIRED");
   return transaction(async (client) => {
     const locked = await client.query<ReviewRecord>(`SELECT * FROM uploads WHERE id=$1 AND removed_at IS NULL FOR UPDATE`, [id]);
     const upload = locked.rows[0];
     if (!upload || upload.review_status !== "pending") throw new Error("REVIEW_NOT_PENDING");
     if (decision === "rejected" && !comment.trim()) throw new Error("COMMENT_REQUIRED");
+    if (platformContent) {
+      const display = platformContent.youtube;
+      await client.query(`UPDATE uploads SET title=$2,caption=$3,platform_content=$4::jsonb,updated_at=now() WHERE id=$1`,
+        [id,display.title,display.caption,JSON.stringify(platformContent)]);
+    }
     const deleteAfter = decision === "rejected" ? "now()+interval '7 days'" : "NULL";
     await client.query(`UPDATE uploads SET review_status=$2,reviewed_by=$3,reviewed_at=now(),review_comment=$4,status=$5,media_delete_after=${deleteAfter},updated_at=now() WHERE id=$1`,
       [id,decision,reviewer.openId,comment.trim() || null,decision === "approved" ? "approved" : "rejected"]);
@@ -76,5 +81,18 @@ export async function decideReview(id: string, reviewer: MeeDooUser, decision: "
       for (const platform of selected) await client.query(`INSERT INTO publications(upload_id,platform,request_id,status) VALUES($1,$2,$3,'queued') ON CONFLICT(upload_id,platform) DO NOTHING`, [id,platform,requestId]);
     }
     return { upload, decision };
+  });
+}
+
+export async function updateReviewContent(id: string, reviewer: MeeDooUser, platformContent: PlatformContent) {
+  if (!await isApprover(reviewer.openId)) throw new Error("APPROVER_REQUIRED");
+  return transaction(async (client) => {
+    const locked = await client.query<ReviewRecord>(`SELECT * FROM uploads WHERE id=$1 AND removed_at IS NULL FOR UPDATE`, [id]);
+    const upload = locked.rows[0];
+    if (!upload || upload.review_status !== "pending") throw new Error("REVIEW_NOT_PENDING");
+    const display = platformContent.youtube;
+    await client.query(`UPDATE uploads SET title=$2,caption=$3,platform_content=$4::jsonb,updated_at=now() WHERE id=$1`,
+      [id,display.title,display.caption,JSON.stringify(platformContent)]);
+    return platformContent;
   });
 }
