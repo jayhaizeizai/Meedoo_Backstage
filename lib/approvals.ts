@@ -20,10 +20,12 @@ export async function submitForReview(input: { session: UploadSession; user: Mee
   const probe=await probeVideo(input.session.media_path!);if(probe.width&&probe.height&&!isVerticalNineSixteen(probe.width,probe.height))throw new Error("INVALID_ASPECT_RATIO");
   const display=input.platformContent.youtube;
   await transaction(async (client) => {
+    const transitioned = await client.query(`UPDATE upload_sessions SET status='submitted',expires_at=now()+interval '60 days',updated_at=now()
+      WHERE id=$1 AND status='ready' RETURNING id`, [input.session.id]);
+    if (!transitioned.rowCount) throw new Error("UPLOAD_SESSION_NOT_READY");
     await client.query(`INSERT INTO uploads(id,profile_username,title,caption,platform_content,original_filename,media_size_bytes,media_path,uploader_open_id,uploader_name,status,target_platforms,review_status,submitted_at,video_width,video_height,video_duration_seconds,video_codec)
       VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,'pending_review',$11,'pending',now(),$12,$13,$14,$15)`,
     [input.session.id,profile || "pending",display.title,display.caption,JSON.stringify(input.platformContent),input.session.original_filename,Number(input.session.expected_size),input.session.media_path,input.user.openId,input.user.name,input.platforms,probe.width,probe.height,probe.duration,probe.codec]);
-    await client.query(`UPDATE upload_sessions SET status='submitted',expires_at=now()+interval '60 days',updated_at=now() WHERE id=$1 AND status='ready'`, [input.session.id]);
   });
   return input.session.id;
 }

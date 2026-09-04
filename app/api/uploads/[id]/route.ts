@@ -15,7 +15,7 @@ export async function GET(_request:NextRequest,{params}:Context){
 export async function DELETE(_request:NextRequest,{params}:Context){
   const user=await getCurrentUser();if(!user)return NextResponse.json({success:false},{status:401});const {id}=await params;
   const session=await getOwnedUploadSession(id,user.openId);if(!session)return NextResponse.json({success:false,message:"Upload session not found."},{status:404});
-  if(["publishing","consumed"].includes(session.status))return NextResponse.json({success:false,message:"Publishing media cannot be cancelled."},{status:409});
+  if(!["uploading","assembling","ready","failed"].includes(session.status))return NextResponse.json({success:false,message:"Submitted media cannot be cancelled."},{status:409});
   if(session.media_path)await rm(session.media_path,{force:true}).catch(()=>undefined);
   await query(`UPDATE upload_sessions SET expires_at=now(),status='failed',error_message='Cancelled by user',updated_at=now() WHERE id=$1`,[id]);
   return NextResponse.json({success:true});

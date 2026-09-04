@@ -14,7 +14,7 @@ export const acceptedVideoTypes = new Set(["video/mp4", "video/quicktime", "vide
 export type UploadSession = {
   id: string; uploader_open_id: string; original_filename: string; content_type: string;
   expected_size: string; chunk_size: number; total_chunks: number; media_path: string | null;
-  status: "uploading" | "assembling" | "ready" | "publishing" | "consumed" | "failed";
+  status: "uploading" | "assembling" | "ready" | "submitted" | "publishing" | "consumed" | "failed";
   expires_at: string;
 };
 

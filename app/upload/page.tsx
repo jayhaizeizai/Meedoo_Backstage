@@ -255,6 +255,9 @@ export default function UploadPage() {
       if(!publishResponse.ok||!data.requestId)throw new Error(data.message||text("发布请求失败","Publishing request failed"));
       setUploadProgress(100);
       setJob({ requestId: data.requestId, status: data.status ?? "queued", results: normalizeResults(data.results) });
+      setStagedUpload(null);
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       window.localStorage.removeItem("meedoo_staged_upload");
       dialogRef.current?.showModal();
     } catch (cause) {

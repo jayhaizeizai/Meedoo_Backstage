@@ -44,6 +44,7 @@ export default function ApprovalDetail() {
   const [approver, setApprover] = useState(false);
   const [history, setHistory] = useState<History[]>([]);
   const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaUnavailable, setMediaUnavailable] = useState(false);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -57,7 +58,7 @@ export default function ApprovalDetail() {
       const record = payload.record as RecordItem;
       const initial = Object.fromEntries(requiredPlatforms.map((platform) => [platform, copyFor(record, platform)]));
       setItem(record); setContent(initial); setSharedContent(contentMatches(initial, record.target_platforms));
-      setApprover(payload.approver); setHistory(payload.history ?? []); setMediaUrl(payload.mediaUrl);
+      setApprover(payload.approver); setHistory(payload.history ?? []); setMediaUrl(payload.mediaUrl); setMediaUnavailable(!payload.mediaUrl);
     }).catch((cause) => setError(cause.message));
   }, [params.id]);
 
@@ -127,7 +128,7 @@ export default function ApprovalDetail() {
       <Link className="back-link" href={approver ? "/approvals" : "/records"}>← {text("返回", "Back")}</Link>
       {error && <div className="data-message error">⚠ {error}</div>}
       {item && <div className="approval-workspace">
-        <section className="review-player card">{mediaUrl ? <video src={mediaUrl} controls playsInline preload="metadata" /> : <div className="data-message">{text("视频文件不可用", "Video unavailable")}</div>}</section>
+        <section className="review-player card">{mediaUrl && !mediaUnavailable ? <video src={mediaUrl} controls playsInline preload="metadata" onError={() => setMediaUnavailable(true)} /> : <div className="data-message">{text("视频文件不可用，请重新上传原始文件。", "Video unavailable. Please upload the original file again.")}</div>}</section>
         <aside className="review-panel card">
           <span className={`review-badge ${item.review_status}`}>{item.review_status}</span>
           <h1>{heading}</h1>
