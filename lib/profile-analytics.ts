@@ -36,9 +36,8 @@ function viewsFrom(platform: UploadPostPlatform, metrics: AnyRecord | null) {
 function integerAllocations(total: number, weights: number[]) {
   if (!weights.length || total <= 0) return weights.map(() => 0);
   const weightTotal = weights.reduce((sum, value) => sum + value, 0);
-  const normalized = weightTotal > 0 ? weights : weights.map(() => 1);
-  const normalizedTotal = normalized.reduce((sum, value) => sum + value, 0);
-  const raw = normalized.map((value) => total * value / normalizedTotal);
+  if (weightTotal <= 0) return weights.map(() => 0);
+  const raw = weights.map((value) => total * value / weightTotal);
   const allocations = raw.map(Math.floor);
   let remainder = total - allocations.reduce((sum, value) => sum + value, 0);
   const order = raw.map((value, index) => ({ index, fraction: value - allocations[index] }))
@@ -48,11 +47,12 @@ function integerAllocations(total: number, weights: number[]) {
 }
 
 async function attributeFollowerGain(client: PoolClient, platform: UploadPostPlatform, snapshotId: string, capturedAt: string, followers: number) {
-  const previous = await client.query<{ id: string; captured_at: string; followers: string | null }>(`SELECT id::text,captured_at,followers::text
+  const previous = await client.query<{ id: string; captured_at: string; followers: string | null; previous_high: string | null }>(`SELECT id::text,captured_at,followers::text,
+      (SELECT max(followers)::text FROM profile_metric_snapshots WHERE platform=$1 AND captured_at<$2) previous_high
     FROM profile_metric_snapshots WHERE platform=$1 AND captured_at<$2 ORDER BY captured_at DESC LIMIT 1`, [platform, capturedAt]);
   const prior = previous.rows[0];
   if (!prior?.followers) return { gained: 0, attributed: 0, candidates: 0, baseline: false };
-  const gained = Math.max(0, followers - Number(prior.followers));
+  const gained = Math.max(0, followers - Number(prior.previous_high ?? prior.followers));
   await client.query(`DELETE FROM publication_follower_attributions WHERE profile_snapshot_id=$1`, [snapshotId]);
 
   const candidates = await client.query<Candidate>(`SELECT p.id::text publication_id,current_snapshot.metrics current_metrics,previous_snapshot.metrics previous_metrics
@@ -60,7 +60,7 @@ async function attributeFollowerGain(client: PoolClient, platform: UploadPostPla
     LEFT JOIN LATERAL (SELECT metrics FROM metric_snapshots ms WHERE ms.publication_id=p.id AND ms.captured_at<=$2 ORDER BY ms.captured_at DESC LIMIT 1) current_snapshot ON true
     LEFT JOIN LATERAL (SELECT metrics FROM metric_snapshots ms WHERE ms.publication_id=p.id AND ms.captured_at<=$3 ORDER BY ms.captured_at DESC LIMIT 1) previous_snapshot ON true
     WHERE p.platform=$1 AND p.status='completed' AND p.removed_at IS NULL AND u.removed_at IS NULL AND u.review_status='approved'
-      AND p.created_at<=$2 AND p.created_at>$3::timestamptz-interval '24 hours'`, [platform, capturedAt, prior.captured_at]);
+      AND p.created_at<=$2 AND p.created_at>$3::timestamptz-interval '96 hours'`, [platform, capturedAt, prior.captured_at]);
   if (!candidates.rowCount) return { gained, attributed: 0, candidates: 0, baseline: true };
   const weights = candidates.rows.map((candidate) => Math.max(0,
     (viewsFrom(platform, candidate.current_metrics) ?? 0) - (viewsFrom(platform, candidate.previous_metrics) ?? 0)));
