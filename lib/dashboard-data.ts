@@ -1,9 +1,10 @@
 import { query } from "./db";
+import { equivalentRetention } from "./equivalent-retention";
 
 export const metricDefinitions = [
   { key: "views", zh: "浏览 / 触达", en: "Views / Reach", weight: 6 },
   { key: "likes", zh: "点赞", en: "Likes", weight: 3 },
-  { key: "retention", zh: "观看 / 留存", en: "Watch / Retention", weight: 17 },
+  { key: "retention", zh: "等效留存评分", en: "Equivalent Retention Score", weight: 17 },
   { key: "shares", zh: "分享 / 转发 / 发送", en: "Shares / Reposts / Sends", weight: 40 },
   { key: "followers", zh: "估算新增粉丝 / 订阅", en: "Estimated new followers / Subscribers", weight: 18 },
   { key: "saves", zh: "收藏", en: "Saves", weight: 10 },
@@ -28,6 +29,7 @@ type Row = {
   publication_status: string;
   error_message: string | null;
   metrics: Record<string, unknown> | null;
+  video_duration_seconds: number | string | null;
   attributed_followers: number | string | null;
   avatar_url: string | null;
   role: string | null;
@@ -40,7 +42,7 @@ type SnapshotRow = Row & {
 
 const aliases: Record<Exclude<MetricKey, "views">, string[]> = {
   likes: ["likes", "like_count"],
-  retention: ["average_view_percentage", "avg_view_percentage", "retention_rate"],
+  retention: [],
   shares: ["shares", "share_count"],
   followers: ["followers_gained", "new_followers", "subscribers_gained", "new_subscribers"],
   saves: ["saves", "favorites", "favorite_count", "bookmarks"],
@@ -65,7 +67,9 @@ function normalize(row: Row): Metrics {
   const viewKeys = row.platform === "instagram" ? ["reach", "views", "impressions"] : ["views", "reach", "impressions"];
   return Object.fromEntries(metricDefinitions.map(({ key }) => [
     key,
-    key === "views" ? numberFrom(row.metrics, viewKeys) : key === "followers"
+    key === "views" ? numberFrom(row.metrics, viewKeys) : key === "retention"
+      ? equivalentRetention(row.platform, row.metrics, row.video_duration_seconds)
+      : key === "followers"
       ? numberFrom(row.metrics, aliases.followers) ?? (row.attributed_followers === null ? null : Number(row.attributed_followers))
       : key === "shares" ? sumAvailable(
         numberFrom(row.metrics, aliases.shares),
@@ -189,7 +193,7 @@ function buildDailyViewsTrend(points: ReturnType<typeof buildTrend>, days: numbe
 export async function getDashboardData(days = 30) {
   const safeDays = Math.min(365, Math.max(1, Math.round(days)));
   const current = await query<Row>(`SELECT p.id::text publication_id,u.id upload_id,u.title,u.uploader_open_id,u.uploader_name,u.created_at,u.status,
-    p.platform,p.post_url,p.platform_post_id,p.status publication_status,p.error_message,latest.metrics,
+    p.platform,p.post_url,p.platform_post_id,p.status publication_status,p.error_message,latest.metrics,u.video_duration_seconds,
     (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a WHERE a.publication_id=p.id) attributed_followers,
     mu.avatar_url,mu.role
     FROM uploads u JOIN publications p ON p.upload_id=u.id
@@ -201,14 +205,14 @@ export async function getDashboardData(days = 30) {
   const rows = allRows.filter((row) => Date.parse(row.created_at) >= cutoff);
 
   const snapshots = await query<SnapshotRow>(`WITH eligible AS (
-      SELECT p.id publication_id,u.id upload_id,u.title,u.uploader_open_id,u.uploader_name,u.created_at,u.status,
+      SELECT p.id publication_id,u.id upload_id,u.title,u.uploader_open_id,u.uploader_name,u.created_at,u.status,u.video_duration_seconds,
         p.platform,p.post_url,p.platform_post_id,p.status publication_status,p.error_message,mu.avatar_url,mu.role
       FROM uploads u JOIN publications p ON p.upload_id=u.id
       LEFT JOIN meedoo_users mu ON mu.open_id=u.uploader_open_id
       WHERE u.review_status='approved' AND u.removed_at IS NULL AND p.removed_at IS NULL
     ), seed AS (
       SELECT DISTINCT ON (e.publication_id) e.publication_id::text,e.upload_id,e.title,e.uploader_open_id,e.uploader_name,e.created_at,e.status,
-        e.platform,e.post_url,e.platform_post_id,e.publication_status,e.error_message,ms.metrics,
+        e.platform,e.post_url,e.platform_post_id,e.publication_status,e.error_message,ms.metrics,e.video_duration_seconds,
         (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a JOIN profile_metric_snapshots ps ON ps.id=a.profile_snapshot_id WHERE a.publication_id=e.publication_id AND ps.captured_at<=ms.captured_at) attributed_followers,
         e.avatar_url,e.role,ms.captured_at,true is_seed
       FROM eligible e JOIN metric_snapshots ms ON ms.publication_id=e.publication_id
@@ -216,7 +220,7 @@ export async function getDashboardData(days = 30) {
       ORDER BY e.publication_id,ms.captured_at DESC
     ), timeline AS (
       SELECT e.publication_id::text,e.upload_id,e.title,e.uploader_open_id,e.uploader_name,e.created_at,e.status,
-        e.platform,e.post_url,e.platform_post_id,e.publication_status,e.error_message,ms.metrics,
+        e.platform,e.post_url,e.platform_post_id,e.publication_status,e.error_message,ms.metrics,e.video_duration_seconds,
         (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a JOIN profile_metric_snapshots ps ON ps.id=a.profile_snapshot_id WHERE a.publication_id=e.publication_id AND ps.captured_at<=ms.captured_at) attributed_followers,
         e.avatar_url,e.role,ms.captured_at,false is_seed
       FROM eligible e JOIN metric_snapshots ms ON ms.publication_id=e.publication_id

@@ -97,6 +97,16 @@ platform provides them. This preserves the account-level total without claiming
 that the attribution is exact, and older videos without a pre-publication baseline
 remain unavailable.
 
+### Equivalent retention score
+
+Retention is displayed as a normalized 0–100 score rather than mixing incompatible
+platform percentages. YouTube uses `average_view_percentage`, capped at 100. TikTok
+combines average watched duration divided by video duration (65%) with
+`full_video_watched_rate` (35%); if only one component is available its weight is
+renormalized. Instagram remains unavailable until its Reels watch-time metrics are
+exposed by the configured analytics provider. Missing metrics stay unavailable and
+are never converted to zero. Team and multi-platform scores are weighted by views.
+
 To back up, rebuild, and populate a Lark Base after granting the app
 `bitable:app`, set `LARK_BASE_APP_TOKEN` and run:
 

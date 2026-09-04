@@ -407,6 +407,7 @@
 .detail-toolbar small { margin-top: 4px; color: var(--muted); }
 .detail-toolbar .platform-selector { margin: 0; }
 .fallback-note { margin: 14px 0; padding: 12px 15px; border: 1px solid #e6ddad; border-radius: 11px; background: #fffbed; color: #7b6727; line-height: 1.5; }
+.metric-method-note{display:block;margin:-5px 0 10px;color:var(--muted);font-size:8px;line-height:1.45}.retention-method-note{margin:14px 0;padding:11px 14px;border:1px solid #dcd8f6;border-radius:11px;background:#faf9ff;color:#655b92;font-size:10px;line-height:1.55}
 .detail-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
 .detail-kpis article { padding: 17px; }
 .detail-kpis small, .detail-kpis strong { display: block; }

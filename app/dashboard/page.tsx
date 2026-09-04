@@ -33,7 +33,8 @@ const initials = (name: string) => name.split(/\s+/).map((part) => part[0]).join
 
 function format(value: number | null, key?: MetricKey | "engagementRate" | "totalScore", language: "zh" | "en" = "zh") {
   if (value === null || !Number.isFinite(value)) return "—";
-  if (key === "retention" || key === "engagementRate") return `${value.toFixed(key === "engagementRate" ? 2 : 1)}%`;
+  if (key === "retention") return value.toFixed(1);
+  if (key === "engagementRate") return `${value.toFixed(2)}%`;
   if (key === "totalScore") return value.toFixed(1);
   return new Intl.NumberFormat(language === "zh" ? "zh-CN" : "en-US", { notation: value >= 10000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
 }
@@ -103,7 +104,7 @@ function Overview({ data, language }: { data: DashboardData; language: "zh" | "e
   const t = (zh: string, en: string) => language === "zh" ? zh : en;
   const cards: { key: TrendMetric; title: string; icon: string }[] = [
     { key: "views", title: t("当天团队总浏览 / 触达", "Today's team views / reach"), icon: "◉" },
-    { key: "retention", title: t("观看 / 留存", "Watch / retention"), icon: "◷" },
+    { key: "retention", title: t("等效留存评分（0–100）", "Equivalent retention score (0–100)"), icon: "◷" },
     { key: "engagementRate", title: t("团队互动率", "Team engagement rate"), icon: "⌁" },
     { key: "followers", title: t("估算新增粉丝 / 订阅", "Estimated new followers / subscribers"), icon: "↗" },
   ];
@@ -125,7 +126,7 @@ function TrendCard({ metric, title, icon, data, language }: { metric: TrendMetri
     const combined = combinePlatforms(selected.map((platform) => point.platforms[platform]));
     return { at: point.capturedAt, value: metric === "engagementRate" ? combined.engagementRate : combined.metrics[metric] };
   });
-  return <article className="card trend-card"><header><span className="kicon">{icon}</span><div><p>{title}</p><strong>{format(currentValue, metric, language)}</strong></div></header><PlatformSelector selected={selected} toggle={toggle} /><LineChart points={points} metric={metric} label={title} language={language} showTime={data.days === 1} /></article>;
+  return <article className="card trend-card"><header><span className="kicon">{icon}</span><div><p>{title}</p><strong>{format(currentValue, metric, language)}</strong></div></header><PlatformSelector selected={selected} toggle={toggle} />{metric === "retention" && <small className="metric-method-note">{language === "zh" ? "YouTube 与 TikTok 等效评分；Instagram 暂无可用观看时长数据" : "Equivalent YouTube and TikTok score; Instagram watch-time data is not yet available"}</small>}<LineChart points={points} metric={metric} label={title} language={language} showTime={data.days === 1} /></article>;
 }
 
 function PlatformSelector({ selected, toggle }: { selected: Platform[]; toggle: (platform: Platform) => void }) {
@@ -170,7 +171,7 @@ function PersonView({ person, data, language }: { person: Person; data: Dashboar
 }
 
 function RecentVideos({ videos, language }: { videos: Video[]; language: "zh" | "en" }) {
-  return <section className="card recent-person-videos"><div className="panel-head"><div><h2>{language === "zh" ? "最近上传的五条视频" : "Five most recent uploads"}</h2><p>{language === "zh" ? "按上传时间从近到远" : "Newest uploads first"}</p></div></div>{videos.length ? <div className="recent-video-list">{videos.map((video) => <article key={video.id}><div><Link href={`/dashboard/videos/${video.id}`}><strong>{video.title}</strong></Link><small>{new Date(video.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}</small><span>{video.platforms.map((platform) => <i key={platform.platform}>{platformMeta[platform.platform].name}</i>)}</span></div><dl><div><dt>{language === "zh" ? "浏览" : "Views"}</dt><dd>{format(video.metrics.views, "views", language)}</dd></div><div><dt>{language === "zh" ? "点赞" : "Likes"}</dt><dd>{format(video.metrics.likes, "likes", language)}</dd></div><div><dt>{language === "zh" ? "留存" : "Retention"}</dt><dd>{format(video.metrics.retention, "retention", language)}</dd></div></dl></article>)}</div> : <div className="empty-chart">{language === "zh" ? "暂无上传记录" : "No uploads yet"}</div>}</section>;
+  return <section className="card recent-person-videos"><div className="panel-head"><div><h2>{language === "zh" ? "最近上传的五条视频" : "Five most recent uploads"}</h2><p>{language === "zh" ? "按上传时间从近到远" : "Newest uploads first"}</p></div></div>{videos.length ? <div className="recent-video-list">{videos.map((video) => <article key={video.id}><div><Link href={`/dashboard/videos/${video.id}`}><strong>{video.title}</strong></Link><small>{new Date(video.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}</small><span>{video.platforms.map((platform) => <i key={platform.platform}>{platformMeta[platform.platform].name}</i>)}</span></div><dl><div><dt>{language === "zh" ? "浏览" : "Views"}</dt><dd>{format(video.metrics.views, "views", language)}</dd></div><div><dt>{language === "zh" ? "点赞" : "Likes"}</dt><dd>{format(video.metrics.likes, "likes", language)}</dd></div><div><dt>{language === "zh" ? "等效留存" : "Equivalent retention"}</dt><dd>{format(video.metrics.retention, "retention", language)}</dd></div></dl></article>)}</div> : <div className="empty-chart">{language === "zh" ? "暂无上传记录。" : "No uploads yet"}</div>}</section>;
 }
 
 function Kpis({ values, labels, language }: { values: string[]; labels: string[]; language: "zh" | "en" }) {

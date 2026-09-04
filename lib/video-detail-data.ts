@@ -1,9 +1,10 @@
 import { query } from "./db";
+import { equivalentRetention } from "./equivalent-retention";
 
 export const videoMetricDefinitions = [
   { key: "views", zh: "浏览 / 触达", en: "Views / Reach" },
   { key: "likes", zh: "点赞", en: "Likes" },
-  { key: "retention", zh: "观看 / 留存", en: "Watch / Retention" },
+  { key: "retention", zh: "等效留存评分", en: "Equivalent Retention Score" },
   { key: "shares", zh: "分享 / 转发 / 发送", en: "Shares / Reposts / Sends" },
   { key: "followers", zh: "估算新增粉丝 / 订阅", en: "Estimated new followers / Subscribers" },
   { key: "saves", zh: "收藏", en: "Saves" },
@@ -15,11 +16,11 @@ const checkpoints = [15, 30, 60, 120, 240, 480, 720, 1440];
 type MetricKey = typeof videoMetricDefinitions[number]["key"];
 type Metrics = Record<MetricKey, number | null>;
 type Platform = typeof platforms[number];
-type UploadRow = { id: string; title: string; uploader_open_id: string | null; uploader_name: string | null; created_at: string; status: string };
+type UploadRow = { id: string; title: string; uploader_open_id: string | null; uploader_name: string | null; created_at: string; status: string; video_duration_seconds: number | string | null };
 type SnapshotRow = UploadRow & { publication_id: string; platform: string; post_url: string | null; publication_status: string; captured_at: string | null; metrics: Record<string, unknown> | null; attributed_followers: number | string | null };
 
 const aliases: Record<Exclude<MetricKey, "views">, string[]> = {
-  likes: ["likes", "like_count"], retention: ["average_view_percentage", "avg_view_percentage", "retention_rate"],
+  likes: ["likes", "like_count"], retention: [],
   shares: ["shares", "share_count"],
   followers: ["followers_gained", "new_followers", "subscribers_gained", "new_subscribers"],
   saves: ["saves", "favorites", "favorite_count", "bookmarks"], comments: ["comments", "comment_count", "replies"],
@@ -39,9 +40,10 @@ function numberFrom(metrics: Record<string, unknown> | null, keys: string[]) {
   return null;
 }
 
-function normalize(platform: string, metrics: Record<string, unknown> | null, attributedFollowers: number | string | null = null): Metrics {
+function normalize(platform: string, metrics: Record<string, unknown> | null, attributedFollowers: number | string | null = null, duration: number | string | null = null): Metrics {
   return Object.fromEntries(videoMetricDefinitions.map(({ key }) => [key, key === "views"
     ? numberFrom(metrics, platform === "instagram" ? ["reach", "views", "impressions"] : ["views", "reach", "impressions"])
+    : key === "retention" ? equivalentRetention(platform, metrics, duration)
     : key === "followers" ? numberFrom(metrics, aliases.followers) ?? (attributedFollowers === null ? null : Number(attributedFollowers))
     : key === "shares" ? sumAvailable(
       numberFrom(metrics, aliases.shares),
@@ -60,7 +62,10 @@ function aggregate(values: Metrics[]) {
   for (const { key } of videoMetricDefinitions) {
     const available = values.map((metrics) => metrics[key]).filter((value): value is number => value !== null);
     if (!available.length) continue;
-    result[key] = key === "retention" ? available.reduce((sum, value) => sum + value, 0) / available.length : available.reduce((sum, value) => sum + value, 0);
+    if (key === "retention") {
+      const weighted = values.filter((metrics) => metrics.retention !== null && metrics.views !== null && metrics.views > 0);
+      result[key] = weighted.length ? weighted.reduce((sum, metrics) => sum + metrics.retention! * metrics.views!, 0) / weighted.reduce((sum, metrics) => sum + metrics.views!, 0) : available.reduce((sum, value) => sum + value, 0) / available.length;
+    } else result[key] = available.reduce((sum, value) => sum + value, 0);
   }
   return result;
 }
@@ -90,7 +95,7 @@ function timelineForUpload(rows: SnapshotRow[], requestedCheckpoints: number[]):
       if (!hasRealHistory) return latestByPublication.get(id)!;
       return [...publicationRows].reverse().find((row) => row.captured_at && Date.parse(row.captured_at) <= cutoff && row.metrics) ?? null;
     }).filter((row): row is SnapshotRow => Boolean(row));
-    const perPlatform = Object.fromEntries(platforms.map((platform) => [platform, aggregate(selected.filter((row) => row.platform === platform).map((row) => normalize(row.platform, row.metrics, row.attributed_followers)))])) as Record<Platform, Metrics>;
+    const perPlatform = Object.fromEntries(platforms.map((platform) => [platform, aggregate(selected.filter((row) => row.platform === platform).map((row) => normalize(row.platform, row.metrics, row.attributed_followers, row.video_duration_seconds)))])) as Record<Platform, Metrics>;
     return { minute, metrics: { all: aggregate(Object.values(perPlatform)), ...perPlatform } };
   });
   return { uploadId: rows[0].id, fallback: !hasRealHistory, points };
@@ -105,7 +110,7 @@ function benchmark(timelines: Timeline[]) {
 }
 
 export async function getVideoDetailData(uploadId: string) {
-  const targetResult = await query<UploadRow>(`SELECT id::text,title,uploader_open_id,uploader_name,created_at,status FROM uploads WHERE id=$1 AND removed_at IS NULL`, [uploadId]);
+  const targetResult = await query<UploadRow>(`SELECT id::text,title,uploader_open_id,uploader_name,created_at,status,video_duration_seconds FROM uploads WHERE id=$1 AND removed_at IS NULL`, [uploadId]);
   const video = targetResult.rows[0];
   if (!video) return null;
   const cohortResult = await query<{ id: string; cohort: string }>(`WITH target AS (SELECT uploader_open_id,uploader_name FROM uploads WHERE id=$1 AND removed_at IS NULL),
@@ -117,7 +122,7 @@ export async function getVideoDetailData(uploadId: string) {
   const ownerIds = cohortResult.rows.filter((row) => row.cohort === "owner").map((row) => row.id);
   const teamIds = cohortResult.rows.filter((row) => row.cohort === "team").map((row) => row.id);
   const ids = [...new Set([uploadId, ...ownerIds, ...teamIds])];
-  const snapshotResult = await query<SnapshotRow>(`SELECT u.id::text,u.title,u.uploader_open_id,u.uploader_name,u.created_at,u.status,
+  const snapshotResult = await query<SnapshotRow>(`SELECT u.id::text,u.title,u.uploader_open_id,u.uploader_name,u.created_at,u.status,u.video_duration_seconds,
       p.id::text publication_id,p.platform,p.post_url,p.status publication_status,ms.captured_at,ms.metrics,
       (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a JOIN profile_metric_snapshots ps ON ps.id=a.profile_snapshot_id
         WHERE a.publication_id=p.id AND (ms.captured_at IS NULL OR ps.captured_at<=ms.captured_at)) attributed_followers
@@ -137,7 +142,7 @@ export async function getVideoDetailData(uploadId: string) {
     return [...publicationRows].reverse().find((row) => row.metrics) ?? publication;
   });
   const currentByPlatform = Object.fromEntries(platforms.map((platform) => [platform,
-    aggregate(latestRows.filter((row) => row.platform === platform).map((row) => normalize(row.platform, row.metrics, row.attributed_followers)))])) as Record<Platform, Metrics>;
+    aggregate(latestRows.filter((row) => row.platform === platform).map((row) => normalize(row.platform, row.metrics, row.attributed_followers, row.video_duration_seconds)))])) as Record<Platform, Metrics>;
   const currentMetrics = { all: aggregate(Object.values(currentByPlatform)), ...currentByPlatform };
   const platformRows = [...new Map(targetRows.map((row) => [row.publication_id, row])).values()];
   return {
