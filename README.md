@@ -8,6 +8,7 @@ Next.js application for Lark-authenticated short-video publishing and analytics.
 - `/records` — the signed-in member's upload, review, and publishing history
 - `/approvals` — pending review queue for approvers
 - `/dashboard` — team overview, leaderboard, video data, and personal score views
+- `/weekly-report` — shared bonus rules and current-week conversion reporting
 - `/login` — Lark OAuth sign-in entry
 - `/api/auth/lark/callback` — Lark OAuth callback
 

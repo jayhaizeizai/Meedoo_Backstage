@@ -6,7 +6,7 @@ import { useLanguage } from "./language-provider";
 import { useAuth } from "./auth-provider";
 
 type AppShellProps = {
-  active: "upload" | "dashboard" | "records" | "approvals";
+  active: "upload" | "dashboard" | "weekly-report" | "records" | "approvals";
   status: { zh: string; en: string };
   children: React.ReactNode;
 };
@@ -37,6 +37,9 @@ export function AppShell({ active, status, children }: AppShellProps) {
           </Link>
           <Link className={active === "dashboard" ? "active" : ""} href="/dashboard">
             <span aria-hidden="true">⌁</span><i>{text("数据看板", "Dashboard")}</i>
+          </Link>
+          <Link className={active === "weekly-report" ? "active" : ""} href="/weekly-report">
+            <span aria-hidden="true">▣</span><i>{text("每周工作周报", "Weekly report")}</i>
           </Link>
           <Link className={active === "records" ? "active" : ""} href="/records"><span aria-hidden="true">☷</span><i>{text("上传记录", "Upload records")}</i></Link>
           {role === "approver" && <Link className={active === "approvals" ? "active" : ""} href="/approvals"><span aria-hidden="true">✓</span><i>{text("视频审批", "Video approvals")}</i></Link>}
