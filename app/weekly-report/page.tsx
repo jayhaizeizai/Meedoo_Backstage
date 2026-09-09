@@ -85,7 +85,6 @@ export default function WeeklyReportPage() {
 function Rules({ language }: { language: "zh" | "en" }) {
   const t = (zh: string, en: string) => language === "zh" ? zh : en;
   return <section className="weekly-section">
-    <div className="report-deadline">◷ <strong>{t("每周五上海时间下午 3 点前提交", "Due every Friday by 3pm Shanghai Time")}</strong></div>
     <article className="rules-intro card"><div><span className="weekly-icon">◎</span><div><p className="eyebrow">SHARED BY THE WHOLE TEAM</p><h2>{t("奖金规则", "Bonus rules")}</h2><p>{t("本页规则对全团队一致，并作为个人周度得分的统一依据。", "These rules are shared by the whole team and define the weekly personal score.")}</p></div></div><strong>100<small>{t("总权重", "Total weight")}</small></strong></article>
     <div className="bonus-rule-grid">
       <article className="card bonus-rule-panel"><p className="eyebrow">WORK EFFICIENCY</p><h2>{t("工作效率奖金倍率", "Work efficiency bonus multiplier")}</h2><div className="bonus-rule-list">{[
@@ -116,34 +115,62 @@ type PlatformResult = WeeklyReport["videos"][number]["platforms"][number];
 
 function Conversions({ data, error, language }: { data: WeeklyReport | null; error: string; language: "zh" | "en" }) {
   const t = (zh: string, en: string) => language === "zh" ? zh : en;
-  const [platform, setPlatform] = useState("instagram");
-  const [owner, setOwner] = useState("all");
+  const [owner, setOwner] = useState("");
   if (error) return <div className="data-message error">⚠ {t("周报数据暂时不可用。", "Weekly report data is temporarily unavailable.")}</div>;
   if (!data) return <div className="data-message">{t("正在载入本周转化数据…", "Loading this week's conversions…")}</div>;
-
-  const rows = data.videos.flatMap((video) => video.platforms
-    .filter((result) => result.platform === platform)
-    .map((result) => ({ video, result })))
-    .filter(({ video }) => owner === "all" || video.ownerId === owner);
-  const total = (key: Exclude<keyof PlatformResult, "platform" | "website">) => {
-    const values = rows.map(({ result }) => result[key]).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-    return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
-  };
-  const durationValues = rows.map(({ video }) => video.duration).filter((value): value is number => value !== null);
+  const selected = data.members.find((member) => member.id === owner) ?? data.members[0] ?? null;
+  const videos = selected ? data.videos.filter((video) => video.ownerId === selected.id) : [];
+  const allRows = videos.flatMap((video) => video.platforms.map((result) => ({ video, result })));
   const platformNames: Record<string, string> = { instagram: "Instagram Reels", youtube: "YouTube Shorts", tiktok: "TikTok" };
 
   return <section className="weekly-section conversion-sheet">
-    <div className="report-deadline">◷ <strong>{t("每周五上海时间下午 3 点前提交", "Due every Friday by 3pm Shanghai Time")}</strong></div>
-    <div className="conversion-toolbar">
-      <div className="report-platform-tabs">{Object.entries(platformNames).map(([key, label], index) => <button className={platform === key ? "active" : ""} onClick={() => setPlatform(key)} key={key}><span>{index + 1}</span>{label}</button>)}</div>
-      <label>{t("上传者", "Uploader")}<select value={owner} onChange={(event) => setOwner(event.target.value)}><option value="all">{t("全部上传者", "All uploaders")}</option>{data.members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}</select></label>
-    </div>
-    <article className="card conversion-sheet-card"><div className="weekly-panel-head"><div><p className="eyebrow">CONVERSIONS</p><h2>{platformNames[platform]}</h2><p>{t(`本周 ${rows.length} 条视频的平台结果`, `${rows.length} platform video results this week`)}</p></div><span>{t("网站转化暂不可用", "Website conversion unavailable")}</span></div>
-      <div className="conversion-sheet-wrap"><div className="conversion-sheet-table">
-        <div className="conversion-sheet-row header"><span>{t("视频", "Video")}</span><span>{t("上传者", "Uploader")}</span><span>{t("时长（秒）", "Duration (sec)")}</span><span>{t("转化到网站", "Conversion to Website")}</span><span>Repost</span><span>Share</span><span>{t("新增粉丝", "New Followers")}</span><span>{t("完播率 / 等效留存", "Completion / Equivalent retention")}</span><span>{t("收藏", "Save / Bookmark")}</span><span>{t("评论", "Comment")}</span><span>{t("浏览", "Views")}</span><span>{t("点赞", "Likes")}</span></div>
-        {rows.map(({ video, result }) => <div className="conversion-sheet-row" key={`${video.id}:${result.platform}`}><span className="conversion-video"><strong>{video.title}</strong><small>{new Date(video.createdAt).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { timeZone: data.period.timeZone })}</small></span><span className="weekly-member">{video.avatar ? <img src={video.avatar} alt="" /> : <i>{video.owner.slice(0, 2).toUpperCase()}</i>}<b>{video.owner}</b></span><strong>{video.duration === null ? "—" : Math.round(video.duration)}</strong><span className="unavailable-pill">{t("不可用", "Unavailable")}</span><strong>{metric(result.reposts, language)}</strong><strong>{metric(result.shares, language)}</strong><strong>{result.followers === null ? "—" : `+${number(result.followers, language)}`}</strong><strong>{percent(result.completionRate)}</strong><strong>{metric(result.saves, language)}</strong><strong>{metric(result.comments, language)}</strong><strong>{metric(result.views, language)}</strong><strong>{metric(result.likes, language)}</strong></div>)}
-        {rows.length > 0 && <div className="conversion-sheet-row totals"><span>{t("合计", "Totals")}</span><span>—</span><strong>{number(durationValues.reduce((sum, value) => sum + value, 0), language)}</strong><span className="unavailable-pill">{t("不可用", "Unavailable")}</span><strong>{metric(total("reposts"), language)}</strong><strong>{metric(total("shares"), language)}</strong><strong>{metric(total("followers"), language)}</strong><strong>—</strong><strong>{metric(total("saves"), language)}</strong><strong>{metric(total("comments"), language)}</strong><strong>{metric(total("views"), language)}</strong><strong>{metric(total("likes"), language)}</strong></div>}
-      </div></div>{rows.length === 0 && <div className="empty-week">{t("本周该平台暂无已批准的视频。", "No approved videos for this platform this week.")}</div>}</article>
+    <div className="person-report-tabs" role="tablist">{data.members.map((member) => <button className={selected?.id === member.id ? "active" : ""} onClick={() => setOwner(member.id)} key={member.id}>{member.avatar ? <img src={member.avatar} alt="" /> : <i>{member.name.slice(0, 2).toUpperCase()}</i>}<span><strong>{member.name}</strong><small>{member.videoCount} {t("个视频", "videos")}</small></span></button>)}</div>
+    {selected ? <>
+      <article className="card person-conversion-total"><div className="weekly-panel-head"><div><p className="eyebrow">PERSON TOTAL</p><h2>{selected.name} · {t("本周加总", "Weekly total")}</h2><p>{t("先汇总该成员的所有渠道，再查看各渠道逐视频明细。", "All channels combined first, followed by per-channel video details.")}</p></div><span>{t("网站转化暂不可用", "Website conversion unavailable")}</span></div><ConversionSummary rows={allRows} videoCount={videos.length} language={language} /></article>
+      {Object.entries(platformNames).map(([platform, label], index) => {
+        const rows = videos.flatMap((video) => video.platforms.filter((result) => result.platform === platform).map((result) => ({ video, result })));
+        return <ChannelTable key={platform} index={index + 1} label={label} rows={rows} data={data} language={language} />;
+      })}
+    </> : <div className="empty-week card">{t("本周暂无上传了已批准视频的成员。", "No members have approved videos this week.")}</div>}
     <p className="conversion-source-note">ⓘ {t("新增粉丝优先使用平台直接数据；Instagram 与 TikTok 缺少直接数据时继续使用估算归因。完播率使用现有跨平台等效留存口径。", "Direct follower data takes priority; Instagram and TikTok continue to use estimated attribution when direct data is missing. Completion uses the existing cross-platform equivalent retention method.")}</p>
   </section>;
+}
+
+type ConversionRow = { video: WeeklyReport["videos"][number]; result: PlatformResult };
+
+function sumResult(rows: ConversionRow[], key: Exclude<keyof PlatformResult, "platform" | "website">) {
+  const values = rows.map(({ result }) => result[key]).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function averageCompletion(rows: ConversionRow[]) {
+  const available = rows.filter(({ result }) => result.completionRate !== null);
+  if (!available.length) return null;
+  const weighted = available.filter(({ result }) => result.views !== null && result.views > 0);
+  return weighted.length
+    ? weighted.reduce((sum, { result }) => sum + result.completionRate! * result.views!, 0) / weighted.reduce((sum, { result }) => sum + result.views!, 0)
+    : available.reduce((sum, { result }) => sum + result.completionRate!, 0) / available.length;
+}
+
+function ConversionSummary({ rows, videoCount, language }: { rows: ConversionRow[]; videoCount: number; language: "zh" | "en" }) {
+  const t = (zh: string, en: string) => language === "zh" ? zh : en;
+  const duration = [...new Map(rows.map(({ video }) => [video.id, video.duration])).values()].filter((value): value is number => value !== null).reduce((sum, value) => sum + value, 0);
+  const items = [
+    [t("视频", "Videos"), number(videoCount, language)], [t("总时长", "Total duration"), `${number(duration, language)}s`],
+    ["Repost", metric(sumResult(rows, "reposts"), language)], ["Share", metric(sumResult(rows, "shares"), language)],
+    [t("新增粉丝", "New followers"), metric(sumResult(rows, "followers"), language)], [t("平均完播 / 留存", "Avg completion / retention"), percent(averageCompletion(rows))],
+    [t("收藏", "Saves"), metric(sumResult(rows, "saves"), language)], [t("评论", "Comments"), metric(sumResult(rows, "comments"), language)],
+    [t("浏览", "Views"), metric(sumResult(rows, "views"), language)], [t("点赞", "Likes"), metric(sumResult(rows, "likes"), language)],
+  ];
+  return <div className="person-total-grid">{items.map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>;
+}
+
+function ChannelTable({ index, label, rows, data, language }: { index: number; label: string; rows: ConversionRow[]; data: WeeklyReport; language: "zh" | "en" }) {
+  const t = (zh: string, en: string) => language === "zh" ? zh : en;
+  const duration = rows.map(({ video }) => video.duration).filter((value): value is number => value !== null).reduce((sum, value) => sum + value, 0);
+  return <article className="card conversion-sheet-card"><div className="weekly-panel-head"><div><p className="eyebrow">CHANNEL {index}</p><h2>{label}</h2><p>{t(`${rows.length} 条视频`, `${rows.length} videos`)}</p></div></div>
+    <div className="conversion-sheet-wrap"><div className="conversion-sheet-table person-channel-table"><div className="conversion-sheet-row header"><span>{t("视频", "Video")}</span><span>{t("时长（秒）", "Duration (sec)")}</span><span>{t("转化到网站", "Conversion to Website")}</span><span>Repost</span><span>Share</span><span>{t("新增粉丝", "New Followers")}</span><span>{t("完播率 / 等效留存", "Completion / Equivalent retention")}</span><span>{t("收藏", "Save / Bookmark")}</span><span>{t("评论", "Comment")}</span><span>{t("浏览", "Views")}</span><span>{t("点赞", "Likes")}</span></div>
+      {rows.map(({ video, result }) => <div className="conversion-sheet-row" key={`${video.id}:${result.platform}`}><span className="conversion-video"><strong>{video.title}</strong><small>{new Date(video.createdAt).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { timeZone: data.period.timeZone })}</small></span><strong>{video.duration === null ? "—" : Math.round(video.duration)}</strong><span className="unavailable-pill">{t("不可用", "Unavailable")}</span><strong>{metric(result.reposts, language)}</strong><strong>{metric(result.shares, language)}</strong><strong>{result.followers === null ? "—" : `+${number(result.followers, language)}`}</strong><strong>{percent(result.completionRate)}</strong><strong>{metric(result.saves, language)}</strong><strong>{metric(result.comments, language)}</strong><strong>{metric(result.views, language)}</strong><strong>{metric(result.likes, language)}</strong></div>)}
+      {rows.length > 0 && <div className="conversion-sheet-row totals"><span>{t("渠道合计", "Channel total")}</span><strong>{number(duration, language)}</strong><span className="unavailable-pill">{t("不可用", "Unavailable")}</span><strong>{metric(sumResult(rows, "reposts"), language)}</strong><strong>{metric(sumResult(rows, "shares"), language)}</strong><strong>{metric(sumResult(rows, "followers"), language)}</strong><strong>{percent(averageCompletion(rows))}</strong><strong>{metric(sumResult(rows, "saves"), language)}</strong><strong>{metric(sumResult(rows, "comments"), language)}</strong><strong>{metric(sumResult(rows, "views"), language)}</strong><strong>{metric(sumResult(rows, "likes"), language)}</strong></div>}
+    </div></div>{rows.length === 0 && <div className="empty-week">{t("本周该渠道暂无视频。", "No videos on this channel this week.")}</div>}</article>;
 }
