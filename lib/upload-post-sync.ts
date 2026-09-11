@@ -1,3 +1,4 @@
+import { syncVideoMilestones } from "./video-milestones";
 import { query, transaction } from "./db";
 import { createNotification } from "./notifications";
 import { syntheticUuid } from "./records";
@@ -137,5 +138,8 @@ export async function syncAll() {
   let profileAnalytics: unknown;
   try { profileAnalytics = await syncProfileAnalytics(); }
   catch (error) { profileAnalytics = { error: error instanceof Error ? error.message : "PROFILE_ANALYTICS_FAILED" }; }
-  return { cleaned, history, statuses, analytics, profileAnalytics, maintenance, syncedAt: new Date().toISOString() };
+  let milestones: unknown;
+  try { milestones = await syncVideoMilestones(); }
+  catch (error) { console.error("Video milestone detection failed", error instanceof Error ? error.message : "unknown"); milestones = {error:"MILESTONE_DETECTION_FAILED"}; }
+  return { cleaned, history, statuses, analytics, profileAnalytics, maintenance, milestones, syncedAt: new Date().toISOString() };
 }

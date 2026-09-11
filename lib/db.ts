@@ -168,6 +168,26 @@ export async function ensureSchema() {
       value jsonb NOT NULL DEFAULT '{}',
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS video_milestone_state (
+      upload_id uuid PRIMARY KEY REFERENCES uploads(id) ON DELETE CASCADE,
+      last_total_views bigint NOT NULL DEFAULT 0,
+      checked_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS video_milestone_events (
+      id bigserial PRIMARY KEY,
+      upload_id uuid NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+      threshold integer NOT NULL CHECK (threshold IN (10000,30000,100000)),
+      total_views bigint NOT NULL,
+      status text NOT NULL CHECK (status IN ('baseline','muted','superseded','pending','sending','sent','failed','uncertain')),
+      chat_id text NOT NULL,
+      payload jsonb NOT NULL,
+      delivery_uuid text NOT NULL UNIQUE,
+      detected_at timestamptz NOT NULL DEFAULT now(),
+      attempted_at timestamptz,
+      message_id text,
+      UNIQUE(upload_id,threshold)
+    );
+    CREATE INDEX IF NOT EXISTS video_milestone_pending_idx ON video_milestone_events(status,detected_at);
     CREATE INDEX IF NOT EXISTS uploads_uploader_created_idx ON uploads(uploader_open_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS uploads_status_idx ON uploads(status);
     CREATE INDEX IF NOT EXISTS upload_sessions_expiry_idx ON upload_sessions(expires_at);
