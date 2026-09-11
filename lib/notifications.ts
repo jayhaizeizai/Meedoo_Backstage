@@ -1,3 +1,4 @@
+import { uploadTitle } from "./upload-title";
 import { getLarkConfig } from "./auth";
 import { query } from "./db";
 
@@ -25,7 +26,20 @@ export async function sendLarkText(openId: string, message: string) {
   return response.ok;
 }
 
+
+async function withUploadTitle(uploadId: string | null, message: string) {
+  if (!uploadId) return message;
+  const result = await query<{title:string;original_filename:string|null;platform_content:unknown}>(
+    `SELECT title,original_filename,platform_content FROM uploads WHERE id=$1`, [uploadId]);
+  const record = result.rows[0];
+  if (!record) return message;
+  const title = uploadTitle(record);
+  // Existing event messages quote the video title; generic approval messages need a title line.
+  return /^MeeDoo(?: reminder)?: “[^”]*”/.test(message) ? message.replace(/“[^”]*”/, () => `“${title}”`) : `Title: ${title}\n${message}`;
+}
+
 export async function notifyUser(openId: string, uploadId: string | null, kind: string, message: string) {
+  message = await withUploadTitle(uploadId, message);
   const result=await query<{id:string}>(`INSERT INTO notifications(user_open_id,upload_id,kind,message) VALUES($1,$2,$3,$4) RETURNING id`,[openId,uploadId,kind,message]);
   try { if(await sendLarkText(openId,message))await query(`UPDATE notifications SET delivered_to_lark=true WHERE id=$1`,[result.rows[0].id]); }
   catch(error){console.error("Lark notification failed",{kind,error:error instanceof Error?error.message:"unknown"});}
@@ -37,6 +51,7 @@ export async function notifyApprovers(uploadId: string, message: string) {
 }
 
 export async function createNotification(uploadId: string, kind: string, message: string) {
+  message = await withUploadTitle(uploadId, message);
   const result = await query<{ id: string; user_open_id: string | null }>(`INSERT INTO notifications(user_open_id,upload_id,kind,message)
     SELECT uploader_open_id,id,$2,$3 FROM uploads WHERE id=$1 RETURNING id,user_open_id`, [uploadId,kind,message]);
   const notification = result.rows[0];
