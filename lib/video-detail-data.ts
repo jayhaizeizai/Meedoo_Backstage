@@ -1,11 +1,11 @@
 import { query } from "./db";
 import { loadFollowerHistory } from "./follower-history";
-import { equivalentRetention } from "./equivalent-retention";
+import { tiktokRetentionScore, storedTikTokRetention } from "./tiktok-retention";
 
 export const videoMetricDefinitions = [
   { key: "views", zh: "浏览 / 触达", en: "Views / Reach" },
   { key: "likes", zh: "点赞", en: "Likes" },
-  { key: "retention", zh: "等效留存评分", en: "Equivalent Retention Score" },
+  { key: "retention", zh: "TikTok 留存曲线分", en: "TikTok retention curve score" },
   { key: "shares", zh: "分享 / 转发 / 发送", en: "Shares / Reposts / Sends" },
   { key: "followers", zh: "估算新增粉丝 / 订阅", en: "Estimated new followers / Subscribers" },
   { key: "saves", zh: "收藏", en: "Saves" },
@@ -44,7 +44,7 @@ function numberFrom(metrics: Record<string, unknown> | null, keys: string[]) {
 function normalize(platform: string, metrics: Record<string, unknown> | null, attributedFollowers: number | string | null = null, duration: number | string | null = null): Metrics {
   return Object.fromEntries(videoMetricDefinitions.map(({ key }) => [key, key === "views"
     ? numberFrom(metrics, platform === "instagram" ? ["reach", "views", "impressions"] : ["views", "reach", "impressions"])
-    : key === "retention" ? equivalentRetention(platform, metrics, duration)
+    : key === "retention" ? tiktokRetentionScore(platform, metrics)
     : key === "followers" ? numberFrom(metrics, aliases.followers) ?? (attributedFollowers === null ? null : Number(attributedFollowers))
     : key === "shares" ? sumAvailable(
       numberFrom(metrics, aliases.shares),
@@ -157,7 +157,11 @@ export async function getVideoDetailData(uploadId: string) {
   return {
     updatedAt: new Date().toISOString(), metricDefinitions: videoMetricDefinitions,
     video: { id: video.id, title: video.title, ownerId: video.uploader_open_id, owner: video.uploader_name ?? "Historical import", createdAt: video.created_at, status: video.status,
-      platforms: platformRows.map((row) => ({ platform: row.platform, url: row.post_url, status: row.publication_status })), metrics: currentMetrics },
+      platforms: platformRows.map((row) => ({ platform: row.platform, url: row.post_url, status: row.publication_status })), metrics: currentMetrics,
+      tiktokRetention: latestRows.filter(row => row.platform === "tiktok").map(row => ({
+        publicationId: row.publication_id, capturedAt: row.captured_at, views: numberFrom(row.metrics, ["views"]),
+        data: storedTikTokRetention(row.metrics) })),
+      youtubeAverageViewPercentage: numberFrom(latestRows.find(row => row.platform === "youtube")?.metrics ?? null, ["average_view_percentage", "avg_view_percentage"]) },
     timeline: { target, owner: { count: ownerTimelines.length, points: benchmark(ownerTimelines), fallbackCount: ownerTimelines.filter((item) => item.fallback).length },
       team: { count: teamTimelines.length, points: benchmark(teamTimelines), fallbackCount: teamTimelines.filter((item) => item.fallback).length } },
   };

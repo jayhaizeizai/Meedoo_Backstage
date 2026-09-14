@@ -1,5 +1,5 @@
 import { query } from "./db";
-import { equivalentRetention } from "./equivalent-retention";
+import { tiktokRetentionScore, storedTikTokRetention } from "./tiktok-retention";
 
 export type WeeklyConversionMetrics = {
   views: number;
@@ -36,6 +36,8 @@ export type WeeklyPlatformResult = {
   shares: number | null;
   followers: number | null;
   completionRate: number | null;
+  retentionScore: number | null;
+  averageViewPercentage: number | null;
   saves: number | null;
   comments: number | null;
   views: number | null;
@@ -92,7 +94,9 @@ function platformResult(row: WeeklyRow): WeeklyPlatformResult {
     shares: valueFrom(row.metrics, ["shares", "share_count"]),
     followers: valueFrom(row.metrics, ["followers_gained", "new_followers", "subscribers_gained", "new_subscribers"])
       ?? (row.attributed_followers === null ? null : Number(row.attributed_followers)),
-    completionRate: equivalentRetention(row.platform, row.metrics, row.video_duration_seconds),
+    completionRate: row.platform === "tiktok" ? storedTikTokRetention(row.metrics)?.completionRate ?? null : null,
+    retentionScore: tiktokRetentionScore(row.platform, row.metrics),
+    averageViewPercentage: row.platform === "youtube" ? valueFrom(row.metrics, ["average_view_percentage", "avg_view_percentage"]) : null,
     saves: valueFrom(row.metrics, ["saves", "favorites", "favorite_count", "bookmarks"]),
     comments: valueFrom(row.metrics, ["comments", "comment_count", "replies"]),
     views: valueFrom(row.metrics, viewKeys),

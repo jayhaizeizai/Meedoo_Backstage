@@ -1,4 +1,6 @@
 import { updateUploadSummary } from "./publication-status";
+import { withTikTokRetention } from "./tiktok-retention";
+import { backfillTikTokRetention } from "./tiktok-retention-backfill";
 import { expireDashboardCache, refreshDashboardCache } from "./dashboard-cache";
 import { syncVideoMilestones } from "./video-milestones";
 import { db, ensureSchema, query, transaction } from "./db";
@@ -112,7 +114,7 @@ export async function syncPendingStatuses() {
 export async function syncAnalytics() {
   const {profile} = getUploadPostConfig();
   // Fair rotation includes organic videos. Attempt time advances even on API errors.
-  const jobs = await query<{id:string;request_id:string|null;platform:string;platform_post_id:string|null}>(`SELECT p.id,p.request_id,p.platform,p.platform_post_id
+  const jobs = await query<{id:string;request_id:string|null;platform:string;platform_post_id:string|null;video_duration_seconds:string|null}>(`SELECT p.id,p.request_id,p.platform,p.platform_post_id,u.video_duration_seconds
     FROM publications p JOIN uploads u ON u.id=p.upload_id WHERE u.removed_at IS NULL AND p.removed_at IS NULL AND p.status='completed'
     AND (p.platform_post_id IS NOT NULL OR p.request_id IS NOT NULL)
     ORDER BY p.analytics_attempted_at NULLS FIRST,p.id LIMIT 80`);
@@ -132,7 +134,7 @@ export async function syncAnalytics() {
       const metrics = item?.post_metrics ?? item?.metrics;
       if (!metrics || typeof metrics !== "object" || Array.isArray(metrics)) continue;
       await query(`INSERT INTO metric_snapshots(publication_id,captured_at,metrics)
-        SELECT id,clock_timestamp(),$2::jsonb FROM publications WHERE id=$1 AND removed_at IS NULL`, [job.id,JSON.stringify(metrics)]);
+        SELECT id,clock_timestamp(),$2::jsonb FROM publications WHERE id=$1 AND removed_at IS NULL`, [job.id,JSON.stringify(job.platform === "tiktok" ? withTikTokRetention(metrics as Record<string, unknown>, job.video_duration_seconds) : metrics)]);
       await query("UPDATE publications SET last_synced_at=now() WHERE id=$1", [job.id]);
       updated++;
     } catch { console.error("Publication analytics check failed"); }
@@ -153,6 +155,7 @@ async function runSync() {
   let milestones: unknown;
   try { milestones = await syncVideoMilestones(); }
   catch (error) { console.error("Video milestone detection failed", error instanceof Error ? error.message : "unknown"); milestones = {error:"MILESTONE_DETECTION_FAILED"}; }
+  await backfillTikTokRetention();
   await refreshDashboardCache();
   return { cleaned, history, statuses, analytics, profileAnalytics, maintenance, milestones, syncedAt: new Date().toISOString() };
 }

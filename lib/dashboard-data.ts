@@ -1,11 +1,12 @@
 import { query } from "./db";
 import { loadFollowerHistory } from "./follower-history";
 import { equivalentRetention } from "./equivalent-retention";
+import { tiktokRetentionScore } from "./tiktok-retention";
 
 export const metricDefinitions = [
   { key: "views", zh: "浏览 / 触达", en: "Views / Reach", weight: 6 },
   { key: "likes", zh: "点赞", en: "Likes", weight: 3 },
-  { key: "retention", zh: "等效留存评分", en: "Equivalent Retention Score", weight: 17 },
+  { key: "retention", zh: "TikTok 留存曲线分", en: "TikTok retention curve score", weight: 0 },
   { key: "shares", zh: "分享 / 转发 / 发送", en: "Shares / Reposts / Sends", weight: 40 },
   { key: "followers", zh: "估算新增粉丝 / 订阅", en: "Estimated new followers / Subscribers", weight: 18 },
   { key: "saves", zh: "收藏", en: "Saves", weight: 10 },
@@ -69,7 +70,7 @@ function normalize(row: Row): Metrics {
   return Object.fromEntries(metricDefinitions.map(({ key }) => [
     key,
     key === "views" ? numberFrom(row.metrics, viewKeys) : key === "retention"
-      ? equivalentRetention(row.platform, row.metrics, row.video_duration_seconds)
+      ? tiktokRetentionScore(row.platform, row.metrics)
       : key === "followers"
       ? numberFrom(row.metrics, aliases.followers) ?? (row.attributed_followers === null ? null : Number(row.attributed_followers))
       : key === "shares" ? sumAvailable(
@@ -85,8 +86,8 @@ function sumAvailable(...values: Array<number | null>) {
   return available.length ? available.reduce((sum, value) => sum + value, 0) : null;
 }
 
-function aggregate(rows: Row[]) {
-  const normalized = rows.map((row) => ({ metrics: normalize(row) }));
+function aggregate(rows: Row[], legacyWatchQuality = false) {
+  const normalized = rows.map((row) => ({ metrics: { ...normalize(row), ...(legacyWatchQuality ? { retention: equivalentRetention(row.platform, row.metrics, row.video_duration_seconds) } : {}) } }));
   const metrics = emptyMetrics();
   for (const definition of metricDefinitions) {
     const values = normalized.map((item) => item.metrics[definition.key]).filter((value): value is number => value !== null);
@@ -238,15 +239,19 @@ export async function getDashboardData(days = 30) {
   for (const row of rows) if (row.uploader_open_id) memberGroups.set(row.uploader_open_id, [...(memberGroups.get(row.uploader_open_id) ?? []), row]);
   const rawPeople = [...memberGroups].map(([id, personRows]) => {
     const data = aggregate(personRows);
+    const legacyWatchQuality = aggregate(personRows, true).metrics.retention;
     const first = personRows[0];
     return { id, name: first.uploader_name ?? "Lark user", role: first.role ?? "member", avatar: first.avatar_url,
-      videoCount: new Set(personRows.map((row) => row.upload_id)).size, ...data };
+      videoCount: new Set(personRows.map((row) => row.upload_id)).size, legacyWatchQuality, ...data };
   });
   const maxima = Object.fromEntries(metricDefinitions.map(({ key }) => [key, Math.max(0, ...rawPeople.map((person) => person.metrics[key] ?? 0))])) as Record<MetricKey, number>;
+  const legacyMaximum = Math.max(0, ...rawPeople.map(person => person.legacyWatchQuality ?? 0));
   const people = rawPeople.map((person) => {
-    const ratios = Object.fromEntries(metricDefinitions.map(({ key }) => [key, person.metrics[key] === null || !maxima[key] ? null : person.metrics[key]! / maxima[key] * 100])) as Metrics;
+    const ratios = Object.fromEntries(metricDefinitions.map(({ key }) => [key, key === "retention" || person.metrics[key] === null || !maxima[key] ? null : person.metrics[key]! / maxima[key] * 100])) as Metrics;
     const scores = Object.fromEntries(metricDefinitions.map(({ key, weight }) => [key, ratios[key] === null ? null : ratios[key]! / 100 * weight])) as Metrics;
-    return { ...person, ratios, scores, totalScore: Object.values(scores).reduce<number>((sum, value) => sum + (value ?? 0), 0) };
+    const legacyRatio = person.legacyWatchQuality === null || !legacyMaximum ? null : person.legacyWatchQuality / legacyMaximum * 100;
+    const legacyScore = legacyRatio === null ? null : legacyRatio / 100 * 17;
+    return { ...person, legacyWatchQuality: { value: person.legacyWatchQuality, ratio: legacyRatio, score: legacyScore }, ratios, scores, totalScore: Object.values(scores).reduce<number>((sum, value) => sum + (value ?? 0), legacyScore ?? 0) };
   }).sort((left, right) => right.totalScore - left.totalScore);
 
   const groupedVideos = new Map<string, Row[]>();

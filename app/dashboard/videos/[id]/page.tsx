@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { TikTokRetentionChart } from "../../../../components/tiktok-retention-chart";
+import type { TikTokRetention } from "../../../../lib/tiktok-retention";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../../../../components/app-shell";
@@ -14,7 +16,7 @@ type Point = { minute: number; metrics: Record<PlatformKey, Metrics> };
 type DetailData = {
   updatedAt: string;
   metricDefinitions: { key: MetricKey; zh: string; en: string }[];
-  video: { id: string; title: string; owner: string; createdAt: string; status: string; platforms: { platform: Platform; url: string | null; status: string }[]; metrics: Record<PlatformKey, Metrics> };
+  video: { tiktokRetention: Array<{ publicationId: string; capturedAt: string | null; views: number | null; data: TikTokRetention | null }>; youtubeAverageViewPercentage: number | null; id: string; title: string; owner: string; createdAt: string; status: string; platforms: { platform: Platform; url: string | null; status: string }[]; metrics: Record<PlatformKey, Metrics> };
   timeline: { target: { fallback: boolean; points: Point[] }; owner: { count: number; fallbackCount: number; points: Point[] }; team: { count: number; fallbackCount: number; points: Point[] } };
 };
 
@@ -66,7 +68,8 @@ export default function VideoDetailPage() {
       <header className="video-detail-hero card"><div><p className="eyebrow">VIDEO ANALYTICS</p><h1>{data.video.title}</h1><p>{data.video.owner} · {new Date(data.video.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en-US")} · {data.video.status}</p><div className="detail-platform-links">{data.video.platforms.map((platform) => platform.url ? <a key={platform.platform} href={platform.url} target="_blank" rel="noreferrer">{platformMeta[platform.platform].name} ↗</a> : <span key={platform.platform}>{platformMeta[platform.platform].name} · {platform.status}</span>)}</div></div><span className="detail-play">▶</span></header>
       <div className="detail-toolbar card"><div><strong>{text("查看平台", "Platforms")}</strong><small>{text("可组合查看一个或多个平台", "Combine one or more platforms")}</small></div><div className="platform-selector">{platforms.map((platform) => <button key={platform} className={selected.includes(platform) ? "active" : ""} onClick={() => toggle(platform)}><i>{platformMeta[platform].icon}</i>{platformMeta[platform].name}</button>)}</div></div>
       {data.timeline.target.fallback && <div className="fallback-note">ⓘ {text("该历史视频没有完整时间序列，当前值暂以水平线展示；采集到真实快照后会自动替换。", "This historical video has no full time series. Its current value is shown as a flat line until real snapshots become available.")}</div>}
-      <div className="retention-method-note">ⓘ {text("等效留存为 0–100 评分：YouTube 使用封顶后的平均观看比例；TikTok 组合平均观看比例与完整观看率；Instagram 暂无可用观看时长数据。", "Equivalent retention is a 0–100 score: YouTube uses capped average view percentage; TikTok combines average watched ratio and completion rate; Instagram watch-time data is not yet available.")}</div>
+      {selected.includes("tiktok") && (data.video.tiktokRetention.length ? data.video.tiktokRetention.map(item => <TikTokRetentionChart key={item.publicationId} {...item} language={language} />) : <div className="retention-method-note">{text("此视频暂无 TikTok 发布数据。", "This video has no TikTok publication data.")}</div>)}
+      {selected.includes("youtube") && <div className="retention-method-note">{text("YouTube 平均观看比例", "YouTube average view percentage")}: {data.video.youtubeAverageViewPercentage === null ? "—" : `${data.video.youtubeAverageViewPercentage.toFixed(1)}%`} · {text("单独展示，不计入 TikTok 留存曲线分。", "Shown separately; excluded from TikTok curve scores.")}</div>}
       <section className="detail-kpis">{data.metricDefinitions.map(({ key, zh, en }) => <article className="card" key={key}><small>{language === "zh" ? zh : en}</small><strong>{format(current?.[key] ?? null, key, language)}</strong></article>)}</section>
       <section className="comparison-copy"><div><p className="eyebrow">24-HOUR BENCHMARK</p><h2>{text("发布后 24 小时表现", "Performance in the first 24 hours")}</h2><p>{text("按相同的发布后时间，对比本视频、上传者最近 10 条和全公司最近 30 条视频的平均表现。", "Compare this video at the same age with the uploader's latest 10 and the company's latest 30 videos.")}</p></div><div className="series-legend"><span className="target">● {text("本视频", "This video")}</span><span className="owner">● {text(`上传者基准 (${data.timeline.owner.count})`, `Uploader baseline (${data.timeline.owner.count})`)}</span><span className="team">● {text(`公司基准 (${data.timeline.team.count})`, `Company baseline (${data.timeline.team.count})`)}</span></div></section>
       <section className="video-chart-grid">{data.metricDefinitions.map((definition) => <MetricComparison key={definition.key} definition={definition} data={data} selected={selected} language={language} />)}</section>

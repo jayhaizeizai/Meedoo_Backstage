@@ -32,7 +32,7 @@ type WeeklyReport = {
     avatar: string | null;
     createdAt: string;
     duration: number | null;
-    platforms: Array<{ platform: string; website: null; reposts: number | null; shares: number | null; followers: number | null; completionRate: number | null; saves: number | null; comments: number | null; views: number | null; likes: number | null }>;
+    platforms: Array<{ platform: string; website: null; reposts: number | null; shares: number | null; followers: number | null; completionRate: number | null; retentionScore: number | null; averageViewPercentage: number | null; saves: number | null; comments: number | null; views: number | null; likes: number | null }>;
   }>;
   message?: string;
 };
@@ -62,7 +62,7 @@ const rules = [
   { icon: "↻", zh: "转发", en: "Reposts", weight: 22, detailZh: "汇总全部视频或帖子的转发。", detailEn: "Totals reposts across all videos and posts." },
   { icon: "↗", zh: "分享 / 发送", en: "Shares / Sends", weight: 18, detailZh: "汇总平台提供的分享与发送。", detailEn: "Totals available share and send actions." },
   { icon: "+", zh: "新增粉丝 / 订阅", en: "New followers / Subscribers", weight: 18, detailZh: "优先使用直接数据，否则使用系统估算归因。", detailEn: "Uses direct data first, then estimated attribution." },
-  { icon: "◷", zh: "观看质量 / 留存", en: "Watch quality / Retention", weight: 17, detailZh: "以跨平台等效的 0–100 分计算。", detailEn: "Uses the cross-platform equivalent 0–100 score." },
+  { icon: "◷", zh: "观看质量 / 留存", en: "Watch quality / Retention", weight: 17, detailZh: "综合分沿用原观看质量口径；新 TikTok 留存曲线分仅作观察，不参与奖金。", detailEn: "Existing watch-quality scoring is retained; the new TikTok curve score is informational and does not affect bonuses." },
   { icon: "◇", zh: "收藏", en: "Saves", weight: 10, detailZh: "统计收藏、书签或喜爱。", detailEn: "Counts saves, bookmarks or favorites." },
   { icon: "…", zh: "评论", en: "Comments", weight: 6, detailZh: "统计评论与回复。", detailEn: "Counts comments and replies." },
   { icon: "◉", zh: "浏览 / 触达", en: "Views / Reach", weight: 6, detailZh: "采用各平台可用的浏览或触达数据。", detailEn: "Uses available platform views or reach." },
@@ -244,7 +244,7 @@ function Rules({ language }: { language: "zh" | "en" }) {
     <div className="rule-section-title"><div><p className="eyebrow">PERFORMANCE WEIGHTS</p><h2>{t("互动指标权重", "Performance metric weights")}</h2></div><small>{t("汇总全部视频 / 帖子", "Across all videos / posts")}</small></div>
     <div className="rule-grid">{rules.map((rule) => <article className="rule-card card" key={rule.en}><header><span>{rule.icon}</span><b>{rule.weight}%</b></header><h3>{language === "zh" ? rule.zh : rule.en}</h3><p>{language === "zh" ? rule.detailZh : rule.detailEn}</p></article>)}</div>
     <article className="score-formula card"><div><span>ƒx</span><div><h2>{t("个人指标得分", "Personal metric score")}</h2><p>{t("每项分别计算后相加，得到个人周度综合得分。", "Calculate each metric separately, then add them for the weekly total score.")}</p></div></div><code>{t("个人值 ÷ 团队本周最高值 × 指标权重", "Individual value ÷ team weekly best × metric weight")}</code></article>
-    <div className="rule-notes"><p>ⓘ {t("YouTube 和 TikTok 使用等效留存；Instagram 观看时长不可用时不会按 0 处理。", "YouTube and TikTok use equivalent retention; unavailable Instagram watch time is not treated as zero.")}</p><p>ⓘ {t("Instagram 与 TikTok 的新增粉丝继续使用估算归因；直接平台数据始终优先。", "Instagram and TikTok followers continue to use estimated attribution; direct platform data always takes priority.")}</p></div>
+    <div className="rule-notes"><p>ⓘ {t("TikTok 使用留存曲线分，仅作观察；YouTube 单独展示平均观看比例。缺失数据不按 0 处理。", "TikTok curve scores are informational; YouTube average view percentage is shown separately. Missing data is not zero.")}</p><p>ⓘ {t("Instagram 与 TikTok 的新增粉丝继续使用估算归因；直接平台数据始终优先。", "Instagram and TikTok followers continue to use estimated attribution; direct platform data always takes priority.")}</p></div>
   </section>;
 }
 
@@ -269,7 +269,7 @@ function Conversions({ data, error, language }: { data: WeeklyReport | null; err
         return <ChannelTable key={platform} index={index + 1} label={label} rows={rows} data={data} language={language} />;
       })}
     </> : <div className="empty-week card">{t("本周暂无上传了已批准视频的成员。", "No members have approved videos this week.")}</div>}
-    <p className="conversion-source-note">ⓘ {t("新增粉丝优先使用平台直接数据；Instagram 与 TikTok 缺少直接数据时继续使用估算归因。完播率使用现有跨平台等效留存口径。", "Direct follower data takes priority; Instagram and TikTok continue to use estimated attribution when direct data is missing. Completion uses the existing cross-platform equivalent retention method.")}</p>
+    <p className="conversion-source-note">ⓘ {t("新增粉丝优先使用平台直接数据；Instagram 与 TikTok 缺少直接数据时继续使用估算归因。TikTok 展示留存曲线分（非完播率），YouTube 展示平均观看比例；不跨平台混算。", "Direct follower data takes priority; Instagram and TikTok continue to use estimated attribution when direct data is missing. TikTok shows curve scores (not completion); YouTube shows average view percentage. These are not combined across platforms.")}</p>
   </section>;
 }
 
@@ -280,13 +280,17 @@ function sumResult(rows: ConversionRow[], key: Exclude<keyof PlatformResult, "pl
   return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
 }
 
+function retentionValue(result: ConversionRow["result"]) {
+  return result.platform === "tiktok" ? result.retentionScore : result.platform === "youtube" ? result.averageViewPercentage : null;
+}
+
 function averageCompletion(rows: ConversionRow[]) {
-  const available = rows.filter(({ result }) => result.completionRate !== null);
+  const available = rows.filter(({ result }) => retentionValue(result) !== null);
   if (!available.length) return null;
   const weighted = available.filter(({ result }) => result.views !== null && result.views > 0);
   return weighted.length
-    ? weighted.reduce((sum, { result }) => sum + result.completionRate! * result.views!, 0) / weighted.reduce((sum, { result }) => sum + result.views!, 0)
-    : available.reduce((sum, { result }) => sum + result.completionRate!, 0) / available.length;
+    ? weighted.reduce((sum, { result }) => sum + retentionValue(result)! * result.views!, 0) / weighted.reduce((sum, { result }) => sum + result.views!, 0)
+    : available.reduce((sum, { result }) => sum + retentionValue(result)!, 0) / available.length;
 }
 
 function ConversionSummary({ rows, videoCount, language }: { rows: ConversionRow[]; videoCount: number; language: "zh" | "en" }) {
@@ -295,7 +299,7 @@ function ConversionSummary({ rows, videoCount, language }: { rows: ConversionRow
   const items = [
     [t("视频", "Videos"), number(videoCount, language)], [t("总时长", "Total duration"), `${number(duration, language)}s`],
     ["Repost", metric(sumResult(rows, "reposts"), language)], ["Share", metric(sumResult(rows, "shares"), language)],
-    [t("新增粉丝", "New followers"), metric(sumResult(rows, "followers"), language)], [t("平均完播 / 留存", "Avg completion / retention"), percent(averageCompletion(rows))],
+    [t("新增粉丝", "New followers"), metric(sumResult(rows, "followers"), language)], [t("TikTok 留存曲线分", "TikTok retention score"), metric(averageCompletion(rows.filter(({result}) => result.platform === "tiktok")), language)],
     [t("收藏", "Saves"), metric(sumResult(rows, "saves"), language)], [t("评论", "Comments"), metric(sumResult(rows, "comments"), language)],
     [t("浏览", "Views"), metric(sumResult(rows, "views"), language)], [t("点赞", "Likes"), metric(sumResult(rows, "likes"), language)],
   ];
@@ -306,8 +310,8 @@ function ChannelTable({ index, label, rows, data, language }: { index: number; l
   const t = (zh: string, en: string) => language === "zh" ? zh : en;
   const duration = rows.map(({ video }) => video.duration).filter((value): value is number => value !== null).reduce((sum, value) => sum + value, 0);
   return <article className="card conversion-sheet-card"><div className="weekly-panel-head"><div><p className="eyebrow">CHANNEL {index}</p><h2>{label}</h2><p>{t(`${rows.length} 条视频`, `${rows.length} videos`)}</p></div></div>
-    <div className="conversion-sheet-wrap"><div className="conversion-sheet-table person-channel-table"><div className="conversion-sheet-row header"><span>{t("视频", "Video")}</span><span>{t("时长（秒）", "Duration (sec)")}</span><span>{t("转化到网站", "Conversion to Website")}</span><span>Repost</span><span>Share</span><span>{t("新增粉丝", "New Followers")}</span><span>{t("完播率 / 等效留存", "Completion / Equivalent retention")}</span><span>{t("收藏", "Save / Bookmark")}</span><span>{t("评论", "Comment")}</span><span>{t("浏览", "Views")}</span><span>{t("点赞", "Likes")}</span></div>
-      {rows.map(({ video, result }) => <div className="conversion-sheet-row" key={`${video.id}:${result.platform}`}><span className="conversion-video"><strong>{video.title}</strong><small>{new Date(video.createdAt).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { timeZone: data.period.timeZone })}</small></span><strong>{video.duration === null ? "—" : Math.round(video.duration)}</strong><span className="unavailable-pill">{t("不可用", "Unavailable")}</span><strong>{metric(result.reposts, language)}</strong><strong>{metric(result.shares, language)}</strong><strong>{result.followers === null ? "—" : `+${number(result.followers, language)}`}</strong><strong>{percent(result.completionRate)}</strong><strong>{metric(result.saves, language)}</strong><strong>{metric(result.comments, language)}</strong><strong>{metric(result.views, language)}</strong><strong>{metric(result.likes, language)}</strong></div>)}
-      {rows.length > 0 && <div className="conversion-sheet-row totals"><span>{t("渠道合计", "Channel total")}</span><strong>{number(duration, language)}</strong><span className="unavailable-pill">{t("不可用", "Unavailable")}</span><strong>{metric(sumResult(rows, "reposts"), language)}</strong><strong>{metric(sumResult(rows, "shares"), language)}</strong><strong>{metric(sumResult(rows, "followers"), language)}</strong><strong>{percent(averageCompletion(rows))}</strong><strong>{metric(sumResult(rows, "saves"), language)}</strong><strong>{metric(sumResult(rows, "comments"), language)}</strong><strong>{metric(sumResult(rows, "views"), language)}</strong><strong>{metric(sumResult(rows, "likes"), language)}</strong></div>}
+    <div className="conversion-sheet-wrap"><div className="conversion-sheet-table person-channel-table"><div className="conversion-sheet-row header"><span>{t("视频", "Video")}</span><span>{t("时长（秒）", "Duration (sec)")}</span><span>{t("转化到网站", "Conversion to Website")}</span><span>Repost</span><span>Share</span><span>{t("新增粉丝", "New Followers")}</span><span>{rows[0]?.result.platform === "youtube" ? t("平均观看比例", "Average view percentage") : t("TikTok 留存曲线分", "TikTok retention score")}</span><span>{t("收藏", "Save / Bookmark")}</span><span>{t("评论", "Comment")}</span><span>{t("浏览", "Views")}</span><span>{t("点赞", "Likes")}</span></div>
+      {rows.map(({ video, result }) => <div className="conversion-sheet-row" key={`${video.id}:${result.platform}`}><span className="conversion-video"><strong>{video.title}</strong><small>{new Date(video.createdAt).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { timeZone: data.period.timeZone })}</small></span><strong>{video.duration === null ? "—" : Math.round(video.duration)}</strong><span className="unavailable-pill">{t("不可用", "Unavailable")}</span><strong>{metric(result.reposts, language)}</strong><strong>{metric(result.shares, language)}</strong><strong>{result.followers === null ? "—" : `+${number(result.followers, language)}`}</strong><strong>{result.platform === "youtube" ? percent(retentionValue(result)) : metric(retentionValue(result), language)}</strong><strong>{metric(result.saves, language)}</strong><strong>{metric(result.comments, language)}</strong><strong>{metric(result.views, language)}</strong><strong>{metric(result.likes, language)}</strong></div>)}
+      {rows.length > 0 && <div className="conversion-sheet-row totals"><span>{t("渠道合计", "Channel total")}</span><strong>{number(duration, language)}</strong><span className="unavailable-pill">{t("不可用", "Unavailable")}</span><strong>{metric(sumResult(rows, "reposts"), language)}</strong><strong>{metric(sumResult(rows, "shares"), language)}</strong><strong>{metric(sumResult(rows, "followers"), language)}</strong><strong>{rows[0]?.result.platform === "youtube" ? percent(averageCompletion(rows)) : metric(averageCompletion(rows), language)}</strong><strong>{metric(sumResult(rows, "saves"), language)}</strong><strong>{metric(sumResult(rows, "comments"), language)}</strong><strong>{metric(sumResult(rows, "views"), language)}</strong><strong>{metric(sumResult(rows, "likes"), language)}</strong></div>}
     </div></div>{rows.length === 0 && <div className="empty-week">{t("本周该渠道暂无视频。", "No videos on this channel this week.")}</div>}</article>;
 }
