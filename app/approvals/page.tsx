@@ -1,3 +1,97 @@
-"use client";import Link from "next/link";import {useRouter} from "next/navigation";import {useEffect,useState} from "react";import {AppShell} from "../../components/app-shell";import {useLanguage} from "../../components/language-provider";
-type Item={id:string;title:string;uploader_name:string|null;submitted_at:string;target_platforms:string[];media_size_bytes:string|null};
-export default function ApprovalsPage(){const {language,text}=useLanguage();const router=useRouter();const [items,setItems]=useState<Item[]>([]);const [error,setError]=useState("");useEffect(()=>{void fetch("/api/approvals",{cache:"no-store"}).then(async r=>{if(r.status===403){router.replace("/records");return null;}const p=await r.json();if(!r.ok)throw new Error(p.message);return p;}).then(p=>{if(p)setItems(p.records??[]);}).catch(e=>setError(e.message));},[router]);return <AppShell active="approvals" status={{zh:`${items.length} 条等待审批`,en:`${items.length} awaiting review`}}><section className="page review-page"><div className="head"><div><p className="eyebrow">REVIEW QUEUE</p><h1>{text("视频审批","Video approvals")}</h1><p>{text("按提交时间从早到晚处理待审批视频。","Review pending videos in submission order.")}</p></div></div>{error&&<div className="data-message error">⚠ {error}</div>}<div className="approval-queue">{[...items].reverse().map(item=><Link className="card approval-row" href={`/approvals/${item.id}`} key={item.id}><span className="approval-play">▶</span><div><h2>{item.title}</h2><p>{item.uploader_name??"Lark user"} · {new Date(item.submitted_at).toLocaleString(language==="zh"?"zh-CN":"en-US")}</p><span>{item.target_platforms.join(" · ")}</span></div><strong>{item.media_size_bytes?`${(Number(item.media_size_bytes)/1024/1024).toFixed(1)} MB`:"—"}</strong><b>{text("开始审批","Review")} →</b></Link>)}{!items.length&&!error&&<div className="data-message">✓ {text("目前没有待审批视频。","No videos are waiting for review.")}</div>}</div></section></AppShell>}
+"use client";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { AppShell } from "../../components/app-shell";
+import { useLanguage } from "../../components/language-provider";
+type Item = {
+  id: string;
+  title: string;
+  uploader_name: string | null;
+  submitted_at: string;
+  target_platforms: string[];
+  media_size_bytes: string | null;
+};
+export default function ApprovalsPage() {
+  const { language, text } = useLanguage();
+  const router = useRouter();
+  const [items, setItems] = useState<Item[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    void fetch("/api/approvals", { cache: "no-store" })
+      .then(async (r) => {
+        if (r.status === 403) {
+          router.replace("/records");
+          return null;
+        }
+        const p = await r.json();
+        if (!r.ok) throw new Error(p.message);
+        return p;
+      })
+      .then((p) => {
+        if (p) setItems(p.records ?? []);
+      })
+      .catch((e) => setError(e.message));
+  }, [router]);
+  return (
+    <AppShell
+      active="approvals"
+      status={{
+        zh: `${items.length} 条等待审批`,
+        en: `${items.length} awaiting review`,
+      }}
+    >
+      <section className="page review-page">
+        <div className="head">
+          <div>
+            <p className="eyebrow">REVIEW QUEUE</p>
+            <h1>{text("视频审批", "Video approvals")}</h1>
+            <p>
+              {text(
+                "按提交时间从早到晚处理待审批视频。",
+                "Review pending videos in submission order.",
+              )}
+            </p>
+          </div>
+        </div>
+        {error && <div className="data-message error">⚠ {error}</div>}
+        <div className="approval-queue">
+          {[...items].reverse().map((item) => (
+            <Link
+              className="card approval-row"
+              href={`/approvals/${item.id}`}
+              key={item.id}
+            >
+              <span className="approval-play">▶</span>
+              <div>
+                <h2>{item.title}</h2>
+                <p>
+                  {item.uploader_name ?? "Lark user"} ·{" "}
+                  {new Date(item.submitted_at).toLocaleString(
+                    language === "zh" ? "zh-CN" : "en-US",
+                  )}
+                </p>
+                <span>{item.target_platforms.join(" · ")}</span>
+              </div>
+              <strong>
+                {item.media_size_bytes
+                  ? `${(Number(item.media_size_bytes) / 1024 / 1024).toFixed(1)} MB`
+                  : "—"}
+              </strong>
+              <b>{text("开始审批", "Review")} →</b>
+            </Link>
+          ))}
+          {!items.length && !error && (
+            <div className="data-message">
+              ✓{" "}
+              {text(
+                "目前没有待审批视频。",
+                "No videos are waiting for review.",
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    </AppShell>
+  );
+}

@@ -1,7 +1,7 @@
 export const UPLOAD_POST_ORIGIN = "https://api.upload-post.com";
 import { supportedPlatforms } from "./social-platforms";
 export { supportedPlatforms, requiredPlatforms } from "./social-platforms";
-export type UploadPostPlatform = typeof supportedPlatforms[number];
+export type UploadPostPlatform = (typeof supportedPlatforms)[number];
 
 export function getUploadPostConfig() {
   return {
@@ -25,7 +25,11 @@ export async function uploadPostFetch(path: string, init: RequestInit = {}) {
     ...init,
     headers,
     cache: "no-store",
-    signal: init.signal ?? AbortSignal.timeout(init.method && init.method !== "GET" ? 5 * 60 * 1000 : 20_000),
+    signal:
+      init.signal ??
+      AbortSignal.timeout(
+        init.method && init.method !== "GET" ? 5 * 60 * 1000 : 20_000,
+      ),
   });
 }
 
@@ -34,11 +38,21 @@ export async function parseProviderResponse(response: Response) {
   try {
     return JSON.parse(text) as Record<string, unknown>;
   } catch {
-    return { success: false, message: response.ok ? "Invalid provider response" : "Upload-Post request failed" };
+    return {
+      success: false,
+      message: response.ok
+        ? "Invalid provider response"
+        : "Upload-Post request failed",
+    };
   }
 }
 
-export function providerMessage(payload: Record<string, unknown>, fallback: string) {
+export function providerMessage(
+  payload: Record<string, unknown>,
+  fallback: string,
+) {
   const candidate = payload.message ?? payload.error;
-  return typeof candidate === "string" && candidate.length <= 500 ? candidate : fallback;
+  return typeof candidate === "string" && candidate.length <= 500
+    ? candidate
+    : fallback;
 }

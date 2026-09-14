@@ -7,11 +7,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "tsc --noEmit",
+    "lint": "pnpm typecheck",
     "history:dry-run": "node scripts/import-organic-history.mjs --dry-run",
     "history:apply": "node scripts/import-organic-history.mjs --apply-db",
     "followers:dry-run": "node scripts/recalculate-follower-attributions.mjs --dry-run",
-    "followers:apply": "node scripts/recalculate-follower-attributions.mjs --apply-db"
+    "followers:apply": "node scripts/recalculate-follower-attributions.mjs --apply-db",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node scripts/verify-upload-transport.cjs && node scripts/verify-tiktok-retention.cjs && node scripts/verify-facebook-x.cjs",
+    "test:integration": "node scripts/verify-reliability.cjs && node scripts/verify-tiktok-retention.cjs --db && node scripts/verify-facebook-x.cjs --db"
   },
   "dependencies": {
     "next": "16.3.3",
@@ -24,6 +29,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "prettier": "3.6.2",
     "typescript": "^5.9.0"
   }
 }

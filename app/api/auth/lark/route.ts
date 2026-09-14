@@ -1,16 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOAuthState, getLarkConfig, isLarkConfigured, OAUTH_STATE_COOKIE, readOAuthState, safeReturnTo } from "../../../../lib/auth";
+import {
+  createOAuthState,
+  getLarkConfig,
+  isLarkConfigured,
+  OAUTH_STATE_COOKIE,
+  readOAuthState,
+  safeReturnTo,
+} from "../../../../lib/auth";
 
 export async function GET(request: NextRequest) {
   const config = getLarkConfig();
   const publicOrigin = config.appUrl || request.url;
-  if (!isLarkConfigured()) return NextResponse.redirect(new URL("/login?error=not_configured", publicOrigin));
+  if (!isLarkConfigured())
+    return NextResponse.redirect(
+      new URL("/login?error=not_configured", publicOrigin),
+    );
 
-  const stateCookie = createOAuthState(safeReturnTo(request.nextUrl.searchParams.get("returnTo")));
+  const stateCookie = createOAuthState(
+    safeReturnTo(request.nextUrl.searchParams.get("returnTo")),
+  );
   const oauthState = readOAuthState(stateCookie);
-  if (!oauthState) return NextResponse.redirect(new URL("/login?error=state", publicOrigin));
+  if (!oauthState)
+    return NextResponse.redirect(new URL("/login?error=state", publicOrigin));
 
-  const authorizeUrl = new URL("/open-apis/authen/v1/authorize", config.accountsOrigin);
+  const authorizeUrl = new URL(
+    "/open-apis/authen/v1/authorize",
+    config.accountsOrigin,
+  );
   authorizeUrl.searchParams.set("app_id", config.appId);
   authorizeUrl.searchParams.set("redirect_uri", config.callbackUrl);
   authorizeUrl.searchParams.set("response_type", "code");

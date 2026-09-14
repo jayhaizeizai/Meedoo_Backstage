@@ -1,11 +1,241 @@
 "use client";
-import Link from "next/link";import {useEffect,useState} from "react";import {AppShell} from "../../components/app-shell";import {useLanguage} from "../../components/language-provider";
-type RecordItem={uploader_name:string|null;media_available:boolean;id:string;title:string;status:string;review_status:string;review_comment:string|null;submitted_at:string|null;reviewed_at:string|null;created_at:string;target_platforms:string[];published_platforms:string[];reviewer_name:string|null;version:number};
-const statusText=(status:string,zh:boolean)=>({pending:zh?"待审批":"Pending review",approved:zh?"已批准":"Approved",rejected:zh?"未通过":"Rejected",withdrawn:zh?"已撤回":"Withdrawn",expired:zh?"已过期":"Expired"}[status]??status);
-export default function RecordsPage(){
-  const {language,text}=useLanguage();const [records,setRecords]=useState<RecordItem[]>([]);const [approver,setApprover]=useState(false);const [error,setError]=useState("");const [preview,setPreview]=useState<string|null>(null);const [unavailable,setUnavailable]=useState<string[]>([]);
-  async function load(){const r=await fetch("/api/review-records",{cache:"no-store"});const p=await r.json();if(!r.ok)throw new Error(p.message);setRecords(p.records??[]);setApprover(Boolean(p.approver));}useEffect(()=>{void load().catch(e=>setError(e.message));},[]);
-  async function withdraw(id:string){const r=await fetch(`/api/review-records/${id}/withdraw`,{method:"POST"});const p=await r.json();if(!r.ok){setError(p.message);return;}await load();}
-  async function remove(id:string,platform?:string){const target=platform??text("全部平台","all platforms");if(!window.confirm(text(`只从 MeeDoo 移除 ${target} 的数据？平台上的视频不会被删除。`,`Remove ${target} data from MeeDoo only? Videos on the platforms will not be deleted.`)))return;const r=await fetch(`/api/review-records/${id}/remove`,{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({platform})});const p=await r.json();if(!r.ok){setError(p.message);return;}await load();}
-  return <AppShell active="records" status={{zh:"审批状态与发布记录",en:"Review and publishing history"}}><section className="page review-page"><div className="head"><div><p className="eyebrow">UPLOAD HISTORY</p><h1>{text("我的上传记录","My upload records")}</h1><p>{text("查看审批结果、评价与发布状态。","Track review decisions, comments and publishing status.")}</p></div><Link className="primary-link" href="/upload">＋ {text("提交新视频","Submit a video")}</Link></div>{error&&<div className="data-message error">⚠ {error}</div>}<div className="record-list">{records.map(item=><article className="card record-item" key={item.id}><div><span className={`review-badge ${item.review_status}`}>{statusText(item.review_status,language==="zh")}</span><h2>{item.title}</h2><p>{text("上传者","Uploaded by")}: <strong>{item.uploader_name?.trim()||text("未知上传者","Unknown uploader")}</strong></p><p>{new Date(item.submitted_at??item.reviewed_at??item.created_at).toLocaleString(language==="zh"?"zh-CN":"en-US")} · V{item.version}</p><div className="record-platforms">{item.target_platforms.map(p=><i key={p}>{p}</i>)}</div><div className="record-actions">{item.media_available&&!unavailable.includes(item.id)?<button aria-expanded={preview===item.id} onClick={()=>setPreview(preview===item.id?null:item.id)}>{preview===item.id?text("收起视频","Hide video"):text("查看视频","Watch video")}</button>:<small>{text("视频文件已删除或不可用","Video file deleted or unavailable")}</small>}</div>{preview===item.id&&item.media_available&&!unavailable.includes(item.id)&&<video aria-label={item.title} controls playsInline preload="metadata" src={`/api/review-media/${item.id}`} style={{display:"block",width:"100%",maxWidth:520,maxHeight:420,marginTop:12,borderRadius:10,background:"#111"}} onError={()=>{setUnavailable(current=>[...current,item.id]);setPreview(null);}}/>}</div><div className="record-decision"><small>{text("发布状态","Publishing status")}</small><strong>{item.status}</strong>{item.review_comment&&<blockquote><b>{text("审批评价","Review comment")}</b>{item.review_comment}<small>{item.reviewer_name??"Approver"}</small></blockquote>}{item.review_status==="pending"&&<div className="record-actions"><Link href={`/approvals/${item.id}`}>{text("查看提交内容","View submission")} →</Link><button onClick={()=>void withdraw(item.id)}>{text("撤回","Withdraw")}</button></div>}{approver&&item.review_status==="approved"&&item.status==="completed"&&<div className="record-removal"><small>{text("仅从 MeeDoo 停止处理","Stop processing in MeeDoo only")}</small><div>{item.published_platforms?.map(platform=><button key={platform} onClick={()=>void remove(item.id,platform)}>{platform} ×</button>)}<button className="remove-all" onClick={()=>void remove(item.id)}>{text("移除全部","Remove all")}</button></div><em>{text("不会删除平台视频","Platform videos stay online")}</em></div>}</div></article>)}{!records.length&&!error&&<div className="data-message">{text("暂无上传记录。","No uploads yet.")}</div>}</div></section></AppShell>;
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { AppShell } from "../../components/app-shell";
+import { useLanguage } from "../../components/language-provider";
+type RecordItem = {
+  uploader_name: string | null;
+  media_available: boolean;
+  id: string;
+  title: string;
+  status: string;
+  review_status: string;
+  review_comment: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  target_platforms: string[];
+  published_platforms: string[];
+  reviewer_name: string | null;
+  version: number;
+};
+const statusText = (status: string, zh: boolean) =>
+  ({
+    pending: zh ? "待审批" : "Pending review",
+    approved: zh ? "已批准" : "Approved",
+    rejected: zh ? "未通过" : "Rejected",
+    withdrawn: zh ? "已撤回" : "Withdrawn",
+    expired: zh ? "已过期" : "Expired",
+  })[status] ?? status;
+export default function RecordsPage() {
+  const { language, text } = useLanguage();
+  const [records, setRecords] = useState<RecordItem[]>([]);
+  const [approver, setApprover] = useState(false);
+  const [error, setError] = useState("");
+  const [preview, setPreview] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState<string[]>([]);
+  async function load() {
+    const r = await fetch("/api/review-records", { cache: "no-store" });
+    const p = await r.json();
+    if (!r.ok) throw new Error(p.message);
+    setRecords(p.records ?? []);
+    setApprover(Boolean(p.approver));
+  }
+  useEffect(() => {
+    void load().catch((e) => setError(e.message));
+  }, []);
+  async function withdraw(id: string) {
+    const r = await fetch(`/api/review-records/${id}/withdraw`, {
+      method: "POST",
+    });
+    const p = await r.json();
+    if (!r.ok) {
+      setError(p.message);
+      return;
+    }
+    await load();
+  }
+  async function remove(id: string, platform?: string) {
+    const target = platform ?? text("全部平台", "all platforms");
+    if (
+      !window.confirm(
+        text(
+          `只从 MeeDoo 移除 ${target} 的数据？平台上的视频不会被删除。`,
+          `Remove ${target} data from MeeDoo only? Videos on the platforms will not be deleted.`,
+        ),
+      )
+    )
+      return;
+    const r = await fetch(`/api/review-records/${id}/remove`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform }),
+    });
+    const p = await r.json();
+    if (!r.ok) {
+      setError(p.message);
+      return;
+    }
+    await load();
+  }
+  return (
+    <AppShell
+      active="records"
+      status={{ zh: "审批状态与发布记录", en: "Review and publishing history" }}
+    >
+      <section className="page review-page">
+        <div className="head">
+          <div>
+            <p className="eyebrow">UPLOAD HISTORY</p>
+            <h1>{text("我的上传记录", "My upload records")}</h1>
+            <p>
+              {text(
+                "查看审批结果、评价与发布状态。",
+                "Track review decisions, comments and publishing status.",
+              )}
+            </p>
+          </div>
+          <Link className="primary-link" href="/upload">
+            ＋ {text("提交新视频", "Submit a video")}
+          </Link>
+        </div>
+        {error && <div className="data-message error">⚠ {error}</div>}
+        <div className="record-list">
+          {records.map((item) => (
+            <article className="card record-item" key={item.id}>
+              <div>
+                <span className={`review-badge ${item.review_status}`}>
+                  {statusText(item.review_status, language === "zh")}
+                </span>
+                <h2>{item.title}</h2>
+                <p>
+                  {text("上传者", "Uploaded by")}:{" "}
+                  <strong>
+                    {item.uploader_name?.trim() ||
+                      text("未知上传者", "Unknown uploader")}
+                  </strong>
+                </p>
+                <p>
+                  {new Date(
+                    item.submitted_at ?? item.reviewed_at ?? item.created_at,
+                  ).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}{" "}
+                  · V{item.version}
+                </p>
+                <div className="record-platforms">
+                  {item.target_platforms.map((p) => (
+                    <i key={p}>{p}</i>
+                  ))}
+                </div>
+                <div className="record-actions">
+                  {item.media_available && !unavailable.includes(item.id) ? (
+                    <button
+                      aria-expanded={preview === item.id}
+                      onClick={() =>
+                        setPreview(preview === item.id ? null : item.id)
+                      }
+                    >
+                      {preview === item.id
+                        ? text("收起视频", "Hide video")
+                        : text("查看视频", "Watch video")}
+                    </button>
+                  ) : (
+                    <small>
+                      {text(
+                        "视频文件已删除或不可用",
+                        "Video file deleted or unavailable",
+                      )}
+                    </small>
+                  )}
+                </div>
+                {preview === item.id &&
+                  item.media_available &&
+                  !unavailable.includes(item.id) && (
+                    <video
+                      aria-label={item.title}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      src={`/api/review-media/${item.id}`}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        maxWidth: 520,
+                        maxHeight: 420,
+                        marginTop: 12,
+                        borderRadius: 10,
+                        background: "#111",
+                      }}
+                      onError={() => {
+                        setUnavailable((current) => [...current, item.id]);
+                        setPreview(null);
+                      }}
+                    />
+                  )}
+              </div>
+              <div className="record-decision">
+                <small>{text("发布状态", "Publishing status")}</small>
+                <strong>{item.status}</strong>
+                {item.review_comment && (
+                  <blockquote>
+                    <b>{text("审批评价", "Review comment")}</b>
+                    {item.review_comment}
+                    <small>{item.reviewer_name ?? "Approver"}</small>
+                  </blockquote>
+                )}
+                {item.review_status === "pending" && (
+                  <div className="record-actions">
+                    <Link href={`/approvals/${item.id}`}>
+                      {text("查看提交内容", "View submission")} →
+                    </Link>
+                    <button onClick={() => void withdraw(item.id)}>
+                      {text("撤回", "Withdraw")}
+                    </button>
+                  </div>
+                )}
+                {approver &&
+                  item.review_status === "approved" &&
+                  item.status === "completed" && (
+                    <div className="record-removal">
+                      <small>
+                        {text(
+                          "仅从 MeeDoo 停止处理",
+                          "Stop processing in MeeDoo only",
+                        )}
+                      </small>
+                      <div>
+                        {item.published_platforms?.map((platform) => (
+                          <button
+                            key={platform}
+                            onClick={() => void remove(item.id, platform)}
+                          >
+                            {platform} ×
+                          </button>
+                        ))}
+                        <button
+                          className="remove-all"
+                          onClick={() => void remove(item.id)}
+                        >
+                          {text("移除全部", "Remove all")}
+                        </button>
+                      </div>
+                      <em>
+                        {text(
+                          "不会删除平台视频",
+                          "Platform videos stay online",
+                        )}
+                      </em>
+                    </div>
+                  )}
+              </div>
+            </article>
+          ))}
+          {!records.length && !error && (
+            <div className="data-message">
+              {text("暂无上传记录。", "No uploads yet.")}
+            </div>
+          )}
+        </div>
+      </section>
+    </AppShell>
+  );
 }

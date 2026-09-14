@@ -1,14 +1,119 @@
 import { uploadTitle } from "./upload-title";
-import {statfs} from "node:fs/promises";import path from "node:path";import {query} from "./db";import {notifyUser} from "./notifications";
-function puertoRicoNow(){const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Puerto_Rico",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hourCycle:"h23",weekday:"short"}).formatToParts(new Date());const get=(type:string)=>parts.find(p=>p.type===type)?.value??"";return{date:`${get("year")}-${get("month")}-${get("day")}`,hour:Number(get("hour")),weekday:get("weekday")};}
-async function state(key:string){const r=await query<{value:Record<string,unknown>}>(`SELECT value FROM maintenance_state WHERE key=$1`,[key]);return r.rows[0]?.value??{};}
-async function setState(key:string,value:Record<string,unknown>){await query(`INSERT INTO maintenance_state(key,value,updated_at) VALUES($1,$2::jsonb,now()) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=now()`,[key,JSON.stringify(value)]);}
-export async function runMaintenance(){
+import { statfs } from "node:fs/promises";
+import path from "node:path";
+import { query } from "./db";
+import { notifyUser } from "./notifications";
+function puertoRicoNow() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Puerto_Rico",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+    weekday: "short",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    hour: Number(get("hour")),
+    weekday: get("weekday"),
+  };
+}
+async function state(key: string) {
+  const r = await query<{ value: Record<string, unknown> }>(
+    `SELECT value FROM maintenance_state WHERE key=$1`,
+    [key],
+  );
+  return r.rows[0]?.value ?? {};
+}
+async function setState(key: string, value: Record<string, unknown>) {
+  await query(
+    `INSERT INTO maintenance_state(key,value,updated_at) VALUES($1,$2::jsonb,now()) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=now()`,
+    [key, JSON.stringify(value)],
+  );
+}
+export async function runMaintenance() {
   // Submitted videos are retained indefinitely, including pending, rejected and withdrawn videos.
-  const filesDeleted=0;
-  const overdue=await query<{id:string;title:string}>(`SELECT u.id::text,u.title FROM uploads u WHERE u.removed_at IS NULL AND u.review_status='pending' AND u.submitted_at<now()-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM notifications n WHERE n.upload_id=u.id AND n.kind='approval_overdue') LIMIT 50`);
-  const approvers=await query<{open_id:string}>(`SELECT open_id FROM meedoo_users WHERE role='approver'`);for(const item of overdue.rows)for(const approver of approvers.rows)await notifyUser(approver.open_id,item.id,"approval_overdue",`MeeDoo reminder: “${item.title}” has been waiting for review for more than 24 hours.\n${process.env.APP_URL}/approvals/${item.id}`);
-  const now=puertoRicoNow();let digestSent=false;if(now.hour===10){const digestState=await state("approval_digest");if(digestState.date!==now.date){const weekend=["Sat","Sun"].includes(now.weekday);const pending=await query<{id:string;title:string;original_filename:string|null;platform_content:unknown;uploader_name:string|null;submitted_at:string}>(`SELECT id::text,title,original_filename,platform_content,uploader_name,submitted_at FROM uploads WHERE removed_at IS NULL AND review_status='pending' ${weekend?"AND submitted_at>=now()-interval '24 hours'":""} ORDER BY submitted_at LIMIT 20`);if(pending.rowCount){const lines=pending.rows.map((item,index)=>`${index+1}. ${uploadTitle(item)} — ${item.uploader_name??"Lark user"}`);for(const approver of approvers.rows)await notifyUser(approver.open_id,null,"approval_digest",`MeeDoo daily approval summary (${pending.rowCount}):\n${lines.join("\n")}\n${process.env.APP_URL}/approvals`);digestSent=true;}await setState("approval_digest",{date:now.date,sent:digestSent});}}
-  let diskPercent:number|null=null;const root=process.env.MEEDOO_MEDIA_DIR;if(root){const disk=await statfs(path.resolve(root));diskPercent=(1-Number(disk.bavail)/Number(disk.blocks))*100;const level=diskPercent>=95?95:diskPercent>=85?85:diskPercent>=70?70:0;const diskState=await state("disk_alert");if(level&&Number(diskState.level??0)<level){for(const approver of approvers.rows)await notifyUser(approver.open_id,null,"disk_alert",`MeeDoo storage alert: video storage is ${diskPercent.toFixed(1)}% full${level>=95?". New uploads should be paused.":"."}`);await setState("disk_alert",{level,percent:diskPercent});}if(!level&&Number(diskState.level??0)>0)await setState("disk_alert",{level:0,percent:diskPercent});}
-  return{filesDeleted,overdue:overdue.rowCount??0,digestSent,diskPercent};
+  const filesDeleted = 0;
+  const overdue = await query<{ id: string; title: string }>(
+    `SELECT u.id::text,u.title FROM uploads u WHERE u.removed_at IS NULL AND u.review_status='pending' AND u.submitted_at<now()-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM notifications n WHERE n.upload_id=u.id AND n.kind='approval_overdue') LIMIT 50`,
+  );
+  const approvers = await query<{ open_id: string }>(
+    `SELECT open_id FROM meedoo_users WHERE role='approver'`,
+  );
+  for (const item of overdue.rows)
+    for (const approver of approvers.rows)
+      await notifyUser(
+        approver.open_id,
+        item.id,
+        "approval_overdue",
+        `MeeDoo reminder: “${item.title}” has been waiting for review for more than 24 hours.\n${process.env.APP_URL}/approvals/${item.id}`,
+      );
+  const now = puertoRicoNow();
+  let digestSent = false;
+  if (now.hour === 10) {
+    const digestState = await state("approval_digest");
+    if (digestState.date !== now.date) {
+      const weekend = ["Sat", "Sun"].includes(now.weekday);
+      const pending = await query<{
+        id: string;
+        title: string;
+        original_filename: string | null;
+        platform_content: unknown;
+        uploader_name: string | null;
+        submitted_at: string;
+      }>(
+        `SELECT id::text,title,original_filename,platform_content,uploader_name,submitted_at FROM uploads WHERE removed_at IS NULL AND review_status='pending' ${weekend ? "AND submitted_at>=now()-interval '24 hours'" : ""} ORDER BY submitted_at LIMIT 20`,
+      );
+      if (pending.rowCount) {
+        const lines = pending.rows.map(
+          (item, index) =>
+            `${index + 1}. ${uploadTitle(item)} — ${item.uploader_name ?? "Lark user"}`,
+        );
+        for (const approver of approvers.rows)
+          await notifyUser(
+            approver.open_id,
+            null,
+            "approval_digest",
+            `MeeDoo daily approval summary (${pending.rowCount}):\n${lines.join("\n")}\n${process.env.APP_URL}/approvals`,
+          );
+        digestSent = true;
+      }
+      await setState("approval_digest", { date: now.date, sent: digestSent });
+    }
+  }
+  let diskPercent: number | null = null;
+  const root = process.env.MEEDOO_MEDIA_DIR;
+  if (root) {
+    const disk = await statfs(path.resolve(root));
+    diskPercent = (1 - Number(disk.bavail) / Number(disk.blocks)) * 100;
+    const level =
+      diskPercent >= 95
+        ? 95
+        : diskPercent >= 85
+          ? 85
+          : diskPercent >= 70
+            ? 70
+            : 0;
+    const diskState = await state("disk_alert");
+    if (level && Number(diskState.level ?? 0) < level) {
+      for (const approver of approvers.rows)
+        await notifyUser(
+          approver.open_id,
+          null,
+          "disk_alert",
+          `MeeDoo storage alert: video storage is ${diskPercent.toFixed(1)}% full${level >= 95 ? ". New uploads should be paused." : "."}`,
+        );
+      await setState("disk_alert", { level, percent: diskPercent });
+    }
+    if (!level && Number(diskState.level ?? 0) > 0)
+      await setState("disk_alert", { level: 0, percent: diskPercent });
+  }
+  return {
+    filesDeleted,
+    overdue: overdue.rowCount ?? 0,
+    digestSent,
+    diskPercent,
+  };
 }

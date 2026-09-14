@@ -21,24 +21,35 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       setLanguage(saved);
       return;
     }
-    setLanguage(window.navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
+    setLanguage(
+      window.navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en",
+    );
   }, []);
 
-  const value = useMemo<LanguageContextValue>(() => ({
-    language,
-    toggleLanguage: () => setLanguage((current) => {
-      const next = current === "zh" ? "en" : "zh";
-      window.localStorage.setItem("meedoo-language", next);
-      return next;
+  const value = useMemo<LanguageContextValue>(
+    () => ({
+      language,
+      toggleLanguage: () =>
+        setLanguage((current) => {
+          const next = current === "zh" ? "en" : "zh";
+          window.localStorage.setItem("meedoo-language", next);
+          return next;
+        }),
+      text: (zh, en) => (language === "zh" ? zh : en),
     }),
-    text: (zh, en) => language === "zh" ? zh : en,
-  }), [language]);
+    [language],
+  );
 
-  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
+  return (
+    <LanguageContext.Provider value={value}>
+      {children}
+    </LanguageContext.Provider>
+  );
 }
 
 export function useLanguage() {
   const value = useContext(LanguageContext);
-  if (!value) throw new Error("useLanguage must be used within LanguageProvider");
+  if (!value)
+    throw new Error("useLanguage must be used within LanguageProvider");
   return value;
 }

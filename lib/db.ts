@@ -15,13 +15,19 @@ export function isDatabaseConfigured() {
 
 export function db() {
   if (!connectionString) throw new Error("DATABASE_NOT_CONFIGURED");
-  global.meedooPool ??= new Pool({ connectionString, max: 10, idleTimeoutMillis: 30_000 });
+  global.meedooPool ??= new Pool({
+    connectionString,
+    max: 10,
+    idleTimeoutMillis: 30_000,
+  });
   return global.meedooPool;
 }
 
 export async function ensureSchema() {
   if (!isDatabaseConfigured()) throw new Error("DATABASE_NOT_CONFIGURED");
-  global.meedooSchemaReady ??= db().query(`
+  global.meedooSchemaReady ??= db()
+    .query(
+      `
     CREATE TABLE IF NOT EXISTS meedoo_users (
       open_id text PRIMARY KEY,
       user_id text,
@@ -227,11 +233,20 @@ export async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS upload_reviews_upload_created_idx ON upload_reviews(upload_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS libtv_credit_entries_consumed_idx ON libtv_credit_entries(consumed_at DESC);
     CREATE INDEX IF NOT EXISTS libtv_credit_entries_member_consumed_idx ON libtv_credit_entries(member_id, consumed_at DESC);
-  `).then(() => undefined).catch((error) => { global.meedooSchemaReady = undefined; throw error; });
+  `,
+    )
+    .then(() => undefined)
+    .catch((error) => {
+      global.meedooSchemaReady = undefined;
+      throw error;
+    });
   return global.meedooSchemaReady;
 }
 
-export async function query<T extends QueryResultRow = QueryResultRow>(text: string, values: unknown[] = []) {
+export async function query<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  values: unknown[] = [],
+) {
   await ensureSchema();
   return db().query<T>(text, values);
 }

@@ -1,3 +1,5 @@
+> 历史待办（2026-08-29）：其中三平台、视频过期删除、旧留存评分等口径已过时。当前行为请先阅读 README.md，再核对代码；不要直接照此恢复旧功能。
+
 # MeeDoo implementation TODO
 
 Last updated: 2026-08-29

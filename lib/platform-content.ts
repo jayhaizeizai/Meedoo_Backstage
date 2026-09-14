@@ -23,20 +23,34 @@ export function parsePlatformContent(value: unknown): PlatformContent | null {
   return result;
 }
 
-export function validatePlatformContent(content: PlatformContent, selected: readonly string[] = Object.keys(content)) {
+export function validatePlatformContent(
+  content: PlatformContent,
+  selected: readonly string[] = Object.keys(content),
+) {
   for (const platform of selected as UploadPostPlatform[]) {
     if (!content[platform]) return `${platform.toUpperCase()}_CONTENT_REQUIRED`;
     const { title, caption } = content[platform];
     if (!title || !caption) return `${platform.toUpperCase()}_CONTENT_REQUIRED`;
     if (title.length > 100) return `${platform.toUpperCase()}_TITLE_TOO_LONG`;
-    if (/[<>]/.test(title) || /[<>]/.test(caption)) return `${platform.toUpperCase()}_INVALID_CHARACTERS`;
-    if (socialTextLength(platform, `${title}\n\n${caption}`) > socialTextLimit(platform)) return `${platform.toUpperCase()}_SOCIAL_TEXT_TOO_LONG`;
-    if (Buffer.byteLength(caption, "utf8") > 5000) return `${platform.toUpperCase()}_CAPTION_TOO_LARGE`;
+    if (/[<>]/.test(title) || /[<>]/.test(caption))
+      return `${platform.toUpperCase()}_INVALID_CHARACTERS`;
+    if (
+      socialTextLength(platform, `${title}\n\n${caption}`) >
+      socialTextLimit(platform)
+    )
+      return `${platform.toUpperCase()}_SOCIAL_TEXT_TOO_LONG`;
+    if (Buffer.byteLength(caption, "utf8") > 5000)
+      return `${platform.toUpperCase()}_CAPTION_TOO_LARGE`;
   }
   return null;
 }
 
-export function contentForPlatform(value: unknown, platform: UploadPostPlatform, legacyTitle: string, legacyCaption: string): PlatformPostContent {
+export function contentForPlatform(
+  value: unknown,
+  platform: UploadPostPlatform,
+  legacyTitle: string,
+  legacyCaption: string,
+): PlatformPostContent {
   const parsed = parsePlatformContent(value);
   return parsed?.[platform] ?? { title: legacyTitle, caption: legacyCaption };
 }

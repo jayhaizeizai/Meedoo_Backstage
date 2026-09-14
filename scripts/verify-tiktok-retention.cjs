@@ -1,87 +1,228 @@
 // Unit fixtures by default; --db additionally uses an isolated TEST schema, never live records.
-const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
-const ts = require('typescript'), { randomUUID } = require('node:crypto');
-require.extensions['.ts'] = (m, f) => m._compile(ts.transpileModule(fs.readFileSync(f, 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, f);
-const { computeTikTokRetention: compute, withTikTokRetention, tiktokRetentionScore } = require('../lib/tiktok-retention.ts');
-const curve = fractions => ({ retention: fractions.map((percentage, second) => ({ second: String(second), percentage })) });
+const fs = require("node:fs"),
+  path = require("node:path"),
+  assert = require("node:assert/strict");
+const ts = require("typescript"),
+  { randomUUID } = require("node:crypto");
+require.extensions[".ts"] = (m, f) =>
+  m._compile(
+    ts.transpileModule(fs.readFileSync(f, "utf8"), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    }).outputText,
+    f,
+  );
+const {
+  computeTikTokRetention: compute,
+  withTikTokRetention,
+  tiktokRetentionScore,
+} = require("../lib/tiktok-retention.ts");
+const curve = (fractions) => ({
+  retention: fractions.map((percentage, second) => ({
+    second: String(second),
+    percentage,
+  })),
+});
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
-close(compute(curve([1, .8, .6, .4]), 3).score, 70);
-close(compute(curve([.5, .5, .5, .5]), 3).score, 50);
+close(compute(curve([1, 0.8, 0.6, 0.4]), 3).score, 70);
+close(compute(curve([0.5, 0.5, 0.5, 0.5]), 3).score, 50);
 close(compute(curve([0, 0, 0, 0]), 3).score, 0);
-close(compute(curve([1, .8, .6, .4]), 2.5).score, 75);
-const start = compute({ retention: [{ second: '1', percentage: .5 }, { second: '2', percentage: .5 }] }, 2);
-close(start.score, 62.5); assert.equal(start.inferredStart, true); assert.equal(start.segments[0][0].second, 1);
-const separate = compute({ ...curve([1, .8, .6, .4]), full_video_watched_rate: .12 }, 3);
-close(separate.threeSecondRate, 40); close(separate.completionRate, 12);
-assert.equal(compute({ average_time_watched: 3, full_video_watched_rate: .5 }, 4).score, null);
-assert.equal(compute(curve([1, .8]), null).status, 'missing_duration');
-assert.equal(compute(curve([1, .8]), 2).status, 'incomplete_curve');
-assert.equal(compute({ retention: [{ second: 2, percentage: .8 }, { second: 3, percentage: .7 }] }, 3).score, null);
-const gap = compute({ retention: [{ second: 0, percentage: 1 }, { second: 2, percentage: .5 }] }, 2);
-assert.equal(gap.score, null); assert.equal(gap.segments.length, 2);
-for (const bad of [null, '', false, NaN, -1, 75, Infinity]) assert.equal(compute({ retention: [{ second: 0, percentage: bad }] }, 1).status, 'invalid_curve');
-assert.equal(compute({ retention: [{ second: 0, percentage: 1 }, { second: 0, percentage: .5 }] }, 1).status, 'invalid_curve');
-const unsorted = curve(Array.from({ length: 12 }, () => .5)); unsorted.retention.reverse();
+close(compute(curve([1, 0.8, 0.6, 0.4]), 2.5).score, 75);
+const start = compute(
+  {
+    retention: [
+      { second: "1", percentage: 0.5 },
+      { second: "2", percentage: 0.5 },
+    ],
+  },
+  2,
+);
+close(start.score, 62.5);
+assert.equal(start.inferredStart, true);
+assert.equal(start.segments[0][0].second, 1);
+const separate = compute(
+  { ...curve([1, 0.8, 0.6, 0.4]), full_video_watched_rate: 0.12 },
+  3,
+);
+close(separate.threeSecondRate, 40);
+close(separate.completionRate, 12);
+assert.equal(
+  compute({ average_time_watched: 3, full_video_watched_rate: 0.5 }, 4).score,
+  null,
+);
+assert.equal(compute(curve([1, 0.8]), null).status, "missing_duration");
+assert.equal(compute(curve([1, 0.8]), 2).status, "incomplete_curve");
+assert.equal(
+  compute(
+    {
+      retention: [
+        { second: 2, percentage: 0.8 },
+        { second: 3, percentage: 0.7 },
+      ],
+    },
+    3,
+  ).score,
+  null,
+);
+const gap = compute(
+  {
+    retention: [
+      { second: 0, percentage: 1 },
+      { second: 2, percentage: 0.5 },
+    ],
+  },
+  2,
+);
+assert.equal(gap.score, null);
+assert.equal(gap.segments.length, 2);
+for (const bad of [null, "", false, NaN, -1, 75, Infinity])
+  assert.equal(
+    compute({ retention: [{ second: 0, percentage: bad }] }, 1).status,
+    "invalid_curve",
+  );
+assert.equal(
+  compute(
+    {
+      retention: [
+        { second: 0, percentage: 1 },
+        { second: 0, percentage: 0.5 },
+      ],
+    },
+    1,
+  ).status,
+  "invalid_curve",
+);
+const unsorted = curve(Array.from({ length: 12 }, () => 0.5));
+unsorted.retention.reverse();
 close(compute(unsorted, 11).score, 50);
-close(compute(curve([.4, .8, .5]), 2).score, 62.5); // Do not flatten replay-related rises.
-assert.equal(tiktokRetentionScore('youtube', withTikTokRetention(curve([1, 1]), 1)), null);
-assert.equal(tiktokRetentionScore('tiktok', curve([1, 1])), null); // Read paths require a stored score.
-console.log('PASS curve integration, clipping, fractions, gaps, missing values, zeros, and separate completion');
+close(compute(curve([0.4, 0.8, 0.5]), 2).score, 62.5); // Do not flatten replay-related rises.
+assert.equal(
+  tiktokRetentionScore("youtube", withTikTokRetention(curve([1, 1]), 1)),
+  null,
+);
+assert.equal(tiktokRetentionScore("tiktok", curve([1, 1])), null); // Read paths require a stored score.
+console.log(
+  "PASS curve integration, clipping, fractions, gaps, missing values, zeros, and separate completion",
+);
 
 async function databaseTest() {
-  assert.equal(process.env.LARK_APP_ID, 'cli_aa1a6845a1f8de15');
-  const { Pool } = require('pg'), schema = 'retention_' + randomUUID().replaceAll('-', '');
+  assert.equal(process.env.LARK_APP_ID, "cli_aa1a6845a1f8de15");
+  const { Pool } = require("pg"),
+    schema = "retention_" + randomUUID().replaceAll("-", "");
   const admin = new Pool({ connectionString: process.env.DATABASE_URL });
   await admin.query(`CREATE SCHEMA ${schema}`);
-  global.meedooPool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema}` });
-  global.fetch = async () => { throw new Error('UNEXPECTED_EXTERNAL_REQUEST'); };
-  const db = require('../lib/db.ts');
+  global.meedooPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    options: `-c search_path=${schema}`,
+  });
+  global.fetch = async () => {
+    throw new Error("UNEXPECTED_EXTERNAL_REQUEST");
+  };
+  const db = require("../lib/db.ts");
   try {
     await db.ensureSchema();
-    await db.query("INSERT INTO meedoo_users(open_id,name,role) VALUES('fixture','Fixture','approver')");
+    await db.query(
+      "INSERT INTO meedoo_users(open_id,name,role) VALUES('fixture','Fixture','approver')",
+    );
     const id = randomUUID();
-    await db.query(`INSERT INTO uploads(id,request_id,title,caption,profile_username,status,target_platforms,uploader_open_id,video_duration_seconds)
-      VALUES($1,'fixture-request','Retention fixture','','fixture','completed',ARRAY['tiktok','youtube'],'fixture',3)`, [id]);
-    const publications = await db.query(`INSERT INTO publications(upload_id,platform,status,platform_post_id)
-      VALUES($1,'tiktok','completed','fixture-tt'),($1,'youtube','completed','fixture-yt') RETURNING id,platform`, [id]);
-    const tt = publications.rows.find(p => p.platform === 'tiktok').id;
-    const yt = publications.rows.find(p => p.platform === 'youtube').id;
-    await db.query('INSERT INTO metric_snapshots(publication_id,metrics) VALUES($1,$2::jsonb),($3,$4::jsonb)',
-      [tt, JSON.stringify({ ...curve([1, .8, .6, .4]), views: 100, full_video_watched_rate: .12 }), yt, JSON.stringify({ views: 900, average_view_percentage: 90 })]);
-    const { backfillTikTokRetention } = require('../lib/tiktok-retention-backfill.ts');
+    await db.query(
+      `INSERT INTO uploads(id,request_id,title,caption,profile_username,status,target_platforms,uploader_open_id,video_duration_seconds)
+      VALUES($1,'fixture-request','Retention fixture','','fixture','completed',ARRAY['tiktok','youtube'],'fixture',3)`,
+      [id],
+    );
+    const publications = await db.query(
+      `INSERT INTO publications(upload_id,platform,status,platform_post_id)
+      VALUES($1,'tiktok','completed','fixture-tt'),($1,'youtube','completed','fixture-yt') RETURNING id,platform`,
+      [id],
+    );
+    const tt = publications.rows.find((p) => p.platform === "tiktok").id;
+    const yt = publications.rows.find((p) => p.platform === "youtube").id;
+    await db.query(
+      "INSERT INTO metric_snapshots(publication_id,metrics) VALUES($1,$2::jsonb),($3,$4::jsonb)",
+      [
+        tt,
+        JSON.stringify({
+          ...curve([1, 0.8, 0.6, 0.4]),
+          views: 100,
+          full_video_watched_rate: 0.12,
+        }),
+        yt,
+        JSON.stringify({ views: 900, average_view_percentage: 90 }),
+      ],
+    );
+    const {
+      backfillTikTokRetention,
+    } = require("../lib/tiktok-retention-backfill.ts");
     assert.equal(await backfillTikTokRetention(), 1);
     assert.equal(await backfillTikTokRetention(), 0);
-    const dashboard = await require('../lib/dashboard-data.ts').getDashboardData(30);
+    const dashboard =
+      await require("../lib/dashboard-data.ts").getDashboardData(30);
     close(dashboard.team.metrics.retention, 70); // YouTube's 900 views cannot affect this score.
     assert.equal(dashboard.people[0].scores.retention, null);
     assert.equal(dashboard.people[0].legacyWatchQuality.score, 17);
-    const detail = await require('../lib/video-detail-data.ts').getVideoDetailData(id);
+    const detail =
+      await require("../lib/video-detail-data.ts").getVideoDetailData(id);
     close(detail.video.tiktokRetention[0].data.score, 70);
     close(detail.video.youtubeAverageViewPercentage, 90);
-    await db.query('UPDATE uploads SET video_duration_seconds=2.5 WHERE id=$1', [id]);
+    await db.query(
+      "UPDATE uploads SET video_duration_seconds=2.5 WHERE id=$1",
+      [id],
+    );
     assert.equal(await backfillTikTokRetention(), 1);
-    close((await require('../lib/video-detail-data.ts').getVideoDetailData(id)).video.tiktokRetention[0].data.score, 75);
+    close(
+      (await require("../lib/video-detail-data.ts").getVideoDetailData(id))
+        .video.tiktokRetention[0].data.score,
+      75,
+    );
     assert.equal(await backfillTikTokRetention(), 0);
     // Exercise the real sync insertion with a mocked read-only provider.
-    const filename = path.resolve(__dirname, '../lib/upload-post.ts');
-    require.cache[filename] = { id: filename, filename, loaded: true, exports: {
-      getUploadPostConfig: () => ({ profile: 'fixture' }), parseProviderResponse: r => r.json(),
-      uploadPostFetch: async url => {
-        const platform = new URL('https://fixture' + url).searchParams.get('platform');
-        return new Response(JSON.stringify({ platforms: { [platform]: { post_metrics: { ...curve([1, .8, .6, .4]), views: 150 } } } }));
+    const filename = path.resolve(__dirname, "../lib/upload-post.ts");
+    require.cache[filename] = {
+      id: filename,
+      filename,
+      loaded: true,
+      exports: {
+        getUploadPostConfig: () => ({ profile: "fixture" }),
+        parseProviderResponse: (r) => r.json(),
+        uploadPostFetch: async (url) => {
+          const platform = new URL("https://fixture" + url).searchParams.get(
+            "platform",
+          );
+          return new Response(
+            JSON.stringify({
+              platforms: {
+                [platform]: {
+                  post_metrics: { ...curve([1, 0.8, 0.6, 0.4]), views: 150 },
+                },
+              },
+            }),
+          );
+        },
       },
-    } };
-    assert.equal(await require('../lib/upload-post-sync.ts').syncAnalytics(), 2);
-    const latest = await db.query('SELECT metrics FROM metric_snapshots WHERE publication_id=$1 ORDER BY captured_at DESC,id DESC LIMIT 1', [tt]);
-    close(tiktokRetentionScore('tiktok', latest.rows[0].metrics), 75);
+    };
+    assert.equal(
+      await require("../lib/upload-post-sync.ts").syncAnalytics(),
+      2,
+    );
+    const latest = await db.query(
+      "SELECT metrics FROM metric_snapshots WHERE publication_id=$1 ORDER BY captured_at DESC,id DESC LIMIT 1",
+      [tt],
+    );
+    close(tiktokRetentionScore("tiktok", latest.rows[0].metrics), 75);
     assert.equal(await backfillTikTokRetention(), 0);
-    console.log('PASS isolated DB: idempotent backfill, duration correction, sync persistence, platform separation, legacy bonus scoring');
+    console.log(
+      "PASS isolated DB: idempotent backfill, duration correction, sync persistence, platform separation, legacy bonus scoring",
+    );
   } finally {
     await global.meedooPool.end();
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);
     await admin.end();
   }
 }
-if (process.argv.includes('--db')) databaseTest().catch(e => { console.error(e.name, e.code || e.message); process.exitCode = 1; });
+if (process.argv.includes("--db"))
+  databaseTest().catch((e) => {
+    console.error(e.name, e.code || e.message);
+    process.exitCode = 1;
+  });

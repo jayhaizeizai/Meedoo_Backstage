@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { MeeDooUser } from "../lib/auth";
 
 type AuthState = {
@@ -20,16 +27,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [required, setRequired] = useState(false);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<MeeDooUser | null>(null);
-  const [role,setRole]=useState<"member"|"approver">("member");
+  const [role, setRole] = useState<"member" | "approver">("member");
 
   const refresh = useCallback(async () => {
     try {
       const response = await fetch("/api/auth/me", { cache: "no-store" });
-      const data = await response.json() as { configured: boolean; required: boolean; user: MeeDooUser | null; role?: "member"|"approver" };
+      const data = (await response.json()) as {
+        configured: boolean;
+        required: boolean;
+        user: MeeDooUser | null;
+        role?: "member" | "approver";
+      };
       setConfigured(data.configured);
       setRequired(data.required);
       setUser(data.user);
-      setRole(data.role??"member");
+      setRole(data.role ?? "member");
     } finally {
       setLoading(false);
     }
@@ -41,9 +53,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.assign("/login");
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
-  const value = useMemo(() => ({ configured, required, loading, user, role, refresh, logout }), [configured, required, loading, user, role, refresh, logout]);
+  const value = useMemo(
+    () => ({ configured, required, loading, user, role, refresh, logout }),
+    [configured, required, loading, user, role, refresh, logout],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

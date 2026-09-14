@@ -14,12 +14,45 @@ type AppShellProps = {
 export function AppShell({ active, status, children }: AppShellProps) {
   const { language, text, toggleLanguage } = useLanguage();
   const { configured, loading, user, role, logout } = useAuth();
-  const userInitials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "LK";
-  const [notifications,setNotifications]=useState<{id:string;message:string;created_at:string;read_at:string|null}[]>([]);
-  const [notificationsOpen,setNotificationsOpen]=useState(false);
-  useEffect(()=>{if(!user)return;void fetch("/api/notifications",{cache:"no-store"}).then((response)=>response.json()).then((payload)=>{if(payload.success)setNotifications(payload.notifications);}).catch(()=>undefined);},[user]);
-  const unread=notifications.filter((item)=>!item.read_at).length;
-  function toggleNotifications(){const next=!notificationsOpen;setNotificationsOpen(next);if(next&&unread){void fetch("/api/notifications",{method:"PATCH"});setNotifications((items)=>items.map((item)=>({...item,read_at:item.read_at??new Date().toISOString()})));}}
+  const userInitials =
+    user?.name
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "LK";
+  const [notifications, setNotifications] = useState<
+    {
+      id: string;
+      message: string;
+      created_at: string;
+      read_at: string | null;
+    }[]
+  >([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    void fetch("/api/notifications", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (payload.success) setNotifications(payload.notifications);
+      })
+      .catch(() => undefined);
+  }, [user]);
+  const unread = notifications.filter((item) => !item.read_at).length;
+  function toggleNotifications() {
+    const next = !notificationsOpen;
+    setNotificationsOpen(next);
+    if (next && unread) {
+      void fetch("/api/notifications", { method: "PATCH" });
+      setNotifications((items) =>
+        items.map((item) => ({
+          ...item,
+          read_at: item.read_at ?? new Date().toISOString(),
+        })),
+      );
+    }
+  }
 
   return (
     <div className="shell">
@@ -33,48 +66,143 @@ export function AppShell({ active, status, children }: AppShellProps) {
         </div>
         <nav className="nav" aria-label={text("主导航", "Main navigation")}>
           <section className="nav-group" aria-labelledby="nav-video-workflow">
-            <h2 className="nav-group-title" id="nav-video-workflow">{text("视频流程", "Video workflow")}</h2>
+            <h2 className="nav-group-title" id="nav-video-workflow">
+              {text("视频流程", "Video workflow")}
+            </h2>
             <div className="nav-group-links">
-              <Link className={active === "upload" ? "active" : ""} href="/upload" title={text("上传视频", "Upload video")}>
-                <span aria-hidden="true">↥</span><i>{text("上传视频", "Upload video")}</i>
+              <Link
+                className={active === "upload" ? "active" : ""}
+                href="/upload"
+                title={text("上传视频", "Upload video")}
+              >
+                <span aria-hidden="true">↥</span>
+                <i>{text("上传视频", "Upload video")}</i>
               </Link>
-              <Link className={active === "records" ? "active" : ""} href="/records" title={text("上传记录", "Upload records")}>
-                <span aria-hidden="true">☷</span><i>{text("上传记录", "Upload records")}</i>
+              <Link
+                className={active === "records" ? "active" : ""}
+                href="/records"
+                title={text("上传记录", "Upload records")}
+              >
+                <span aria-hidden="true">☷</span>
+                <i>{text("上传记录", "Upload records")}</i>
               </Link>
-              {role === "approver" && <Link className={active === "approvals" ? "active" : ""} href="/approvals" title={text("视频审批", "Video approvals")}>
-                <span aria-hidden="true">✓</span><i>{text("视频审批", "Video approvals")}</i>
-              </Link>}
+              {role === "approver" && (
+                <Link
+                  className={active === "approvals" ? "active" : ""}
+                  href="/approvals"
+                  title={text("视频审批", "Video approvals")}
+                >
+                  <span aria-hidden="true">✓</span>
+                  <i>{text("视频审批", "Video approvals")}</i>
+                </Link>
+              )}
             </div>
           </section>
           <section className="nav-group" aria-labelledby="nav-analytics">
-            <h2 className="nav-group-title" id="nav-analytics">{text("数据看板", "Analytics")}</h2>
+            <h2 className="nav-group-title" id="nav-analytics">
+              {text("数据看板", "Analytics")}
+            </h2>
             <div className="nav-group-links">
-              <Link className={active === "dashboard" ? "active" : ""} href="/dashboard" title={text("视频数据看报", "Video analytics report")}>
-                <span aria-hidden="true">⌁</span><i>{text("视频数据看报", "Video analytics report")}</i>
+              <Link
+                className={active === "dashboard" ? "active" : ""}
+                href="/dashboard"
+                title={text("视频数据看报", "Video analytics report")}
+              >
+                <span aria-hidden="true">⌁</span>
+                <i>{text("视频数据看报", "Video analytics report")}</i>
               </Link>
-              <Link className={active === "weekly-report" ? "active" : ""} href="/weekly-report" title={text("市场部每周周报", "Marketing weekly report")}>
-                <span aria-hidden="true">▣</span><i>{text("市场部每周周报", "Marketing weekly report")}</i>
+              <Link
+                className={active === "weekly-report" ? "active" : ""}
+                href="/weekly-report"
+                title={text("市场部每周周报", "Marketing weekly report")}
+              >
+                <span aria-hidden="true">▣</span>
+                <i>{text("市场部每周周报", "Marketing weekly report")}</i>
               </Link>
             </div>
           </section>
         </nav>
         <div className="side-bottom">
           <div className="user">
-            {user?.avatar ? <img className="avatar auth-avatar" src={user.avatar} alt="" /> : <span className="avatar">{userInitials}</span>}
+            {user?.avatar ? (
+              <img className="avatar auth-avatar" src={user.avatar} alt="" />
+            ) : (
+              <span className="avatar">{userInitials}</span>
+            )}
             <div>
-              <strong>{loading ? text("检查登录状态", "Checking session") : user?.name ?? text("尚未登录", "Not signed in")}</strong>
-              <small>{user?.email ?? (configured ? "Lark workspace" : text("等待应用配置", "Awaiting app setup"))}</small>
+              <strong>
+                {loading
+                  ? text("检查登录状态", "Checking session")
+                  : (user?.name ?? text("尚未登录", "Not signed in"))}
+              </strong>
+              <small>
+                {user?.email ??
+                  (configured
+                    ? "Lark workspace"
+                    : text("等待应用配置", "Awaiting app setup"))}
+              </small>
             </div>
-            {user ? <button className="user-action" type="button" onClick={() => void logout()} title={text("退出登录", "Sign out")}>↪</button> : <Link className="user-action" href="/login" title={text("登录", "Sign in")}>→</Link>}
+            {user ? (
+              <button
+                className="user-action"
+                type="button"
+                onClick={() => void logout()}
+                title={text("退出登录", "Sign out")}
+              >
+                ↪
+              </button>
+            ) : (
+              <Link
+                className="user-action"
+                href="/login"
+                title={text("登录", "Sign in")}
+              >
+                →
+              </Link>
+            )}
           </div>
         </div>
       </aside>
       <main className="main">
         <header className="topbar">
-          <div className="live"><i /><span>{text(status.zh, status.en)}</span></div>
+          <div className="live">
+            <i />
+            <span>{text(status.zh, status.en)}</span>
+          </div>
           <div className="top-actions">
-            <div className="notification-wrap"><button className="notification-button" onClick={toggleNotifications} aria-label={text("状态通知","Status notifications")}>♢{unread>0&&<b>{unread}</b>}</button>{notificationsOpen&&<div className="notification-menu"><strong>{text("状态通知","Status notifications")}</strong>{notifications.length?notifications.map((item)=><div key={item.id}><span>{item.message}</span><small>{new Date(item.created_at).toLocaleString(language==="zh"?"zh-CN":"en-US")}</small></div>):<p>{text("暂无通知","No notifications yet")}</p>}</div>}</div>
-            <button className="lang" onClick={toggleLanguage} aria-label={text("切换到英文", "Switch to Chinese")}>
+            <div className="notification-wrap">
+              <button
+                className="notification-button"
+                onClick={toggleNotifications}
+                aria-label={text("状态通知", "Status notifications")}
+              >
+                ♢{unread > 0 && <b>{unread}</b>}
+              </button>
+              {notificationsOpen && (
+                <div className="notification-menu">
+                  <strong>{text("状态通知", "Status notifications")}</strong>
+                  {notifications.length ? (
+                    notifications.map((item) => (
+                      <div key={item.id}>
+                        <span>{item.message}</span>
+                        <small>
+                          {new Date(item.created_at).toLocaleString(
+                            language === "zh" ? "zh-CN" : "en-US",
+                          )}
+                        </small>
+                      </div>
+                    ))
+                  ) : (
+                    <p>{text("暂无通知", "No notifications yet")}</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <button
+              className="lang"
+              onClick={toggleLanguage}
+              aria-label={text("切换到英文", "Switch to Chinese")}
+            >
               <b>{language === "zh" ? "中" : "EN"}</b>
               <span>{language === "zh" ? "English" : "中文"}</span>
             </button>

@@ -7,10 +7,18 @@ export function proxy(request: NextRequest) {
   if (user) return NextResponse.next();
 
   const loginUrl = new URL("/login", process.env.APP_URL || request.url);
-  loginUrl.searchParams.set("returnTo", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  loginUrl.searchParams.set(
+    "returnTo",
+    `${request.nextUrl.pathname}${request.nextUrl.search}`,
+  );
   return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
-  matcher: ["/upload/:path*", "/dashboard/:path*", "/records/:path*", "/approvals/:path*"],
+  matcher: [
+    "/upload/:path*",
+    "/dashboard/:path*",
+    "/records/:path*",
+    "/approvals/:path*",
+  ],
 };
