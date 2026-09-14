@@ -321,6 +321,53 @@
 @media(max-width:950px){.bonus-rule-grid{grid-template-columns:1fr}}
 @media(max-width:620px){.person-report-tabs button{min-width:150px}.person-total-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rule-section-title{align-items:flex-start;gap:5px;flex-direction:column}}
 
+/* LIBTV weekly accounting */
+.accounting-upload{display:grid;grid-template-columns:minmax(260px,1.4fr) minmax(220px,.9fr) 145px 165px auto;align-items:end;gap:12px;padding:21px}
+.accounting-upload h2,.accounting-member h2{margin:0 0 5px;font-size:17px}
+.accounting-upload p:not(.eyebrow),.accounting-member header p{margin:0;color:var(--muted);font-size:9px;line-height:1.5}
+.accounting-upload label,.accounting-toolbar label{display:grid;gap:6px;color:var(--muted);font-size:8px;font-weight:800}
+.accounting-upload input,.accounting-toolbar select{width:100%;height:40px;padding:0 10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit;font-size:9px}
+.accounting-upload input[type=file]{padding:8px}
+.accounting-upload button{height:40px;padding:0 15px;border:0;border-radius:10px;background:#6757e8;color:#fff;font-weight:900;cursor:pointer}
+.accounting-upload button:disabled{cursor:not-allowed;opacity:.48}
+.accounting-message{padding:11px 14px;border-radius:10px;font-size:9px;font-weight:800}
+.accounting-message.success{border:1px solid #bfe7dc;background:#f2fbf8;color:#08765f}
+.accounting-message.error{border:1px solid #f0caca;background:#fff5f5;color:#a43d45}
+.accounting-toolbar{display:flex;align-items:end;justify-content:space-between;gap:14px}
+.accounting-toolbar select{min-width:180px}
+.accounting-toolbar p{margin:0;padding:10px 13px;border-radius:10px;background:#f1eeff;color:#6254d4;font-size:9px;font-weight:800}
+.accounting-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.accounting-kpis article{padding:18px}
+.accounting-kpis small,.accounting-kpis strong{display:block}
+.accounting-kpis small{min-height:24px;color:var(--muted);font-size:8px}
+.accounting-kpis strong{font-size:22px}
+.accounting-members{display:grid;gap:14px}
+.accounting-member{padding:21px}
+.accounting-member>header{display:flex;align-items:start;justify-content:space-between;gap:16px;margin-bottom:15px}
+.accounting-member>header>strong{color:#5b4bdc;font-size:22px}
+.accounting-member-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.accounting-member-kpis>div{padding:12px;border:1px solid var(--line);border-radius:10px;background:#fafbfc}
+.accounting-member-kpis small,.accounting-member-kpis b{display:block}
+.accounting-member-kpis small{color:var(--muted);font-size:8px}
+.accounting-member-kpis b{margin-top:5px;font-size:15px}
+.accounting-warning{margin:0 0 13px;padding:10px 12px;border:1px solid #eadba9;border-radius:9px;background:#fffbed;color:#806b25;font-size:9px}
+.accounting-models{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-bottom:14px}
+.accounting-models>div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;border-radius:9px;background:#f5f3ff}
+.accounting-models span,.accounting-models strong,.accounting-models small{display:block;min-width:0}
+.accounting-models strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px}
+.accounting-models small{margin-top:3px;color:var(--muted);font-size:7px}
+.accounting-models b{flex:none;color:#5b4bdc;font-size:9px}
+.accounting-video-list{overflow:auto;border-top:1px solid var(--line)}
+.accounting-video-row{min-width:650px;display:grid;grid-template-columns:minmax(300px,1fr) 130px 130px;align-items:center;gap:15px;min-height:55px;border-top:1px solid var(--line)}
+.accounting-video-row:first-child{border-top:0}
+.accounting-video-row.header{min-height:35px;color:var(--muted);font-size:8px;font-weight:800;text-transform:uppercase}
+.accounting-video-row>span strong,.accounting-video-row>span small{display:block}
+.accounting-video-row>span strong{font-size:10px}
+.accounting-video-row>span small{margin-top:3px;color:var(--muted);font-size:8px}
+.accounting-video-row>b{font-size:10px}
+@media(max-width:1100px){.accounting-upload{grid-template-columns:1fr 1fr}.accounting-upload>div{grid-column:1/-1}.accounting-models{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.accounting-upload,.accounting-kpis,.accounting-member-kpis,.accounting-models{grid-template-columns:1fr}.accounting-toolbar,.accounting-member>header{align-items:stretch;flex-direction:column}.accounting-member>header>strong{text-align:left}}
+
 /* Dashboard history, ranking, filters and video analytics */
 .filters select,
 .sort-controls select,
