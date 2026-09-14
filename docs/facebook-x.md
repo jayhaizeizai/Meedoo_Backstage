@@ -1,6 +1,6 @@
 # Facebook 和 X 测试接入
 
-Facebook、X 为额外可选渠道，默认不选；TikTok、Instagram、YouTube 保留原有必选规则。当前只部署测试服。
+新提交统一使用 TikTok、Instagram、YouTube、Facebook、X 五个平台，默认共用标题和文案。没有额外渠道选择区；五个平台均连接且 Facebook 公共主页配置完成后方可提交。旧三平台记录仍可读取和审批。当前只部署测试服。
 
 ## 配置与真实联调
 

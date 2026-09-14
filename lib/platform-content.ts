@@ -1,4 +1,4 @@
-import { supportedPlatforms, requiredPlatforms, UploadPostPlatform } from "./upload-post";
+import { supportedPlatforms, UploadPostPlatform } from "./upload-post";
 import { socialTextLength, socialTextLimit } from "./social-platforms";
 
 export type PlatformPostContent = { title: string; caption: string };
@@ -11,7 +11,7 @@ export function parsePlatformContent(value: unknown): PlatformContent | null {
   for (const platform of supportedPlatforms) {
     const item = source[platform];
     if (!item || typeof item !== "object") {
-      if (requiredPlatforms.some(required => required === platform)) return null;
+      if (["tiktok", "instagram", "youtube"].includes(platform)) return null;
       continue;
     }
     const fields = item as Record<string, unknown>;

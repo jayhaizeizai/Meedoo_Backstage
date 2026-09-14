@@ -1,6 +1,6 @@
-// Shared, browser-safe platform definitions. New channels are opt-in.
-export const requiredPlatforms = ["tiktok", "instagram", "youtube"] as const;
-export const supportedPlatforms = [...requiredPlatforms, "facebook", "x"] as const;
+// Shared, browser-safe definitions: all five channels are part of every new submission.
+export const supportedPlatforms = ["tiktok", "instagram", "youtube", "facebook", "x"] as const;
+export const requiredPlatforms = supportedPlatforms;
 export type SocialPlatform = typeof supportedPlatforms[number];
 export const platformMeta = {
   tiktok: { name: "TikTok", icon: "♪", className: "tt", color: "#252936" },

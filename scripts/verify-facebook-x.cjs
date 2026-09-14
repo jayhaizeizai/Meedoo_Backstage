@@ -23,7 +23,8 @@ mock('lib/server-auth.ts',{getCurrentUser:async()=>({openId:'fixture-user',name:
 mock('lib/media-url.ts',{createMediaUrl:()=> 'https://fixture.invalid/video'});
 mock('lib/video-probe.ts',{probeVideo:async()=>({width:1080,height:1920,duration,codec:'h264'}),isVerticalNineSixteen:()=>true});
 const contentLib=require('../lib/platform-content.ts');
-const legacy=Object.fromEntries(requiredPlatforms.map(p=>[p,{title:p+' title',caption:p+' caption'}]));
+assert.deepEqual(requiredPlatforms,supportedPlatforms);
+const legacy=Object.fromEntries(["tiktok","instagram","youtube"].map(p=>[p,{title:p+' title',caption:p+' caption'}]));
 assert.ok(contentLib.parsePlatformContent(legacy));
 assert.equal(contentLib.contentForPlatform(legacy,'instagram','fallback','fallback').title,'instagram title');
 const content={...legacy,facebook:{title:'Facebook title',caption:'Facebook caption'},x:{title:'X title',caption:'X caption'}};
