@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
 
@@ -37,6 +37,25 @@ type WeeklyReport = {
   message?: string;
 };
 
+type AccountingData = {
+  success: boolean;
+  canUpload: boolean;
+  period: { start: string; end: string; timeZone: string } | null;
+  availableWeeks: string[];
+  setting: { packagePoints: number; packageCostCny: number; updatedAt: string } | null;
+  totals: { points: number; costCny: number | null; videoCount: number };
+  members: Array<{
+    memberId: string; memberName: string; taskCount: number; points: number; costCny: number | null;
+    videoCount: number; perVideoPoints: number | null; perVideoCostCny: number | null; matched: boolean;
+    models: Array<{ model: string; tasks: number; points: number }>;
+  }>;
+  videos: Array<{
+    id: string; title: string; uploader_open_id: string | null; uploader_name: string; created_at: string;
+    allocatedPoints: number | null; allocatedCostCny: number | null;
+  }>;
+  message?: string;
+};
+
 const rules = [
   { icon: "↻", zh: "转发", en: "Reposts", weight: 22, detailZh: "汇总全部视频或帖子的转发。", detailEn: "Totals reposts across all videos and posts." },
   { icon: "↗", zh: "分享 / 发送", en: "Shares / Sends", weight: 18, detailZh: "汇总平台提供的分享与发送。", detailEn: "Totals available share and send actions." },
@@ -54,7 +73,7 @@ const metric = (value: number | null, language: "zh" | "en") => value === null ?
 
 export default function WeeklyReportPage() {
   const { language, text } = useLanguage();
-  const [active, setActive] = useState<"rules" | "conversions">("rules");
+  const [active, setActive] = useState<"rules" | "accounting" | "conversions">("rules");
   const [data, setData] = useState<WeeklyReport | null>(null);
   const [error, setError] = useState("");
 
@@ -74,12 +93,102 @@ export default function WeeklyReportPage() {
     <div className="head weekly-report-head"><div><p className="eyebrow">WEEKLY WORK REPORT</p><h1>{text("每周工作周报", "Weekly work report")}</h1><p>{text("团队共享规则、核算与本周转化表现。", "Shared team rules, accounting and this week's conversions.")}</p></div>{data && <div className="week-chip"><small>{text("新加坡时间", "Singapore time")}</small><strong>{new Date(data.period.start).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { timeZone: data.period.timeZone })} – {new Date(new Date(data.period.end).getTime() - 1).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { timeZone: data.period.timeZone })}</strong></div>}</div>
     <div className="weekly-tabs" role="tablist" aria-label={text("周报栏目", "Weekly report sections")}>
       <button className={active === "rules" ? "active" : ""} onClick={() => setActive("rules")} role="tab" aria-selected={active === "rules"}>① <span>{text("规则", "Bonus rules")}</span></button>
-      <button disabled role="tab" aria-disabled="true" title={text("等待 LIBTV token 数据", "Waiting for LIBTV token data")}>② <span>{text("核算", "Accounting")}</span><small>{text("暂不可用", "Unavailable")}</small></button>
+      <button className={active === "accounting" ? "active" : ""} onClick={() => setActive("accounting")} role="tab" aria-selected={active === "accounting"}>② <span>{text("核算", "Accounting")}</span></button>
       <button className={active === "conversions" ? "active" : ""} onClick={() => setActive("conversions")} role="tab" aria-selected={active === "conversions"}>③ <span>{text("转化", "Conversions")}</span></button>
     </div>
     {active === "rules" && <Rules language={language} />}
+    {active === "accounting" && <Accounting language={language} />}
     {active === "conversions" && <Conversions data={data} error={error} language={language} />}
   </section></AppShell>;
+}
+
+function Accounting({ language }: { language: "zh" | "en" }) {
+  const t = (zh: string, en: string) => language === "zh" ? zh : en;
+  const [data, setData] = useState<AccountingData | null>(null);
+  const [selectedWeek, setSelectedWeek] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [packagePoints, setPackagePoints] = useState("16300");
+  const [packageCostCny, setPackageCostCny] = useState("649");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const load = async (week = "") => {
+    setError("");
+    const response = await fetch(`/api/weekly-report/accounting${week ? `?week=${encodeURIComponent(week)}` : ""}`, { cache: "no-store" });
+    const payload = await response.json() as AccountingData;
+    if (!response.ok || !payload.success) throw new Error(payload.message || "Accounting unavailable");
+    setData(payload);
+    if (payload.period) setSelectedWeek(payload.period.start.slice(0, 10));
+    if (payload.setting) {
+      setPackagePoints(String(payload.setting.packagePoints));
+      setPackageCostCny(String(payload.setting.packageCostCny));
+    }
+  };
+
+  useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Accounting unavailable")); }, []);
+
+  const upload = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!file) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      form.set("packagePoints", packagePoints);
+      form.set("packageCostCny", packageCostCny);
+      const response = await fetch("/api/weekly-report/accounting", { method: "POST", body: form });
+      const payload = await response.json() as { success?: boolean; duplicateFile?: boolean; sourceRows?: number; importedRows?: number; message?: string };
+      if (!response.ok || !payload.success) throw new Error(payload.message || "Import failed");
+      setMessage(payload.duplicateFile
+        ? t("该文件已经导入过，套餐价格设置已更新。", "This file was already imported; package pricing was updated.")
+        : t(`已读取 ${payload.sourceRows ?? 0} 条记录，新增 ${payload.importedRows ?? 0} 条。`, `Read ${payload.sourceRows ?? 0} rows and added ${payload.importedRows ?? 0}.`));
+      setFile(null);
+      const input = document.getElementById("libtv-csv") as HTMLInputElement | null;
+      if (input) input.value = "";
+      await load();
+    } catch (cause) {
+      const code = cause instanceof Error ? cause.message : "Import failed";
+      setError(code.startsWith("CSV_") ? t("CSV 格式不符合 LIBTV 积分明细格式。", "The CSV does not match the LIBTV credit export format.") : code);
+    } finally { setBusy(false); }
+  };
+
+  const formatNumber = (value: number | null, maximumFractionDigits = 0) => value === null ? "—" : new Intl.NumberFormat(language === "zh" ? "zh-CN" : "en-US", { maximumFractionDigits }).format(value);
+  const money = (value: number | null) => value === null ? "—" : new Intl.NumberFormat(language === "zh" ? "zh-CN" : "en-US", { style: "currency", currency: "CNY", minimumFractionDigits: 2 }).format(value);
+
+  return <section className="weekly-section accounting-section">
+    {data?.canUpload && <form className="card accounting-upload" onSubmit={upload}>
+      <div><p className="eyebrow">LIBTV CSV IMPORT</p><h2>{t("上传积分消耗明细", "Upload credit usage details")}</h2><p>{t("下载 LIBTV“团队积分消耗明细”CSV 后上传。重复文件和重叠记录不会重复计费。", "Upload the LIBTV team credit usage CSV. Duplicate files and overlapping records are not charged twice.")}</p></div>
+      <label>{t("CSV 文件", "CSV file")}<input id="libtv-csv" type="file" accept=".csv,text/csv" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required /></label>
+      <label>{t("每人套餐积分", "Points per person")}<input type="number" min="1" step="1" value={packagePoints} onChange={(event) => setPackagePoints(event.target.value)} required /></label>
+      <label>{t("每人套餐价格（人民币）", "Price per person (CNY)")}<input type="number" min="0.01" step="0.01" value={packageCostCny} onChange={(event) => setPackageCostCny(event.target.value)} required /></label>
+      <button type="submit" disabled={busy || !file}>{busy ? t("正在分析…", "Analyzing…") : t("上传并分析", "Upload and analyze")}</button>
+    </form>}
+    {message && <div className="accounting-message success">{message}</div>}
+    {error && <div className="accounting-message error">⚠ {error}</div>}
+    {!data && !error && <div className="data-message">{t("正在载入核算数据…", "Loading accounting data…")}</div>}
+    {data && <><div className="accounting-toolbar">
+      <label>{t("核算周", "Accounting week")}<select value={selectedWeek} onChange={(event) => { const value = event.target.value; setSelectedWeek(value); void load(value).catch((cause) => setError(cause instanceof Error ? cause.message : "Accounting unavailable")); }}>{data.availableWeeks.map((week) => <option value={week} key={week}>{week}</option>)}</select></label>
+      {data.setting && <p>{t("成本口径", "Cost basis")}：{money(data.setting.packageCostCny)} ÷ {formatNumber(data.setting.packagePoints)} = {money(data.setting.packageCostCny / data.setting.packagePoints)} / {t("积分", "point")}</p>}
+    </div>
+    <div className="accounting-kpis">
+      <article className="card"><small>{t("团队创作积分", "Team creative points")}</small><strong>{formatNumber(data.totals.points)}</strong></article>
+      <article className="card"><small>{t("折算人民币成本", "Calculated cost")}</small><strong>{money(data.totals.costCny)}</strong></article>
+      <article className="card"><small>{t("已批准视频", "Approved videos")}</small><strong>{formatNumber(data.totals.videoCount)}</strong></article>
+      <article className="card"><small>{t("团队平均每条视频", "Team average per video")}</small><strong>{data.totals.videoCount ? money((data.totals.costCny ?? 0) / data.totals.videoCount) : "—"}</strong></article>
+    </div>
+    {data.members.length ? <div className="accounting-members">{data.members.map((member) => {
+      const memberVideos = data.videos.filter((video) => video.uploader_name.trim().toLocaleLowerCase() === member.memberName.trim().toLocaleLowerCase());
+      return <article className="card accounting-member" key={member.memberId}>
+        <header><div><p className="eyebrow">MEMBER ACCOUNTING</p><h2>{member.memberName}</h2><p>{formatNumber(member.taskCount)} {t("次创作任务", "creative tasks")} · {formatNumber(member.videoCount)} {t("条已批准视频", "approved videos")}</p></div><strong>{money(member.costCny)}</strong></header>
+        <div className="accounting-member-kpis"><div><small>{t("消耗积分", "Points used")}</small><b>{formatNumber(member.points)}</b></div><div><small>{t("平均每条积分", "Points per video")}</small><b>{formatNumber(member.perVideoPoints, 2)}</b></div><div><small>{t("平均每条成本", "Cost per video")}</small><b>{money(member.perVideoCostCny)}</b></div></div>
+        {!member.matched && <p className="accounting-warning">{t("未找到同名的已批准视频，暂时无法分摊到单条视频。", "No approved videos matched this member name, so per-video allocation is unavailable.")}</p>}
+        <div className="accounting-models">{member.models.map((model) => <div key={model.model}><span><strong>{model.model}</strong><small>{model.tasks} {t("次任务", "tasks")}</small></span><b>{formatNumber(model.points)} {t("积分", "points")}</b></div>)}</div>
+        {memberVideos.length > 0 && <div className="accounting-video-list"><div className="accounting-video-row header"><span>{t("视频", "Video")}</span><span>{t("分摊积分", "Allocated points")}</span><span>{t("人民币成本", "Cost (CNY)")}</span></div>{memberVideos.map((video) => <div className="accounting-video-row" key={video.id}><span><strong>{video.title}</strong><small>{new Date(video.created_at).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { timeZone: data.period?.timeZone })}</small></span><b>{formatNumber(video.allocatedPoints, 2)}</b><b>{money(video.allocatedCostCny)}</b></div>)}</div>}
+      </article>;
+    })}</div> : <div className="empty-week card">{t("该周暂无已导入的成员创作积分。", "No imported member creative credits for this week.")}</div>}
+    <p className="conversion-source-note">ⓘ {t("成本按每人 649 元 ÷ 16,300 积分折算；系统清零不计入。每个人的周积分平均分摊到其本周已批准视频，并非 LIBTV 对单条成片的直接归属。", "Cost is calculated at CNY 649 ÷ 16,300 points per person. System clearing is excluded. Each member's weekly points are averaged across their approved videos; this is not direct per-video attribution from LIBTV.")}</p></>}
+  </section>;
 }
 
 function Rules({ language }: { language: "zh" | "en" }) {
