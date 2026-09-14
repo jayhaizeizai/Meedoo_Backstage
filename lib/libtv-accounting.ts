@@ -120,11 +120,19 @@ export async function importLibTvCsv(input: { bytes: Uint8Array; filename: strin
 
 function weekWindow(value?: string | null) {
   const parsed = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00+08:00`) : null;
-  if (parsed && !Number.isNaN(parsed.getTime())) return { start: parsed, end: new Date(parsed.getTime() + 7 * 86400000) };
+  if (parsed && !Number.isNaN(parsed.getTime())) return { weekStart: value!, start: parsed, end: new Date(parsed.getTime() + 7 * 86400000) };
   return null;
 }
 
 const normalizeName = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+
+export async function saveLibTvMemberMapping(input: { memberId: string; uploaderOpenId: string; user: MeeDooUser }) {
+  if (!input.memberId.trim() || !input.uploaderOpenId.trim()) throw new Error("MAPPING_INVALID");
+  const uploader = await query<{ open_id: string }>("SELECT open_id FROM meedoo_users WHERE open_id=$1", [input.uploaderOpenId]);
+  if (!uploader.rowCount) throw new Error("MAPPING_UPLOADER_NOT_FOUND");
+  await query(`INSERT INTO libtv_member_mappings(member_id,uploader_open_id,updated_by,updated_at) VALUES($1,$2,$3,now())
+    ON CONFLICT(member_id) DO UPDATE SET uploader_open_id=excluded.uploader_open_id,updated_by=excluded.updated_by,updated_at=now()`, [input.memberId, input.uploaderOpenId, input.user.openId]);
+}
 
 export async function getLibTvAccounting(requestedWeek?: string | null) {
   const weeks = await query<{ week_start: string }>(`SELECT DISTINCT to_char(date_trunc('week',consumed_at AT TIME ZONE '${TIME_ZONE}'),'YYYY-MM-DD') week_start
@@ -132,7 +140,11 @@ export async function getLibTvAccounting(requestedWeek?: string | null) {
   const selectedWeek = weekWindow(requestedWeek) ?? weekWindow(weeks.rows[0]?.week_start);
   const settings = await query<{ package_points: number; package_cost_cny: string; updated_at: string }>("SELECT package_points,package_cost_cny,updated_at FROM libtv_accounting_settings WHERE singleton=true");
   const setting = settings.rows[0] ? { packagePoints: Number(settings.rows[0].package_points), packageCostCny: Number(settings.rows[0].package_cost_cny), updatedAt: settings.rows[0].updated_at } : null;
-  if (!selectedWeek) return { period: null, availableWeeks: weeks.rows.map((row) => row.week_start), setting, members: [], videos: [], totals: { points: 0, costCny: null, videoCount: 0 } };
+  const uploaders = await query<{ open_id: string; name: string }>("SELECT open_id,name FROM meedoo_users ORDER BY name");
+  const mappings = await query<{ member_id: string; uploader_open_id: string }>("SELECT member_id,uploader_open_id FROM libtv_member_mappings");
+  const mappingByMember = new Map(mappings.rows.map((row) => [row.member_id, row.uploader_open_id]));
+  const uploaderNameById = new Map(uploaders.rows.map((row) => [row.open_id, row.name]));
+  if (!selectedWeek) return { period: null, availableWeeks: weeks.rows.map((row) => row.week_start), setting, uploaders: uploaders.rows, members: [], videos: [], totals: { points: 0, costCny: null, videoCount: 0 } };
   const entries = await query<{ member_id: string; member_name: string; member_alias: string | null; entry_type: string; model: string | null; points: number | string }>(`SELECT member_id,member_name,member_alias,entry_type,model,points
     FROM libtv_credit_entries WHERE consumed_at >= $1 AND consumed_at < $2 AND points<0 AND member_id IS NOT NULL AND member_id<>'0' AND COALESCE(member_name,'')<>''`, [selectedWeek.start.toISOString(), selectedWeek.end.toISOString()]);
   const uploads = await query<{ id: string; title: string; uploader_open_id: string | null; uploader_name: string; created_at: string }>(`SELECT id::text,title,uploader_open_id,COALESCE(uploader_name,'Historical import') uploader_name,created_at
@@ -142,7 +154,8 @@ export async function getLibTvAccounting(requestedWeek?: string | null) {
   const costPerPoint = setting ? setting.packageCostCny / setting.packagePoints : null;
   const members = [...grouped.entries()].map(([memberId, rows]) => {
     const memberName = rows[0].member_alias?.trim() || rows[0].member_name;
-    const memberUploads = uploads.rows.filter((upload) => normalizeName(upload.uploader_name) === normalizeName(memberName));
+    const mappedUploaderOpenId = mappingByMember.get(memberId) ?? null;
+    const memberUploads = uploads.rows.filter((upload) => mappedUploaderOpenId ? upload.uploader_open_id === mappedUploaderOpenId : normalizeName(upload.uploader_name) === normalizeName(memberName));
     const points = rows.reduce((sum, row) => sum + Math.abs(Number(row.points)), 0);
     const modelGroups = new Map<string, { tasks: number; points: number }>();
     for (const row of rows) {
@@ -154,20 +167,21 @@ export async function getLibTvAccounting(requestedWeek?: string | null) {
     }
     const perVideoPoints = memberUploads.length ? points / memberUploads.length : null;
     return {
-      memberId, memberName, taskCount: rows.length, points, costCny: costPerPoint === null ? null : points * costPerPoint,
+      memberId, memberName, mappedUploaderOpenId, mappedUploaderName: mappedUploaderOpenId ? uploaderNameById.get(mappedUploaderOpenId) ?? null : null,
+      taskCount: rows.length, points, costCny: costPerPoint === null ? null : points * costPerPoint,
       videoCount: memberUploads.length, perVideoPoints, perVideoCostCny: perVideoPoints === null || costPerPoint === null ? null : perVideoPoints * costPerPoint,
       models: [...modelGroups.entries()].map(([model, values]) => ({ model, ...values })).sort((left, right) => right.points - left.points),
       matched: memberUploads.length > 0,
     };
   }).sort((left, right) => right.points - left.points);
   const videos = uploads.rows.map((upload) => {
-    const member = members.find((item) => normalizeName(item.memberName) === normalizeName(upload.uploader_name));
+    const member = members.find((item) => item.mappedUploaderOpenId ? item.mappedUploaderOpenId === upload.uploader_open_id : normalizeName(item.memberName) === normalizeName(upload.uploader_name));
     return { ...upload, allocatedPoints: member?.perVideoPoints ?? null, allocatedCostCny: member?.perVideoCostCny ?? null };
   });
   const totalPoints = members.reduce((sum, member) => sum + member.points, 0);
   return {
-    period: { start: selectedWeek.start.toISOString(), end: selectedWeek.end.toISOString(), timeZone: TIME_ZONE },
-    availableWeeks: weeks.rows.map((row) => row.week_start), setting, members, videos,
+    period: { weekStart: selectedWeek.weekStart, start: selectedWeek.start.toISOString(), end: selectedWeek.end.toISOString(), timeZone: TIME_ZONE },
+    availableWeeks: weeks.rows.map((row) => row.week_start), setting, uploaders: uploaders.rows, members, videos,
     totals: { points: totalPoints, costCny: costPerPoint === null ? null : totalPoints * costPerPoint, videoCount: uploads.rows.length },
   };
 }
