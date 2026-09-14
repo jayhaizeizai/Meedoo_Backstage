@@ -327,7 +327,15 @@
 .accounting-upload p:not(.eyebrow),.accounting-member header p{margin:0;color:var(--muted);font-size:9px;line-height:1.5}
 .accounting-upload label,.accounting-toolbar label{display:grid;gap:6px;color:var(--muted);font-size:8px;font-weight:800}
 .accounting-upload input,.accounting-toolbar select{width:100%;height:40px;padding:0 10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit;font-size:9px}
-.accounting-upload input[type=file]{padding:8px}
+.accounting-file-field>span:first-child{display:block}
+.accounting-file-picker{position:relative;display:flex;align-items:center;gap:10px;width:100%;height:40px;padding:4px 10px 4px 4px;overflow:hidden;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--muted);cursor:pointer;transition:border-color .18s,box-shadow .18s,background .18s}
+.accounting-file-picker:hover{border-color:#b9b1f2;background:#fbfaff}
+.accounting-file-picker:focus-within{border-color:#6757e8;box-shadow:0 0 0 3px #6757e81a}
+.accounting-file-picker.selected{border-color:#c7c0f6;background:#faf9ff}
+.accounting-file-input{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;border:0!important}
+.accounting-file-picker b{flex:none;display:inline-flex;align-items:center;height:30px;padding:0 11px;border-radius:7px;background:#eeeaff;color:#5b4bdc;font-size:8px;font-weight:900}
+.accounting-file-picker em{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8a91a2;font-size:8px;font-style:normal;font-weight:600}
+.accounting-file-picker.selected em{color:var(--ink)}
 .accounting-upload button{height:40px;padding:0 15px;border:0;border-radius:10px;background:#6757e8;color:#fff;font-weight:900;cursor:pointer}
 .accounting-upload button:disabled{cursor:not-allowed;opacity:.48}
 .accounting-message{padding:11px 14px;border-radius:10px;font-size:9px;font-weight:800}
@@ -344,7 +352,12 @@
 .accounting-members{display:grid;gap:14px}
 .accounting-member{padding:21px}
 .accounting-member>header{display:flex;align-items:start;justify-content:space-between;gap:16px;margin-bottom:15px}
-.accounting-member>header>strong{color:#5b4bdc;font-size:22px}
+.accounting-member-side{display:grid;justify-items:end;gap:9px;min-width:210px}
+.accounting-member-side>strong{color:#5b4bdc;font-size:22px}
+.accounting-member-map{display:grid;gap:5px;width:210px;color:var(--muted);font-size:8px;font-weight:800}
+.accounting-member-map select{width:100%;height:36px;padding:0 30px 0 10px;border:1px solid #d8d4f6;border-radius:9px;background:#faf9ff;color:#5749cf;font:inherit;font-size:8px;font-weight:800;cursor:pointer}
+.accounting-member-map select:focus{outline:2px solid #6757e826;border-color:#6757e8}
+.accounting-member-map select:disabled{cursor:wait;opacity:.65}
 .accounting-member-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
 .accounting-member-kpis>div{padding:12px;border:1px solid var(--line);border-radius:10px;background:#fafbfc}
 .accounting-member-kpis small,.accounting-member-kpis b{display:block}
@@ -366,7 +379,7 @@
 .accounting-video-row>span small{margin-top:3px;color:var(--muted);font-size:8px}
 .accounting-video-row>b{font-size:10px}
 @media(max-width:1100px){.accounting-upload{grid-template-columns:1fr 1fr}.accounting-upload>div{grid-column:1/-1}.accounting-models{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:620px){.accounting-upload,.accounting-kpis,.accounting-member-kpis,.accounting-models{grid-template-columns:1fr}.accounting-toolbar,.accounting-member>header{align-items:stretch;flex-direction:column}.accounting-member>header>strong{text-align:left}}
+@media(max-width:620px){.accounting-upload,.accounting-kpis,.accounting-member-kpis,.accounting-models{grid-template-columns:1fr}.accounting-toolbar,.accounting-member>header{align-items:stretch;flex-direction:column}.accounting-member-side{justify-items:start;min-width:0}.accounting-member-map{width:100%}.accounting-member-side>strong{text-align:left}}
 
 /* Dashboard history, ranking, filters and video analytics */
 .filters select,
