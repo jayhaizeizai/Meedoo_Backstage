@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
@@ -27,6 +27,8 @@ const platformMeta: Record<Platform, { name: string; className: string; icon: st
   instagram: { name: "Instagram", className: "ig", icon: "◎" },
   youtube: { name: "YouTube", className: "yt", icon: "▶" },
 };
+// Temporarily hide rankings while keeping the implementation for later.
+const leaderboardEnabled = false;
 const allPlatforms = Object.keys(platformMeta) as Platform[];
 const palette = ["#6757e8", "#00a884", "#ef8354", "#4f8fe8", "#d55a85"];
 const initials = (name: string) => name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
@@ -60,12 +62,17 @@ export default function DashboardPage() {
   const [days, setDays] = useState(30);
   const [error, setError] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const loadRevision = useRef(0);
   const load = useCallback(async () => {
+    const revision = ++loadRevision.current;
+    try {
     setError("");
     const response = await fetch(`/api/dashboard?days=${days}`, { cache: "no-store" });
     const payload = await response.json();
+    if (revision !== loadRevision.current) return;
     if (!response.ok || !payload.success) throw new Error(payload.message || "Dashboard unavailable");
     setData(payload as DashboardData);
+    } catch(cause) { if(revision === loadRevision.current) throw cause; }
   }, [days]);
   useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Dashboard unavailable")); }, [load]);
   async function sync() {
@@ -83,16 +90,16 @@ export default function DashboardPage() {
     }
   }
   const person = useMemo(() => data?.people.find((item) => item.id === active) ?? null, [data, active]);
-  const status = data ? { zh: `更新于 ${new Date(data.updatedAt).toLocaleString("zh-CN")}`, en: `Updated ${new Date(data.updatedAt).toLocaleString("en-US")}` } : { zh: "正在读取数据", en: "Loading data" };
+  const status = data ? { zh: `更新于 ${new Date(data.updatedAt).toLocaleString("zh-CN", { timeZone: "Asia/Singapore" })}`, en: `Updated ${new Date(data.updatedAt).toLocaleString("en-US", { timeZone: "Asia/Singapore" })}` } : { zh: "正在读取数据", en: "Loading data" };
   return <AppShell active="dashboard" status={status}><section className="page">
     <div className="head"><div><p className="eyebrow">CROSS-PLATFORM INTELLIGENCE</p><h1>{text("数据看板", "Performance dashboard")}</h1><p>{text("查看团队、成员和视频在不同时间与平台上的表现。", "Explore performance by team, member, video, time and platform.")}</p></div><div className="filters"><select value={days} onChange={(event) => setDays(Number(event.target.value))} aria-label={text("时间范围", "Date range")}><option value={1}>{text("过去 24 小时", "Last 24 hours")}</option><option value={7}>{text("过去 7 天", "Last 7 days")}</option><option value={30}>{text("过去 30 天", "Last 30 days")}</option><option value={90}>{text("过去 90 天", "Last 90 days")}</option><option value={365}>{text("过去一年", "Last year")}</option></select><button disabled={syncing} onClick={() => void sync()}>{syncing ? "…" : "↻"} {text("同步", "Sync")}</button></div></div>
     {error && <div className="data-message error">⚠ {error}</div>}
     {!data && !error && <div className="data-message">{text("正在载入团队数据…", "Loading team data…")}</div>}
     {data && <>
-      <div className="tabs" role="tablist"><button className={active === "team" ? "active" : ""} onClick={() => setActive("team")}>{text("团队总体", "Team overview")}</button><button className={active === "leaderboard" ? "active" : ""} onClick={() => setActive("leaderboard")}>🏆 {text("排行榜", "Leaderboard")}</button><button className={active === "videos" ? "active" : ""} onClick={() => setActive("videos")}>▶ {text("视频数据", "Video data")}</button>{data.people.map((item) => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => setActive(item.id)}>{item.name}</button>)}</div>
+      <p className="conversion-source-note">{text("日期按新加坡时间；视频列表与汇总展示所选上传范围内视频的累计指标，并非该期间全部视频的新增量。", "Dates use Singapore time. Video lists and totals show cumulative metrics for videos uploaded in the selected range, not gains across all videos during that period.")}</p><div className="tabs" role="tablist"><button className={active === "team" ? "active" : ""} onClick={() => setActive("team")}>{text("团队总体", "Team overview")}</button>{leaderboardEnabled && <button className={active === "leaderboard" ? "active" : ""} onClick={() => setActive("leaderboard")}>🏆 {text("排行榜", "Leaderboard")}</button>}<button className={active === "videos" ? "active" : ""} onClick={() => setActive("videos")}>▶ {text("视频数据", "Video data")}</button>{data.people.map((item) => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => setActive(item.id)}>{item.name}</button>)}</div>
       {active === "team" && <Overview data={data} language={language} />}
       {person && <PersonView person={person} data={data} language={language} />}
-      {active === "leaderboard" && <Leaderboard data={data} language={language} />}
+      {leaderboardEnabled && active === "leaderboard" && <Leaderboard data={data} language={language} />}
       {active === "videos" && <VideoData data={data} language={language} onSynced={load} />}
     </>}
   </section></AppShell>;
@@ -144,7 +151,7 @@ function LineChart({ points, metric, label, language, showTime = false }: { poin
   const x = (index: number) => padding + (points.length === 1 ? (width - padding * 2) / 2 : index / (points.length - 1) * (width - padding * 2));
   const y = (value: number) => height - padding - (value - minimum) / range * (height - padding * 2);
   const coordinates = available.map((point) => `${x(point.index)},${y(point.value)}`).join(" ");
-  const dateOptions: Intl.DateTimeFormatOptions = showTime ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" };
+  const dateOptions: Intl.DateTimeFormatOptions = showTime ? { timeZone: "Asia/Singapore", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { timeZone: "Asia/Singapore", month: "short", day: "numeric" };
   const first = new Date(available[0].at).toLocaleString(language === "zh" ? "zh-CN" : "en-US", dateOptions);
   const last = new Date(available.at(-1)!.at).toLocaleString(language === "zh" ? "zh-CN" : "en-US", dateOptions);
   const hovered = hoveredIndex === null ? null : available.find((point) => point.index === hoveredIndex) ?? null;
@@ -154,7 +161,7 @@ function LineChart({ points, metric, label, language, showTime = false }: { poin
     const nearest = available.reduce((best, point) => Math.abs(x(point.index) - chartX) < Math.abs(x(best.index) - chartX) ? point : best);
     setHoveredIndex(nearest.index);
   }
-  const tooltipDate = hovered ? new Date(hovered.at).toLocaleString(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  const tooltipDate = hovered ? new Date(hovered.at).toLocaleString(language === "zh" ? "zh-CN" : "en-US", { timeZone: "Asia/Singapore", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
   return <div className="line-chart" onMouseLeave={() => setHoveredIndex(null)}><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} onMouseMove={hover}><line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} /><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} /><polyline points={coordinates} />{available.map((point) => <circle className={hovered?.index === point.index ? "chart-point active" : "chart-point"} key={point.index} cx={x(point.index)} cy={y(point.value)} r={hovered?.index === point.index ? 5 : 3} />)}{hovered && <line className="hover-guide" x1={x(hovered.index)} x2={x(hovered.index)} y1={padding} y2={height - padding} />}</svg>{hovered && <div className="chart-tooltip" style={{ left: `${Math.min(88, Math.max(12, x(hovered.index) / width * 100))}%`, top: `${Math.max(12, y(hovered.value) / height * 100)}%` }}><time>{tooltipDate}</time><strong>{label}</strong><b>{format(hovered.value, metric, language)}</b></div>}<span>{first}</span><span>{last}</span></div>;
 }
 
@@ -171,7 +178,7 @@ function PersonView({ person, data, language }: { person: Person; data: Dashboar
 }
 
 function RecentVideos({ videos, language }: { videos: Video[]; language: "zh" | "en" }) {
-  return <section className="card recent-person-videos"><div className="panel-head"><div><h2>{language === "zh" ? "最近上传的五条视频" : "Five most recent uploads"}</h2><p>{language === "zh" ? "按上传时间从近到远" : "Newest uploads first"}</p></div></div>{videos.length ? <div className="recent-video-list">{videos.map((video) => <article key={video.id}><div><Link href={`/dashboard/videos/${video.id}`}><strong>{video.title}</strong></Link><small>{new Date(video.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}</small><span>{video.platforms.map((platform) => <i key={platform.platform}>{platformMeta[platform.platform].name}</i>)}</span></div><dl><div><dt>{language === "zh" ? "浏览" : "Views"}</dt><dd>{format(video.metrics.views, "views", language)}</dd></div><div><dt>{language === "zh" ? "点赞" : "Likes"}</dt><dd>{format(video.metrics.likes, "likes", language)}</dd></div><div><dt>{language === "zh" ? "等效留存" : "Equivalent retention"}</dt><dd>{format(video.metrics.retention, "retention", language)}</dd></div></dl></article>)}</div> : <div className="empty-chart">{language === "zh" ? "暂无上传记录。" : "No uploads yet"}</div>}</section>;
+  return <section className="card recent-person-videos"><div className="panel-head"><div><h2>{language === "zh" ? "最近上传的五条视频" : "Five most recent uploads"}</h2><p>{language === "zh" ? "按上传时间从近到远" : "Newest uploads first"}</p></div></div>{videos.length ? <div className="recent-video-list">{videos.map((video) => <article key={video.id}><div><Link href={`/dashboard/videos/${video.id}`}><strong>{video.title}</strong></Link><small>{new Date(video.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en-US", { timeZone: "Asia/Singapore" })}</small><span>{video.platforms.map((platform) => <i key={platform.platform}>{platformMeta[platform.platform].name}</i>)}</span></div><dl><div><dt>{language === "zh" ? "浏览" : "Views"}</dt><dd>{format(video.metrics.views, "views", language)}</dd></div><div><dt>{language === "zh" ? "点赞" : "Likes"}</dt><dd>{format(video.metrics.likes, "likes", language)}</dd></div><div><dt>{language === "zh" ? "等效留存" : "Equivalent retention"}</dt><dd>{format(video.metrics.retention, "retention", language)}</dd></div></dl></article>)}</div> : <div className="empty-chart">{language === "zh" ? "暂无上传记录。" : "No uploads yet"}</div>}</section>;
 }
 
 function Kpis({ values, labels, language }: { values: string[]; labels: string[]; language: "zh" | "en" }) {
@@ -215,8 +222,8 @@ function VideoData({ data, language, onSynced }: { data: DashboardData; language
     const ownerKey = video.ownerId ?? `name:${video.owner}`;
     const timestamp = Date.parse(video.createdAt);
     if (owner !== "all" && ownerKey !== owner) return false;
-    if (from && timestamp < Date.parse(`${from}T00:00:00`)) return false;
-    if (to && timestamp > Date.parse(`${to}T23:59:59.999`)) return false;
+    if (from && timestamp < Date.parse(`${from}T00:00:00+08:00`)) return false;
+    if (to && timestamp > Date.parse(`${to}T23:59:59.999+08:00`)) return false;
     return true;
   }).sort((left, right) => {
     const a = sortKey === "createdAt" ? Date.parse(left.createdAt) : left.metrics[sortKey];
@@ -239,5 +246,5 @@ function VideoData({ data, language, onSynced }: { data: DashboardData; language
       setRetrying("");
     }
   }
-  return <section className="video-data-view show"><div className="video-data-head"><div><p className="eyebrow">VIDEO PERFORMANCE</p><h2>{t("每个视频的数据", "Video-level performance")}</h2><p>{t(`筛选并排序 ${filtered.length} 条视频`, `Filter and sort ${filtered.length} videos`)}</p></div></div><div className="uploader-tabs"><button className={owner === "all" ? "active" : ""} onClick={() => setOwner("all")}>{t("全部上传者", "All uploaders")}</button>{uploaders.map(([key, name]) => <button key={key} className={owner === key ? "active" : ""} onClick={() => setOwner(key)}>{name}</button>)}</div><div className="video-filters"><label>{t("开始时间", "From")}<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>{t("结束时间", "To")}<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><label>{t("排序指标", "Sort by")}<select value={sortKey} onChange={(event) => setSortKey(event.target.value as "createdAt" | MetricKey)}><option value="createdAt">{t("上传时间", "Upload time")}</option>{data.metricDefinitions.map((metric) => <option value={metric.key} key={metric.key}>{language === "zh" ? metric.zh : metric.en}</option>)}</select></label><button onClick={() => setDirection((value) => value === "desc" ? "asc" : "desc")}>{direction === "desc" ? "↓" : "↑"} {direction === "desc" ? t("倒序", "Descending") : t("正序", "Ascending")}</button>{(owner !== "all" || from || to || sortKey !== "createdAt") && <button className="clear-filter" onClick={() => { setOwner("all"); setFrom(""); setTo(""); setSortKey("createdAt"); setDirection("desc"); }}>{t("清除", "Clear")}</button>}</div>{filtered.length ? <div className="video-table-wrap"><div className="video-table"><div className="video-data-row video-data-header"><span>{t("视频", "Video")}</span><span>{t("上传者", "Uploader")}</span><span>{t("上传时间", "Uploaded")}</span>{data.metricDefinitions.map((metric) => <span key={metric.key}>{language === "zh" ? metric.zh : metric.en}{sortKey === metric.key ? direction === "desc" ? " ↓" : " ↑" : ""}</span>)}</div>{filtered.map((video) => <div className="video-data-row" key={video.id}><span className="video-cell"><Link className="video-detail-link" href={`/dashboard/videos/${video.id}`}><i><b>▶</b></i><span className="video-title"><strong>{video.title}</strong></span></Link><span className="video-platform-links">{video.platforms.map((platform) => <span key={platform.platform}>{platform.url ? <a href={platform.url} target="_blank" rel="noreferrer">{platform.platform} ↗</a> : platform.platform}{platform.status === "failed" && <button disabled={retrying === `${video.id}:${platform.platform}`} title={platform.error ?? ""} onClick={() => void retry(video.id, platform.platform)}>{retrying === `${video.id}:${platform.platform}` ? "…" : t("重试", "Retry")}</button>}</span>)}</span></span><span className="uploader-cell"><i className="avatar">{initials(video.owner)}</i><b>{video.owner}</b></span><span className="date-cell">{new Date(video.createdAt).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US")}</span>{data.metricDefinitions.map((metric) => <span key={metric.key}><strong>{format(video.metrics[metric.key], metric.key, language)}</strong>{video.metrics[metric.key] === null && <small>{t("未提供", "Unavailable")}</small>}</span>)}</div>)}</div></div> : <div className="data-message">{t("没有符合筛选条件的视频。", "No videos match these filters.")}</div>}</section>;
+  return <section className="video-data-view show"><div className="video-data-head"><div><p className="eyebrow">VIDEO PERFORMANCE</p><h2>{t("每个视频的数据", "Video-level performance")}</h2><p>{t(`筛选并排序 ${filtered.length} 条视频`, `Filter and sort ${filtered.length} videos`)}</p></div></div><div className="uploader-tabs"><button className={owner === "all" ? "active" : ""} onClick={() => setOwner("all")}>{t("全部上传者", "All uploaders")}</button>{uploaders.map(([key, name]) => <button key={key} className={owner === key ? "active" : ""} onClick={() => setOwner(key)}>{name}</button>)}</div><div className="video-filters"><label>{t("开始时间", "From")}<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>{t("结束时间", "To")}<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><label>{t("排序指标", "Sort by")}<select value={sortKey} onChange={(event) => setSortKey(event.target.value as "createdAt" | MetricKey)}><option value="createdAt">{t("上传时间", "Upload time")}</option>{data.metricDefinitions.map((metric) => <option value={metric.key} key={metric.key}>{language === "zh" ? metric.zh : metric.en}</option>)}</select></label><button onClick={() => setDirection((value) => value === "desc" ? "asc" : "desc")}>{direction === "desc" ? "↓" : "↑"} {direction === "desc" ? t("倒序", "Descending") : t("正序", "Ascending")}</button>{(owner !== "all" || from || to || sortKey !== "createdAt") && <button className="clear-filter" onClick={() => { setOwner("all"); setFrom(""); setTo(""); setSortKey("createdAt"); setDirection("desc"); }}>{t("清除", "Clear")}</button>}</div>{filtered.length ? <div className="video-table-wrap"><div className="video-table"><div className="video-data-row video-data-header"><span>{t("视频", "Video")}</span><span>{t("上传者", "Uploader")}</span><span>{t("上传时间", "Uploaded")}</span>{data.metricDefinitions.map((metric) => <span key={metric.key}>{language === "zh" ? metric.zh : metric.en}{sortKey === metric.key ? direction === "desc" ? " ↓" : " ↑" : ""}</span>)}</div>{filtered.map((video) => <div className="video-data-row" key={video.id}><span className="video-cell"><Link className="video-detail-link" href={`/dashboard/videos/${video.id}`}><i><b>▶</b></i><span className="video-title"><strong>{video.title}</strong></span></Link><span className="video-platform-links">{video.platforms.map((platform) => <span key={platform.platform}>{platform.url ? <a href={platform.url} target="_blank" rel="noreferrer">{platform.platform} ↗</a> : platform.platform}{platform.status === "reconciling" && <small>{t("等待平台确认，请勿重复发布", "Awaiting platform confirmation; do not repost")}</small>}{platform.status === "failed" && <button disabled={retrying === `${video.id}:${platform.platform}`} title={platform.error ?? ""} onClick={() => void retry(video.id, platform.platform)}>{retrying === `${video.id}:${platform.platform}` ? "…" : t("重试", "Retry")}</button>}</span>)}</span></span><span className="uploader-cell"><i className="avatar">{initials(video.owner)}</i><b>{video.owner}</b></span><span className="date-cell">{new Date(video.createdAt).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { timeZone: "Asia/Singapore" })}</span>{data.metricDefinitions.map((metric) => <span key={metric.key}><strong>{format(video.metrics[metric.key], metric.key, language)}</strong>{video.metrics[metric.key] === null && <small>{t("未提供", "Unavailable")}</small>}</span>)}</div>)}</div></div> : <div className="data-message">{t("没有符合筛选条件的视频。", "No videos match these filters.")}</div>}</section>;
 }

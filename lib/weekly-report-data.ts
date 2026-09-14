@@ -25,10 +25,12 @@ type WeeklyRow = {
   platform: string;
   metrics: Record<string, unknown> | null;
   attributed_followers: number | string | null;
+  captured_at: string | null;
 };
 
 export type WeeklyPlatformResult = {
   platform: string;
+  capturedAt: string | null;
   website: null;
   reposts: number | null;
   shares: number | null;
@@ -84,6 +86,7 @@ function platformResult(row: WeeklyRow): WeeklyPlatformResult {
   const viewKeys = row.platform === "instagram" ? ["reach", "views", "impressions"] : ["views", "reach", "impressions"];
   return {
     platform: row.platform,
+    capturedAt: row.captured_at,
     website: null,
     reposts: valueFrom(row.metrics, ["reposts", "repost_count", "repost"]),
     shares: valueFrom(row.metrics, ["shares", "share_count"]),
@@ -107,16 +110,18 @@ export function singaporeWeekWindow(now = new Date()) {
   return { start, end: new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000) };
 }
 
-export async function getWeeklyReportData(now = new Date()) {
-  const period = singaporeWeekWindow(now);
-  const result = await query<WeeklyRow>(`SELECT u.id::text upload_id,u.title,u.created_at,u.video_duration_seconds,u.uploader_open_id,u.uploader_name,mu.avatar_url,p.platform,latest.metrics,
-    (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a WHERE a.publication_id=p.id) attributed_followers
+export async function getWeeklyReportData(selected = new Date(), now = new Date(), snapshot = true) {
+  const period = singaporeWeekWindow(selected);
+  const historical = period.end.getTime() <= now.getTime();
+  const cutoff = historical && snapshot ? period.end : now;
+  const result = await query<WeeklyRow>(`SELECT u.id::text upload_id,u.title,u.created_at,u.video_duration_seconds,u.uploader_open_id,u.uploader_name,mu.avatar_url,p.platform,latest.metrics,latest.captured_at,
+    (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a JOIN profile_metric_snapshots ps ON ps.id=a.profile_snapshot_id WHERE a.publication_id=p.id AND ps.captured_at < $3 AND a.created_at < $3) attributed_followers
     FROM uploads u JOIN publications p ON p.upload_id=u.id
     LEFT JOIN meedoo_users mu ON mu.open_id=u.uploader_open_id
-    LEFT JOIN LATERAL (SELECT metrics FROM metric_snapshots ms WHERE ms.publication_id=p.id ORDER BY captured_at DESC LIMIT 1) latest ON true
+    LEFT JOIN LATERAL (SELECT metrics,captured_at FROM metric_snapshots ms WHERE ms.publication_id=p.id AND ms.captured_at < $3 ORDER BY captured_at DESC,id DESC LIMIT 1) latest ON true
     WHERE u.review_status='approved' AND u.removed_at IS NULL AND p.removed_at IS NULL
       AND u.created_at >= $1 AND u.created_at < $2
-    ORDER BY u.created_at DESC`, [period.start.toISOString(), period.end.toISOString()]);
+    ORDER BY u.created_at DESC`, [period.start.toISOString(), period.end.toISOString(), cutoff.toISOString()]);
 
   const memberRows = new Map<string, WeeklyRow[]>();
   for (const row of result.rows) {
@@ -145,6 +150,9 @@ export async function getWeeklyReportData(now = new Date()) {
   })).sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
 
   return {
+    historical,
+    cutoff: cutoff.toISOString(),
+    missingSnapshots: result.rows.filter((row) => !row.captured_at).length,
     updatedAt: now.toISOString(),
     period: { start: period.start.toISOString(), end: period.end.toISOString(), timeZone: "Asia/Singapore" },
     videoCount: new Set(result.rows.map((row) => row.upload_id)).size,
@@ -152,4 +160,14 @@ export async function getWeeklyReportData(now = new Date()) {
     members,
     videos,
   };
+}
+
+export function parseReportWeek(value: string | null, now = new Date()) {
+  if (value === null) return now;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("INVALID_WEEK");
+  const date = new Date(`${value}T00:00:00+08:00`);
+  if (!Number.isFinite(date.getTime()) || new Date(date.getTime() + 28800000).toISOString().slice(0, 10) !== value
+    || date.getTime() < Date.parse("2000-01-01T00:00:00+08:00")
+    || singaporeWeekWindow(date).start > singaporeWeekWindow(now).start) throw new Error("INVALID_WEEK");
+  return date;
 }

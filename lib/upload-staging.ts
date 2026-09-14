@@ -1,3 +1,4 @@
+import { removeForCleanup } from "./cleanup-file";
 import { createReadStream } from "node:fs";
 import { mkdir, open, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -122,11 +123,13 @@ export async function assembleUploadSession(session: UploadSession) {
 }
 
 export async function cleanupExpiredUploadSessions() {
-  const expired = await query<{ id:string; media_path:string|null }>(`SELECT id,media_path FROM upload_sessions WHERE expires_at<now() AND status IN ('uploading','assembling','ready','failed') LIMIT 100`);
+  const expired = await query<{ id:string; media_path:string|null }>(`SELECT id,media_path FROM upload_sessions s WHERE expires_at<now() AND status IN ('uploading','assembling','ready','failed') AND NOT EXISTS(SELECT 1 FROM uploads u WHERE u.id=s.id OR (s.media_path IS NOT NULL AND u.media_path=s.media_path)) LIMIT 100`);
+  let cleaned=0;
   for (const item of expired.rows) {
-    if (item.media_path) await rm(item.media_path,{force:true}).catch(()=>undefined);
-    await rm(chunkDirectory(item.id),{recursive:true,force:true}).catch(()=>undefined);
+    if (item.media_path && !await removeForCleanup(item.media_path)) continue;
+    if (!await removeForCleanup(chunkDirectory(item.id),true)) continue;
     await query(`DELETE FROM upload_sessions WHERE id=$1`,[item.id]);
+    cleaned++;
   }
-  return expired.rowCount ?? 0;
+  return cleaned;
 }

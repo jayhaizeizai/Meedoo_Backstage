@@ -1,3 +1,6 @@
+import { invalidateDashboardCache } from "./dashboard-cache";
+import { stat } from "node:fs/promises";
+import { uploadTitle } from "./upload-title";
 import { randomUUID } from "node:crypto";
 import { query, transaction } from "./db";
 import { MeeDooUser } from "./auth";
@@ -25,7 +28,7 @@ export async function submitForReview(input: { session: UploadSession; user: Mee
     if (!transitioned.rowCount) throw new Error("UPLOAD_SESSION_NOT_READY");
     await client.query(`INSERT INTO uploads(id,profile_username,title,caption,platform_content,original_filename,media_size_bytes,media_path,uploader_open_id,uploader_name,status,target_platforms,review_status,submitted_at,video_width,video_height,video_duration_seconds,video_codec)
       VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,'pending_review',$11,'pending',now(),$12,$13,$14,$15)`,
-    [input.session.id,profile || "pending",display.title,display.caption,JSON.stringify(input.platformContent),input.session.original_filename,Number(input.session.expected_size),input.session.media_path,input.user.openId,input.user.name,input.platforms,probe.width,probe.height,probe.duration,probe.codec]);
+    [input.session.id,profile || "pending",uploadTitle({platform_content:input.platformContent,original_filename:input.session.original_filename}),display.caption,JSON.stringify(input.platformContent),input.session.original_filename,Number(input.session.expected_size),input.session.media_path,input.user.openId,input.user.name,input.platforms,probe.width,probe.height,probe.duration,probe.codec]);
   });
   return input.session.id;
 }
@@ -38,26 +41,32 @@ export type ReviewRecord = {
   video_width:number|null;video_height:number|null;video_duration_seconds:string|null;video_codec:string|null;
   platform_content: PlatformContent | Record<string, never>;
   published_platforms: string[];
+  file_deleted_at: string | null;
+  media_available?: boolean;
 };
 
 export async function listReviewRecords(user: MeeDooUser, pendingOnly = false) {
   const approver = await isApprover(user.openId);
   const conditions = ["u.removed_at IS NULL", "($1::boolean OR u.uploader_open_id=$2)", pendingOnly ? "u.review_status='pending'" : "true"];
-  const result = await query<ReviewRecord>(`SELECT u.id::text,u.title,u.caption,u.uploader_open_id,u.uploader_name,u.status,u.review_status,u.review_comment,
-      u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,u.platform_content,r.name reviewer_name,
+  const result = await query<ReviewRecord>(`SELECT u.id::text,u.title,u.caption,u.uploader_open_id,COALESCE(NULLIF(u.uploader_name,''),owner.name) uploader_name,u.status,u.review_status,u.review_comment,
+      u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.file_deleted_at,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,u.platform_content,r.name reviewer_name,
       ARRAY(SELECT p.platform FROM publications p WHERE p.upload_id=u.id AND p.status='completed' AND p.removed_at IS NULL ORDER BY p.platform) published_platforms
-    FROM uploads u LEFT JOIN meedoo_users r ON r.open_id=u.reviewed_by WHERE ${conditions.join(" AND ")} ORDER BY COALESCE(u.submitted_at,u.created_at) DESC LIMIT 200`, [approver,user.openId]);
-  return { approver, records: result.rows };
+    FROM uploads u LEFT JOIN meedoo_users owner ON owner.open_id=u.uploader_open_id LEFT JOIN meedoo_users r ON r.open_id=u.reviewed_by WHERE ${conditions.join(" AND ")} ORDER BY COALESCE(u.submitted_at,u.created_at) DESC LIMIT 200`, [approver,user.openId]);
+  const records = await Promise.all(result.rows.map(async (record) => ({
+    ...record, title: uploadTitle(record),
+    media_available: Boolean(!record.file_deleted_at && record.media_path && await stat(record.media_path).then(info => info.isFile()).catch(() => false)),
+  })));
+  return { approver, records };
 }
 
 export async function getReviewRecord(id: string, user: MeeDooUser) {
   const approver = await isApprover(user.openId);
-  const result = await query<ReviewRecord>(`SELECT u.id::text,u.title,u.caption,u.uploader_open_id,u.uploader_name,u.status,u.review_status,u.review_comment,
-      u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,u.platform_content,r.name reviewer_name,
+  const result = await query<ReviewRecord>(`SELECT u.id::text,u.title,u.caption,u.uploader_open_id,COALESCE(NULLIF(u.uploader_name,''),owner.name) uploader_name,u.status,u.review_status,u.review_comment,
+      u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.file_deleted_at,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,u.platform_content,r.name reviewer_name,
       ARRAY(SELECT p.platform FROM publications p WHERE p.upload_id=u.id AND p.status='completed' AND p.removed_at IS NULL ORDER BY p.platform) published_platforms
-    FROM uploads u LEFT JOIN meedoo_users r ON r.open_id=u.reviewed_by WHERE u.id=$1 AND u.removed_at IS NULL AND ($2::boolean OR u.uploader_open_id=$3)`, [id,approver,user.openId]);
+    FROM uploads u LEFT JOIN meedoo_users owner ON owner.open_id=u.uploader_open_id LEFT JOIN meedoo_users r ON r.open_id=u.reviewed_by WHERE u.id=$1 AND u.removed_at IS NULL AND ($2::boolean OR u.uploader_open_id=$3)`, [id,approver,user.openId]);
   const history=result.rows[0]?await query<{decision:string;comment:string|null;created_at:string;reviewer_name:string}>(`SELECT ur.decision,ur.comment,ur.created_at,mu.name reviewer_name FROM upload_reviews ur JOIN meedoo_users mu ON mu.open_id=ur.reviewer_open_id WHERE ur.upload_id=$1 ORDER BY ur.created_at DESC`,[id]):{rows:[]};
-  return { approver, record: result.rows[0] ?? null,history:history.rows };
+  return { approver, record: result.rows[0] ? {...result.rows[0],title:uploadTitle(result.rows[0])} : null,history:history.rows };
 }
 
 export async function decideReview(id: string, reviewer: MeeDooUser, decision: "approved" | "rejected", comment: string, platformContent?: PlatformContent) {
@@ -70,10 +79,9 @@ export async function decideReview(id: string, reviewer: MeeDooUser, decision: "
     if (platformContent) {
       const display = platformContent.youtube;
       await client.query(`UPDATE uploads SET title=$2,caption=$3,platform_content=$4::jsonb,updated_at=now() WHERE id=$1`,
-        [id,display.title,display.caption,JSON.stringify(platformContent)]);
+        [id,uploadTitle({platform_content:platformContent,original_filename:upload.original_filename}),display.caption,JSON.stringify(platformContent)]);
     }
-    const deleteAfter = decision === "rejected" ? "now()+interval '7 days'" : "NULL";
-    await client.query(`UPDATE uploads SET review_status=$2,reviewed_by=$3,reviewed_at=now(),review_comment=$4,status=$5,media_delete_after=${deleteAfter},updated_at=now() WHERE id=$1`,
+    await client.query(`UPDATE uploads SET review_status=$2,reviewed_by=$3,reviewed_at=now(),review_comment=$4,status=$5,media_delete_after=NULL,updated_at=now() WHERE id=$1`,
       [id,decision,reviewer.openId,comment.trim() || null,decision === "approved" ? "approved" : "rejected"]);
     await client.query(`INSERT INTO upload_reviews(upload_id,reviewer_open_id,decision,comment) VALUES($1,$2,$3,$4)`, [id,reviewer.openId,decision,comment.trim() || null]);
     if (decision === "approved") {
@@ -82,6 +90,7 @@ export async function decideReview(id: string, reviewer: MeeDooUser, decision: "
       await client.query(`UPDATE uploads SET request_id=$2 WHERE id=$1`, [id,requestId]);
       for (const platform of selected) await client.query(`INSERT INTO publications(upload_id,platform,request_id,status) VALUES($1,$2,$3,'queued') ON CONFLICT(upload_id,platform) DO NOTHING`, [id,platform,requestId]);
     }
+    await invalidateDashboardCache(client);
     return { upload, decision };
   });
 }
@@ -94,7 +103,7 @@ export async function updateReviewContent(id: string, reviewer: MeeDooUser, plat
     if (!upload || upload.review_status !== "pending") throw new Error("REVIEW_NOT_PENDING");
     const display = platformContent.youtube;
     await client.query(`UPDATE uploads SET title=$2,caption=$3,platform_content=$4::jsonb,updated_at=now() WHERE id=$1`,
-      [id,display.title,display.caption,JSON.stringify(platformContent)]);
+      [id,uploadTitle({platform_content:platformContent,original_filename:upload.original_filename}),display.caption,JSON.stringify(platformContent)]);
     return platformContent;
   });
 }

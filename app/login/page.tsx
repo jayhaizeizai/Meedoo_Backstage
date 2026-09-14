@@ -1,5 +1,6 @@
 "use client";
 
+import { safeReturnTo } from "../../lib/safe-return-to";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../components/auth-provider";
@@ -21,7 +22,7 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     setError(params.get("error"));
     const destination = params.get("returnTo");
-    if (destination?.startsWith("/") && !destination.startsWith("//")) setReturnTo(destination);
+    setReturnTo(safeReturnTo(destination));
   }, []);
   const message = error ? errors[error] : null;
 

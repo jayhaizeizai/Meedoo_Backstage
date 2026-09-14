@@ -1,4 +1,5 @@
 import { query } from "./db";
+import { loadFollowerHistory } from "./follower-history";
 import { equivalentRetention } from "./equivalent-retention";
 
 export const metricDefinitions = [
@@ -191,7 +192,8 @@ function buildDailyViewsTrend(points: ReturnType<typeof buildTrend>, days: numbe
 }
 
 export async function getDashboardData(days = 30) {
-  const safeDays = Math.min(365, Math.max(1, Math.round(days)));
+  const updatedAt = new Date().toISOString();
+  const safeDays = Math.min(365, Math.max(1, Math.round(Number.isFinite(days) ? days : 30)));
   const current = await query<Row>(`SELECT p.id::text publication_id,u.id upload_id,u.title,u.uploader_open_id,u.uploader_name,u.created_at,u.status,
     p.platform,p.post_url,p.platform_post_id,p.status publication_status,p.error_message,latest.metrics,u.video_duration_seconds,
     (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a WHERE a.publication_id=p.id) attributed_followers,
@@ -213,21 +215,21 @@ export async function getDashboardData(days = 30) {
     ), seed AS (
       SELECT DISTINCT ON (e.publication_id) e.publication_id::text,e.upload_id,e.title,e.uploader_open_id,e.uploader_name,e.created_at,e.status,
         e.platform,e.post_url,e.platform_post_id,e.publication_status,e.error_message,ms.metrics,e.video_duration_seconds,
-        (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a JOIN profile_metric_snapshots ps ON ps.id=a.profile_snapshot_id WHERE a.publication_id=e.publication_id AND ps.captured_at<=ms.captured_at) attributed_followers,
-        e.avatar_url,e.role,ms.captured_at,true is_seed
+        NULL::double precision attributed_followers,
+        e.avatar_url,e.role,ms.captured_at,(extract(epoch FROM ms.captured_at)*1000000)::bigint::text captured_us,true is_seed
       FROM eligible e JOIN metric_snapshots ms ON ms.publication_id=e.publication_id
       WHERE ms.captured_at < now() - ($1::text || ' days')::interval
       ORDER BY e.publication_id,ms.captured_at DESC
     ), timeline AS (
       SELECT e.publication_id::text,e.upload_id,e.title,e.uploader_open_id,e.uploader_name,e.created_at,e.status,
         e.platform,e.post_url,e.platform_post_id,e.publication_status,e.error_message,ms.metrics,e.video_duration_seconds,
-        (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a JOIN profile_metric_snapshots ps ON ps.id=a.profile_snapshot_id WHERE a.publication_id=e.publication_id AND ps.captured_at<=ms.captured_at) attributed_followers,
-        e.avatar_url,e.role,ms.captured_at,false is_seed
+        NULL::double precision attributed_followers,
+        e.avatar_url,e.role,ms.captured_at,(extract(epoch FROM ms.captured_at)*1000000)::bigint::text captured_us,false is_seed
       FROM eligible e JOIN metric_snapshots ms ON ms.publication_id=e.publication_id
       WHERE ms.captured_at >= now() - ($1::text || ' days')::interval
     ) SELECT * FROM seed UNION ALL SELECT * FROM timeline ORDER BY captured_at`, [safeDays]);
 
-  const updatedAt = new Date().toISOString();
+  await loadFollowerHistory(snapshots.rows);
   const cumulativeTrend = buildTrend(snapshots.rows, allRows, updatedAt, safeDays * 96 + 10);
   const teamTrend = downsample(cumulativeTrend);
   const dailyViewsTrend = buildDailyViewsTrend(cumulativeTrend, safeDays, updatedAt);

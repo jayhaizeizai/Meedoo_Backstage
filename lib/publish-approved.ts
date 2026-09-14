@@ -1,3 +1,4 @@
+import { expireDashboardCache } from "./dashboard-cache";
 import { createMediaUrl } from "./media-url";
 import { query } from "./db";
 import { getUploadPostConfig, parseProviderResponse, providerMessage, supportedPlatforms, uploadPostFetch, UploadPostPlatform } from "./upload-post";
@@ -31,9 +32,11 @@ export async function publishApprovedUpload(uploadId: string) {
     await query(`UPDATE uploads SET request_id=$2,provider_job_id=$3,status=$4,updated_at=now() WHERE id=$1`,[upload.id,requestId,jobId,status]);
     await query(`UPDATE publications SET request_id=$2,provider_job_id=COALESCE($3,provider_job_id),status=$4,updated_at=now() WHERE upload_id=$1`,[upload.id,requestId,jobId,status]);
     await query(`UPDATE upload_sessions SET status='consumed',updated_at=now() WHERE id=$1`,[upload.id]);
+    await expireDashboardCache();
     return {requestId,jobId,status};
   } catch (error) {
     if(error instanceof Error && !["UPLOAD_NOT_APPROVED","MEDIA_UNAVAILABLE"].includes(error.message)) await query(`UPDATE upload_sessions SET status='submitted',updated_at=now() WHERE id=$1`,[upload.id]);
+    await expireDashboardCache();
     throw error;
   }
 }

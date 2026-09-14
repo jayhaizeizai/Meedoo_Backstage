@@ -23,7 +23,7 @@ export async function uploadPostFetch(path: string, init: RequestInit = {}) {
     ...init,
     headers,
     cache: "no-store",
-    signal: init.signal ?? AbortSignal.timeout(5 * 60 * 1000),
+    signal: init.signal ?? AbortSignal.timeout(init.method && init.method !== "GET" ? 5 * 60 * 1000 : 20_000),
   });
 }
 

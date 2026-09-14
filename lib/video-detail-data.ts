@@ -1,4 +1,5 @@
 import { query } from "./db";
+import { loadFollowerHistory } from "./follower-history";
 import { equivalentRetention } from "./equivalent-retention";
 
 export const videoMetricDefinitions = [
@@ -85,7 +86,11 @@ type Timeline = { uploadId: string; fallback: boolean; points: TimelinePoint[] }
 function timelineForUpload(rows: SnapshotRow[], requestedCheckpoints: number[]): Timeline {
   const createdAt = Date.parse(rows[0].created_at);
   const byPublication = new Map<string, SnapshotRow[]>();
-  for (const row of rows) byPublication.set(row.publication_id, [...(byPublication.get(row.publication_id) ?? []), row]);
+  for (const row of rows) {
+    const group = byPublication.get(row.publication_id) ?? [];
+    group.push(row);
+    byPublication.set(row.publication_id, group);
+  }
   for (const publicationRows of byPublication.values()) publicationRows.sort((a, b) => Date.parse(a.captured_at ?? "") - Date.parse(b.captured_at ?? ""));
   const hasRealHistory = rows.some((row) => row.captured_at && Date.parse(row.captured_at) >= createdAt && Date.parse(row.captured_at) <= createdAt + 24 * 60 * 60 * 1000);
   const latestByPublication = new Map([...byPublication].map(([id, publicationRows]) => [id, [...publicationRows].reverse().find((row) => row.metrics) ?? publicationRows.at(-1)!]));
@@ -123,14 +128,18 @@ export async function getVideoDetailData(uploadId: string) {
   const teamIds = cohortResult.rows.filter((row) => row.cohort === "team").map((row) => row.id);
   const ids = [...new Set([uploadId, ...ownerIds, ...teamIds])];
   const snapshotResult = await query<SnapshotRow>(`SELECT u.id::text,u.title,u.uploader_open_id,u.uploader_name,u.created_at,u.status,u.video_duration_seconds,
-      p.id::text publication_id,p.platform,p.post_url,p.status publication_status,ms.captured_at,ms.metrics,
-      (SELECT sum(a.attributed_followers)::double precision FROM publication_follower_attributions a JOIN profile_metric_snapshots ps ON ps.id=a.profile_snapshot_id
-        WHERE a.publication_id=p.id AND (ms.captured_at IS NULL OR ps.captured_at<=ms.captured_at)) attributed_followers
+      p.id::text publication_id,p.platform,p.post_url,p.status publication_status,ms.captured_at,(extract(epoch FROM ms.captured_at)*1000000)::bigint::text captured_us,ms.metrics,
+      NULL::double precision attributed_followers
     FROM uploads u JOIN publications p ON p.upload_id=u.id
     LEFT JOIN metric_snapshots ms ON ms.publication_id=p.id
     WHERE u.removed_at IS NULL AND p.removed_at IS NULL AND u.id=ANY($1::uuid[]) ORDER BY u.created_at DESC,p.id,ms.captured_at`, [ids]);
+  await loadFollowerHistory(snapshotResult.rows);
   const grouped = new Map<string, SnapshotRow[]>();
-  for (const row of snapshotResult.rows) grouped.set(row.id, [...(grouped.get(row.id) ?? []), row]);
+  for (const row of snapshotResult.rows) {
+    const group = grouped.get(row.id) ?? [];
+    group.push(row);
+    grouped.set(row.id, group);
+  }
   const elapsedMinutes = Math.max(1, Math.min(1440, Math.floor((Date.now() - Date.parse(video.created_at)) / 60_000)));
   const targetCheckpoints = [...new Set([...checkpoints.filter((minute) => minute <= elapsedMinutes), elapsedMinutes])].sort((a, b) => a - b);
   const targetRows = grouped.get(uploadId) ?? [];

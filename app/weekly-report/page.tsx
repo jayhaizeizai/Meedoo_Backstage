@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useRef, type FormEvent } from "react";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
 
@@ -88,7 +88,7 @@ export default function WeeklyReportPage() {
   }, []);
 
   const status = data
-    ? { zh: `本周数据更新于 ${new Date(data.updatedAt).toLocaleString("zh-CN")}`, en: `This week updated ${new Date(data.updatedAt).toLocaleString("en-US")}` }
+    ? { zh: `本周数据更新于 ${new Date(data.updatedAt).toLocaleString("zh-CN", { timeZone: "Asia/Singapore" })}`, en: `This week updated ${new Date(data.updatedAt).toLocaleString("en-US", { timeZone: "Asia/Singapore" })}` }
     : { zh: "每周工作周报", en: "Weekly work report" };
 
   return <AppShell active="weekly-report" status={status}><section className="page weekly-report-page">
@@ -116,10 +116,14 @@ function Accounting({ language }: { language: "zh" | "en" }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const loadRevision = useRef(0);
   const load = async (week = "") => {
+    const revision = ++loadRevision.current;
+    try {
     setError("");
     const response = await fetch(`/api/weekly-report/accounting${week ? `?week=${encodeURIComponent(week)}` : ""}`, { cache: "no-store" });
     const payload = await response.json() as AccountingData;
+    if (revision !== loadRevision.current) return;
     if (!response.ok || !payload.success) throw new Error(payload.message || "Accounting unavailable");
     setData(payload);
     if (payload.period) setSelectedWeek(payload.period.weekStart);
@@ -127,6 +131,7 @@ function Accounting({ language }: { language: "zh" | "en" }) {
       setPackagePoints(String(payload.setting.packagePoints));
       setPackageCostCny(String(payload.setting.packageCostCny));
     }
+    } catch(cause) { if(revision === loadRevision.current) throw cause; }
   };
 
   useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Accounting unavailable")); }, []);

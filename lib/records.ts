@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { MeeDooUser } from "./auth";
@@ -52,7 +52,7 @@ export async function updateAcceptedUpload(id: string, providerRequestId: string
 }
 
 export function syntheticUuid(seed: string) {
-  const hex = Buffer.from(seed).toString("hex").padEnd(32, "0").slice(0, 32).split("");
+  const hex = createHash("sha256").update(`meedoo:import:${seed}`).digest("hex").slice(0, 32).split("");
   hex[12] = "4"; hex[16] = "8";
-  return `${hex.slice(0,8).join("")}-${hex.slice(8,12).join("")}-${hex.slice(12,16).join("")}-${hex.slice(16,20).join("")}-${hex.slice(20,32).join("")}` || randomUUID();
+  return `${hex.slice(0,8).join("")}-${hex.slice(8,12).join("")}-${hex.slice(12,16).join("")}-${hex.slice(16,20).join("")}-${hex.slice(20,32).join("")}`;
 }

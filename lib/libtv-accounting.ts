@@ -105,9 +105,11 @@ export async function importLibTvCsv(input: { bytes: Uint8Array; filename: strin
       VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(file_hash) DO NOTHING RETURNING file_hash`, [fileHash, input.filename, input.user.openId, input.packagePoints, input.packageCostCny, entries.length, new Date(Math.min(...consumedTimes)), new Date(Math.max(...consumedTimes))]);
     let inserted = 0;
     if (imported.rowCount) {
-      for (const entry of entries) {
-        const result = await client.query(`INSERT INTO libtv_credit_entries(entry_key,import_hash,source_row,consumed_at,entry_type,model,task_details,project_name,task_id,member_id,member_name,member_alias,project_id,points)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(entry_key) DO NOTHING`, [entry.entryKey, fileHash, entry.sourceRow, entry.consumedAt, entry.entryType, entry.model || null, entry.taskDetails || null, entry.projectName || null, entry.taskId || null, entry.memberId || null, entry.memberName || null, entry.memberAlias || null, entry.projectId || null, entry.points]);
+      for (let offset = 0; offset < entries.length; offset += 500) {
+        const batch = entries.slice(offset, offset + 500);
+        const values = batch.flatMap(entry => [entry.entryKey, fileHash, entry.sourceRow, entry.consumedAt, entry.entryType, entry.model || null, entry.taskDetails || null, entry.projectName || null, entry.taskId || null, entry.memberId || null, entry.memberName || null, entry.memberAlias || null, entry.projectId || null, entry.points]);
+        const placeholders = batch.map((_, row) => `(${Array.from({length:14}, (_, col) => `$${row * 14 + col + 1}`).join(",")})`).join(",");
+        const result = await client.query(`INSERT INTO libtv_credit_entries(entry_key,import_hash,source_row,consumed_at,entry_type,model,task_details,project_name,task_id,member_id,member_name,member_alias,project_id,points) VALUES ${placeholders} ON CONFLICT(entry_key) DO NOTHING`, values);
         inserted += result.rowCount ?? 0;
       }
       await client.query("UPDATE libtv_imports SET imported_row_count=$2 WHERE file_hash=$1", [fileHash, inserted]);

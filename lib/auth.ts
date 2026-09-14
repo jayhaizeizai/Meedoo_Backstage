@@ -69,10 +69,8 @@ export function readOAuthState(value?: string) {
   }
 }
 
-export function safeReturnTo(value?: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/upload";
-  return value;
-}
+export { safeReturnTo } from "./safe-return-to";
+import { safeReturnTo } from "./safe-return-to";
 
 export function getLarkConfig() {
   const brand = process.env.LARK_BRAND === "feishu" ? "feishu" : "lark";

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "../../../../../lib/db";
+import { invalidateDashboardCache } from "../../../../../lib/dashboard-cache";
 import { getCurrentUser } from "../../../../../lib/server-auth";
 import { supportedPlatforms, UploadPostPlatform } from "../../../../../lib/upload-post";
 
@@ -22,6 +23,7 @@ export async function DELETE(request: NextRequest, { params }: Context) {
       if(!removed.rowCount)return null;
       const active=await client.query(`SELECT 1 FROM publications WHERE upload_id=$1 AND removed_at IS NULL LIMIT 1`,[id]);
       if(!active.rowCount)await client.query(`UPDATE uploads SET removed_at=now(),removed_by=$2,updated_at=now() WHERE id=$1`,[id,user.openId]);
+      await invalidateDashboardCache(client);
       return removed.rows.map((row)=>row.platform);
     });
     if(!result)return NextResponse.json({success:false,message:"No matching published platform can be removed."},{status:409});

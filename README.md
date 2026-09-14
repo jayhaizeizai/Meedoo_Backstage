@@ -60,10 +60,7 @@ filesystem path never reach the browser.
 
 `meedoo-sync.timer` imports Upload-Post history and refreshes Analytics every 15
 minutes. The signed `/api/upload-post/webhook` endpoint applies terminal status
-updates idempotently. Pending files are retained for 60 days, rejected or withdrawn
-files for 7 days, and successfully published files for 3 days. Approved files with
-a failed platform are retained for retry. Database records and platform links remain
-after media cleanup; object storage remains the recommended production upgrade.
+updates idempotently. Submitted video files are retained long term, including pending, rejected, withdrawn, and published videos. Automatic video expiry is disabled. Only expired, unsubmitted upload sessions/chunks remain eligible for cleanup.
 Set `UPLOAD_POST_HISTORY_AFTER` to an ISO timestamp when an environment must
 ignore older provider history, for example after intentionally clearing test data.
 
@@ -91,10 +88,10 @@ their `open_id` is added to the owner map.
 
 MeeDoo stores the current follower total for each connected platform during every
 scheduled sync. Positive follower changes are attributed only to videos that were
-inside their first 24 hours during that interval. Allocation is weighted by each
+inside their first 96 hours during that interval. Allocation is weighted by each
 eligible video's incremental views; when no view delta is available, the increase
-is split evenly. Direct per-post `new_followers` metrics take precedence when a
-platform provides them. This preserves the account-level total without claiming
+is not allocated. Direct per-post `new_followers` metrics take precedence when a
+platform provides them. This does not allocate declines or unassigned gains and does not claim
 that the attribution is exact, and older videos without a pre-publication baseline
 remain unavailable.
 
@@ -158,3 +155,12 @@ installed and tested.
 
 See [`docs/lark-setup.md`](docs/lark-setup.md) for the Lark console checklist.
 See [`TODO.md`](TODO.md) for the prioritized implementation backlog.
+
+
+### Dashboard and background jobs
+
+Dashboard results are precomputed after each sync for 1/7/30/90/365 days. A database lock prevents overlapping full syncs. Analytics attempts rotate oldest-first across up to 80 publications per run, including organic posts via native platform IDs, with a three-minute analytics budget and 20-second read timeouts. This respects the provider live analytics limit of 100 calls per five minutes; large accounts refresh over multiple runs.
+
+Follower estimates use the positive increase over the account’s historical high-water mark, allocated by view increases among eligible posts in the preceding 96 hours. No view increase means no allocation. They do not represent YouTube subscribersGained/subscribersLost.
+
+Notifications persist before returning the user response, then deliver after the response or during scheduled sync. Failed deliveries retry after five minutes; existing pre-migration notifications are not replayed. Unknown retry outcomes remain reconciling and are polled by their new request ID; do not automatically repost them. If the provider never acknowledges the request, manual provider reconciliation is required.

@@ -1,5 +1,8 @@
-import { query, transaction } from "./db";
-import { createNotification } from "./notifications";
+import { updateUploadSummary } from "./publication-status";
+import { expireDashboardCache, refreshDashboardCache } from "./dashboard-cache";
+import { syncVideoMilestones } from "./video-milestones";
+import { db, ensureSchema, query, transaction } from "./db";
+import { flushNotifications } from "./notifications";
 import { syntheticUuid } from "./records";
 import { getUploadPostConfig, parseProviderResponse, uploadPostFetch } from "./upload-post";
 import { cleanupExpiredUploadSessions } from "./upload-staging";
@@ -21,38 +24,33 @@ function resultsList(value: unknown): AnyRecord[] {
 }
 
 export async function applyStatusPayload(requestId: string, payload: AnyRecord) {
-  const status = stringValue(payload.status) ?? "processing";
-  const before = await query<{ id:string;status:string;title:string }>(`SELECT DISTINCT u.id,u.status,u.title FROM uploads u LEFT JOIN publications p ON p.upload_id=u.id WHERE u.removed_at IS NULL AND (u.request_id=$1 OR p.request_id=$1) LIMIT 1`,[requestId]);
-  const previousStatus = before.rows[0]?.status;
-  const uploadResult = await query<{ id: string; status: string; title: string }>(`UPDATE uploads SET status=$2,provider_job_id=COALESCE($3,provider_job_id),
-    updated_at=now(),completed_at=CASE WHEN $2 IN ('completed','failed') THEN COALESCE(completed_at,now()) ELSE completed_at END,
-    media_delete_after=CASE WHEN $2='completed' THEN COALESCE(media_delete_after,now()+interval '3 days') ELSE media_delete_after END
-    WHERE id=(SELECT DISTINCT u.id FROM uploads u LEFT JOIN publications p ON p.upload_id=u.id WHERE u.removed_at IS NULL AND (u.request_id=$1 OR p.request_id=$1) LIMIT 1) RETURNING id,status,title`, [requestId,status,stringValue(payload.job_id)]);
-  const upload = uploadResult.rows[0];
-  if (!upload) return;
-  for (const item of resultsList(payload.results ?? payload.platforms)) {
-    const platform = stringValue(item.platform);
-    if (!platform) continue;
-    const rawItemStatus = stringValue(item.status)?.toLowerCase() ?? null;
-    const errorMessage = stringValue(item.error_message ?? item.error);
-    const errorCode = stringValue(item.error_code);
-    const failureStage = stringValue(item.failure_stage);
-    const hasExplicitFailure = Boolean(errorMessage || errorCode || failureStage) || failureStatuses.has(rawItemStatus ?? "");
-    const hasExplicitSuccess = item.success === true || successStatuses.has(rawItemStatus ?? "")
-      || Boolean(stringValue(item.platform_post_id ?? item.post_id ?? item.publish_id) || stringValue(item.post_url ?? item.url));
-    const terminalRequest = ["completed", "failed"].includes(status);
-    const itemStatus = hasExplicitSuccess ? "completed" : hasExplicitFailure || (terminalRequest && item.success === false) ? "failed" : "processing";
-    const itemSuccess = itemStatus === "completed" ? true : itemStatus === "failed" ? false : null;
-    await query(`UPDATE publications SET status=$3,success=$4,provider_job_id=COALESCE($5,provider_job_id),
-      platform_post_id=COALESCE($6,platform_post_id),post_url=COALESCE($7,post_url),error_message=$8,
-      fallback_to_inbox=COALESCE($9,fallback_to_inbox),last_synced_at=now(),updated_at=now()
-      WHERE upload_id=$1 AND platform=$2 AND removed_at IS NULL`, [upload.id,platform,itemStatus,itemSuccess,stringValue(item.job_id),
-      stringValue(item.platform_post_id ?? item.post_id ?? item.publish_id),stringValue(item.post_url ?? item.url),
-      itemStatus === "failed" ? errorMessage ?? stringValue(item.message) ?? errorCode ?? failureStage : null,boolValue(item.fallback_to_inbox)]);
-  }
-  if (["completed","failed"].includes(status) && previousStatus !== status) {
-    await createNotification(upload.id, `publish_${status}`, status === "completed" ? `MeeDoo: “${upload.title}” publishing completed.` : `MeeDoo: “${upload.title}” publishing failed. Open MeeDoo to retry.`);
-  }
+  await transaction(async client => {
+    const found = await client.query<{id:string}>(`SELECT u.id FROM uploads u WHERE u.removed_at IS NULL AND EXISTS
+      (SELECT 1 FROM publications p WHERE p.upload_id=u.id AND p.removed_at IS NULL AND p.request_id=$1) FOR UPDATE`, [requestId]);
+    for (const upload of found.rows) {
+      const items = resultsList(payload.results ?? payload.platforms);
+      for (const item of items) {
+        const platform = stringValue(item.platform);
+        if (!platform) continue;
+        const rawStatus = stringValue(item.status)?.toLowerCase() ?? "";
+        const error = stringValue(item.error_message ?? item.error ?? item.error_code ?? item.failure_stage);
+        const success = item.success === true || successStatuses.has(rawStatus) || Boolean(item.platform_post_id ?? item.post_id ?? item.publish_id ?? item.post_url ?? item.url);
+        const failed = !success && (Boolean(error) || failureStatuses.has(rawStatus) || item.success === false);
+        const status = success ? "completed" : failed ? "failed" : "processing";
+        await client.query(`UPDATE publications SET status=$4,success=$5,provider_job_id=COALESCE($6,provider_job_id),
+          platform_post_id=COALESCE($7,platform_post_id),post_url=COALESCE($8,post_url),error_message=$9,
+          last_synced_at=now(),updated_at=now() WHERE upload_id=$1 AND platform=$2 AND request_id=$3 AND removed_at IS NULL
+          AND (status NOT IN ('completed','failed') OR $4 IN ('completed','failed'))`,
+        [upload.id,platform,requestId,status,success?true:failed?false:null,stringValue(item.job_id),
+          stringValue(item.platform_post_id ?? item.post_id ?? item.publish_id),stringValue(item.post_url ?? item.url),failed?error ?? "Publishing failed":null]);
+      }
+      if (!items.length && failureStatuses.has(String(payload.status))) {
+        await client.query(`UPDATE publications SET status='failed',success=false,error_message='Publishing failed',updated_at=now()
+          WHERE upload_id=$1 AND request_id=$2 AND removed_at IS NULL AND status NOT IN ('completed','failed')`, [upload.id,requestId]);
+      }
+      await updateUploadSummary(client, upload.id);
+    }
+  });
 }
 
 export async function syncHistory() {
@@ -73,24 +71,26 @@ export async function syncHistory() {
       ? stringValue(row.external_id)! : syntheticUuid(requestId);
     const createdAt = stringValue(row.upload_timestamp) ?? new Date().toISOString();
     await transaction(async (client) => {
-      await client.query(`INSERT INTO uploads(id,request_id,provider_job_id,profile_username,title,caption,media_size_bytes,status,target_platforms,imported,created_at,updated_at,completed_at)
+      const existing = await client.query<{id:string;status:string}>(`SELECT u.id,u.status FROM uploads u WHERE u.removed_at IS NULL AND (u.request_id=$1 OR u.id=$2 OR EXISTS
+        (SELECT 1 FROM publications p WHERE p.upload_id=u.id AND p.request_id=$1)) LIMIT 1 FOR UPDATE`, [requestId,uploadId]);
+      if (!existing.rows[0]) await client.query(`INSERT INTO uploads(id,request_id,provider_job_id,profile_username,title,caption,media_size_bytes,status,target_platforms,imported,created_at,updated_at,completed_at)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,ARRAY[$9],true,$10,$10,CASE WHEN $8 IN ('completed','failed') THEN $10::timestamptz END)
-        ON CONFLICT(request_id) DO UPDATE SET provider_job_id=COALESCE(excluded.provider_job_id,uploads.provider_job_id),
-          status=excluded.status,target_platforms=(SELECT ARRAY(SELECT DISTINCT unnest(uploads.target_platforms || excluded.target_platforms))),updated_at=now()
+        ON CONFLICT(request_id) DO UPDATE SET target_platforms=(SELECT ARRAY(SELECT DISTINCT unnest(uploads.target_platforms || excluded.target_platforms))),updated_at=now()
           WHERE uploads.removed_at IS NULL`,
       [uploadId,requestId,stringValue(row.job_id),stringValue(row.profile_username) ?? profile,stringValue(row.post_title) ?? "Untitled import",
        stringValue(row.post_caption) ?? "",Number(row.media_size_bytes ?? 0) || null,row.success === false ? "failed" : "completed",platform,createdAt]);
       const selected = await client.query<{ id: string }>(`SELECT id FROM uploads WHERE request_id=$1 AND removed_at IS NULL`, [requestId]);
-      const actualUploadId = selected.rows[0]?.id;
+      const actualUploadId = existing.rows[0]?.id ?? selected.rows[0]?.id;
       if (!actualUploadId) return;
       await client.query(`INSERT INTO publications(upload_id,platform,request_id,provider_job_id,platform_post_id,status,success,post_url,error_message,fallback_to_inbox,last_synced_at,created_at,updated_at)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now(),$11,$11)
         ON CONFLICT(upload_id,platform) DO UPDATE SET provider_job_id=COALESCE(excluded.provider_job_id,publications.provider_job_id),
           platform_post_id=COALESCE(excluded.platform_post_id,publications.platform_post_id),status=excluded.status,success=excluded.success,
           post_url=COALESCE(excluded.post_url,publications.post_url),error_message=excluded.error_message,last_synced_at=now(),updated_at=now()
-          WHERE publications.removed_at IS NULL`,
+          WHERE publications.removed_at IS NULL AND publications.request_id=excluded.request_id`,
       [actualUploadId,platform,requestId,stringValue(row.job_id),stringValue(row.platform_post_id),row.success === false ? "failed" : "completed",
        boolValue(row.success),stringValue(row.post_url),stringValue(row.error_message),Boolean(row.fallback_to_inbox),createdAt]);
+      if (existing.rows[0] && !["completed","failed"].includes(existing.rows[0].status)) await updateUploadSummary(client,actualUploadId);
     });
     imported++;
   }
@@ -98,37 +98,50 @@ export async function syncHistory() {
 }
 
 export async function syncPendingStatuses() {
-  const pending = await query<{ request_id: string }>(`SELECT request_id FROM uploads WHERE removed_at IS NULL AND request_id IS NOT NULL AND status NOT IN ('completed','failed') ORDER BY created_at DESC LIMIT 50`);
+  const pending = await query<{request_id:string}>(`SELECT DISTINCT p.request_id FROM publications p JOIN uploads u ON u.id=p.upload_id
+    WHERE p.removed_at IS NULL AND u.removed_at IS NULL AND p.request_id IS NOT NULL AND p.status NOT IN ('completed','failed')`);
   for (const row of pending.rows) {
-    const response = await uploadPostFetch(`/api/uploadposts/status?request_id=${encodeURIComponent(row.request_id)}`);
-    if (response.ok) await applyStatusPayload(row.request_id, await parseProviderResponse(response));
+    try {
+      const response = await uploadPostFetch(`/api/uploadposts/status?request_id=${encodeURIComponent(row.request_id)}`);
+      if (response.ok) await applyStatusPayload(row.request_id, await parseProviderResponse(response));
+    } catch { console.error("Publication status check failed"); }
   }
   return pending.rowCount ?? 0;
 }
 
 export async function syncAnalytics() {
-  const uploads = await query<{ id: string; request_id: string }>(`SELECT DISTINCT ON (u.id,p.request_id) u.id,p.request_id FROM uploads u JOIN publications p ON p.upload_id=u.id WHERE u.removed_at IS NULL AND p.removed_at IS NULL AND p.request_id IS NOT NULL AND p.status='completed' ORDER BY u.id,p.request_id,u.created_at DESC LIMIT 50`);
+  const {profile} = getUploadPostConfig();
+  // Fair rotation includes organic videos. Attempt time advances even on API errors.
+  const jobs = await query<{id:string;request_id:string|null;platform:string;platform_post_id:string|null}>(`SELECT p.id,p.request_id,p.platform,p.platform_post_id
+    FROM publications p JOIN uploads u ON u.id=p.upload_id WHERE u.removed_at IS NULL AND p.removed_at IS NULL AND p.status='completed'
+    AND (p.platform_post_id IS NOT NULL OR p.request_id IS NOT NULL)
+    ORDER BY p.analytics_attempted_at NULLS FIRST,p.id LIMIT 80`);
   let updated = 0;
-  for (const upload of uploads.rows) {
-    const response = await uploadPostFetch(`/api/uploadposts/post-analytics/${encodeURIComponent(upload.request_id)}`);
-    if (!response.ok) continue;
-    const payload = await parseProviderResponse(response);
-    for (const item of resultsList(payload.platforms)) {
-      const platform = stringValue(item.platform);
-      const metrics = item.post_metrics ?? item.metrics;
-      if (!platform || !metrics || typeof metrics !== "object") continue;
-      const publication = await query<{ id: string }>(`UPDATE publications SET platform_post_id=COALESCE($3,platform_post_id),post_url=COALESCE($4,post_url),last_synced_at=now(),updated_at=now()
-        WHERE upload_id=$1 AND platform=$2 AND removed_at IS NULL RETURNING id`, [upload.id,platform,stringValue(item.platform_post_id),stringValue(item.post_url)]);
-      if (!publication.rows[0]) continue;
-      await query(`INSERT INTO metric_snapshots(publication_id,captured_at,metrics) VALUES($1,clock_timestamp(),$2::jsonb)
-        ON CONFLICT(publication_id,captured_at) DO UPDATE SET metrics=excluded.metrics`, [publication.rows[0].id,JSON.stringify(metrics)]);
+  const deadline = Date.now() + 180_000;
+  for (const job of jobs.rows) {
+    if (Date.now() >= deadline) break;
+    await query("UPDATE publications SET analytics_attempted_at=now() WHERE id=$1", [job.id]);
+    const params = new URLSearchParams({platform:job.platform,user:profile});
+    if (job.platform_post_id) params.set("platform_post_id",job.platform_post_id);
+    const endpoint = job.platform_post_id ? `/api/uploadposts/post-analytics?${params}` : `/api/uploadposts/post-analytics/${encodeURIComponent(job.request_id!)}?${params}`;
+    try {
+      const response = await uploadPostFetch(endpoint);
+      if (!response.ok) continue;
+      const payload = await parseProviderResponse(response);
+      const item = resultsList(payload.platforms).find(item => item.platform === job.platform);
+      const metrics = item?.post_metrics ?? item?.metrics;
+      if (!metrics || typeof metrics !== "object" || Array.isArray(metrics)) continue;
+      await query(`INSERT INTO metric_snapshots(publication_id,captured_at,metrics)
+        SELECT id,clock_timestamp(),$2::jsonb FROM publications WHERE id=$1 AND removed_at IS NULL`, [job.id,JSON.stringify(metrics)]);
+      await query("UPDATE publications SET last_synced_at=now() WHERE id=$1", [job.id]);
       updated++;
-    }
+    } catch { console.error("Publication analytics check failed"); }
   }
   return updated;
 }
 
-export async function syncAll() {
+async function runSync() {
+  await flushNotifications();
   const cleaned = await cleanupExpiredUploadSessions();
   const maintenance=await runMaintenance();
   const history = await syncHistory();
@@ -137,5 +150,24 @@ export async function syncAll() {
   let profileAnalytics: unknown;
   try { profileAnalytics = await syncProfileAnalytics(); }
   catch (error) { profileAnalytics = { error: error instanceof Error ? error.message : "PROFILE_ANALYTICS_FAILED" }; }
-  return { cleaned, history, statuses, analytics, profileAnalytics, maintenance, syncedAt: new Date().toISOString() };
+  let milestones: unknown;
+  try { milestones = await syncVideoMilestones(); }
+  catch (error) { console.error("Video milestone detection failed", error instanceof Error ? error.message : "unknown"); milestones = {error:"MILESTONE_DETECTION_FAILED"}; }
+  await refreshDashboardCache();
+  return { cleaned, history, statuses, analytics, profileAnalytics, maintenance, milestones, syncedAt: new Date().toISOString() };
+}
+
+export async function syncAll() {
+  await ensureSchema();
+  const client = await db().connect();
+  let locked = false;
+  try {
+    locked = (await client.query<{locked:boolean}>("SELECT pg_try_advisory_lock(7241902) locked")).rows[0].locked;
+    if (!locked) return { alreadyRunning:true };
+    return await runSync();
+  } finally {
+    try { if (locked) await client.query("SELECT pg_advisory_unlock(7241902)"); }
+    catch { client.release(true); throw new Error("SYNC_LOCK_RELEASE_FAILED"); }
+    client.release();
+  }
 }

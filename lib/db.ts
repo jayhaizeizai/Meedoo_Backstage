@@ -209,6 +209,10 @@ export async function ensureSchema() {
       updated_by text REFERENCES meedoo_users(open_id) ON DELETE SET NULL,
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+    UPDATE uploads SET media_delete_after=NULL WHERE media_delete_after IS NOT NULL;
+    ALTER TABLE publications ADD COLUMN IF NOT EXISTS analytics_attempted_at timestamptz;
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS lark_queued boolean NOT NULL DEFAULT false;
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS lark_attempted_at timestamptz;
     CREATE INDEX IF NOT EXISTS uploads_uploader_created_idx ON uploads(uploader_open_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS uploads_status_idx ON uploads(status);
     CREATE INDEX IF NOT EXISTS upload_sessions_expiry_idx ON upload_sessions(expires_at);

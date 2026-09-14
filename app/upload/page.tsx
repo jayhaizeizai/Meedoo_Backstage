@@ -1,4 +1,5 @@
 "use client";
+import { titleForSelectedFile } from "../../lib/upload-title";
 
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -171,8 +172,7 @@ export default function UploadPage() {
     }
     setStagedUpload(restored);
     setFile(nextFile);
-    const filenameTitle=nextFile.name.replace(/\.[^.]+$/, "").slice(0, MAX_TITLE_CHARACTERS);
-    setPlatformContent((current)=>Object.fromEntries(platformOptions.map(({id})=>[id,{...current[id],title:filenameTitle}])) as PlatformContentState);
+    setPlatformContent((current)=>Object.fromEntries(platformOptions.map(({id})=>[id,{...current[id],title:titleForSelectedFile(current[id].title,file?.name,nextFile.name)}])) as PlatformContentState);
   }
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {

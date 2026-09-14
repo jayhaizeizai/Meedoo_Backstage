@@ -1,3 +1,4 @@
+import { uploadTitle } from "../../../../lib/upload-title";
 import { NextRequest,NextResponse } from "next/server";
 import { getCurrentUser } from "../../../../lib/server-auth";
 import { getOwnedUploadSession } from "../../../../lib/upload-staging";
@@ -18,6 +19,6 @@ export async function POST(request:NextRequest){
   if(!platformContent)return error("A title and caption are required for all three platforms.",400,"PLATFORM_CONTENT_REQUIRED");
   const validationCode=validatePlatformContent(platformContent);if(validationCode)return error("Each platform requires a valid title and caption. Titles must be 1–100 characters; title and caption together must be at most 2,200 characters.",400,validationCode);
   if(platforms.length!==supportedPlatforms.length||supportedPlatforms.some((platform)=>!platforms.includes(platform)))return error("TikTok, Instagram, and YouTube must all be selected.",400,"ALL_PLATFORMS_REQUIRED");
-  try{const uploadId=await submitForReview({session:staged,user,platformContent,platforms});const title=platformContent.youtube.title;await notifyApprovers(uploadId,`MeeDoo: “${title}” was submitted by ${user.name} and is waiting for your review.\n${process.env.APP_URL}/approvals/${uploadId}`);return NextResponse.json({success:true,uploadId,requestId:uploadId,status:"pending_review"},{status:202});}
+  try{const uploadId=await submitForReview({session:staged,user,platformContent,platforms});const title=uploadTitle({platform_content:platformContent,original_filename:staged.original_filename});await notifyApprovers(uploadId,`MeeDoo: “${title}” was submitted by ${user.name} and is waiting for your review.\n${process.env.APP_URL}/approvals/${uploadId}`);return NextResponse.json({success:true,uploadId,requestId:uploadId,status:"pending_review"},{status:202});}
   catch(cause){const code=cause instanceof Error?cause.message:"unknown";console.error("Review submission failed",code);if(code==="INVALID_ASPECT_RATIO")return error("Video must use a vertical 9:16 aspect ratio.",400,code);if(code==="UPLOAD_SESSION_NOT_READY")return error("Temporary video is no longer available for review submission.",409,code);return NextResponse.json({success:false,message:"Could not submit this video for review."},{status:503});}
 }

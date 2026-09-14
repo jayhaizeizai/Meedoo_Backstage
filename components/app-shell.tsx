@@ -32,17 +32,31 @@ export function AppShell({ active, status, children }: AppShellProps) {
           </div>
         </div>
         <nav className="nav" aria-label={text("主导航", "Main navigation")}>
-          <Link className={active === "upload" ? "active" : ""} href="/upload">
-            <span aria-hidden="true">↥</span><i>{text("上传视频", "Upload video")}</i>
-          </Link>
-          <Link className={active === "dashboard" ? "active" : ""} href="/dashboard">
-            <span aria-hidden="true">⌁</span><i>{text("数据看板", "Dashboard")}</i>
-          </Link>
-          <Link className={active === "weekly-report" ? "active" : ""} href="/weekly-report">
-            <span aria-hidden="true">▣</span><i>{text("每周工作周报", "Weekly report")}</i>
-          </Link>
-          <Link className={active === "records" ? "active" : ""} href="/records"><span aria-hidden="true">☷</span><i>{text("上传记录", "Upload records")}</i></Link>
-          {role === "approver" && <Link className={active === "approvals" ? "active" : ""} href="/approvals"><span aria-hidden="true">✓</span><i>{text("视频审批", "Video approvals")}</i></Link>}
+          <section className="nav-group" aria-labelledby="nav-video-workflow">
+            <h2 className="nav-group-title" id="nav-video-workflow">{text("视频流程", "Video workflow")}</h2>
+            <div className="nav-group-links">
+              <Link className={active === "upload" ? "active" : ""} href="/upload" title={text("上传视频", "Upload video")}>
+                <span aria-hidden="true">↥</span><i>{text("上传视频", "Upload video")}</i>
+              </Link>
+              <Link className={active === "records" ? "active" : ""} href="/records" title={text("上传记录", "Upload records")}>
+                <span aria-hidden="true">☷</span><i>{text("上传记录", "Upload records")}</i>
+              </Link>
+              {role === "approver" && <Link className={active === "approvals" ? "active" : ""} href="/approvals" title={text("视频审批", "Video approvals")}>
+                <span aria-hidden="true">✓</span><i>{text("视频审批", "Video approvals")}</i>
+              </Link>}
+            </div>
+          </section>
+          <section className="nav-group" aria-labelledby="nav-analytics">
+            <h2 className="nav-group-title" id="nav-analytics">{text("数据看板", "Analytics")}</h2>
+            <div className="nav-group-links">
+              <Link className={active === "dashboard" ? "active" : ""} href="/dashboard" title={text("视频数据看报", "Video analytics report")}>
+                <span aria-hidden="true">⌁</span><i>{text("视频数据看报", "Video analytics report")}</i>
+              </Link>
+              <Link className={active === "weekly-report" ? "active" : ""} href="/weekly-report" title={text("市场部每周周报", "Marketing weekly report")}>
+                <span aria-hidden="true">▣</span><i>{text("市场部每周周报", "Marketing weekly report")}</i>
+              </Link>
+            </div>
+          </section>
         </nav>
         <div className="side-bottom">
           <div className="user">
