@@ -40,13 +40,15 @@ type WeeklyReport = {
 type AccountingData = {
   success: boolean;
   canUpload: boolean;
-  period: { start: string; end: string; timeZone: string } | null;
+  period: { start: string; end: string; weekStart: string; timeZone: string } | null;
   availableWeeks: string[];
+  uploaders: Array<{ open_id: string; name: string }>;
   setting: { packagePoints: number; packageCostCny: number; updatedAt: string } | null;
   totals: { points: number; costCny: number | null; videoCount: number };
   members: Array<{
     memberId: string; memberName: string; taskCount: number; points: number; costCny: number | null;
     videoCount: number; perVideoPoints: number | null; perVideoCostCny: number | null; matched: boolean;
+    mappedUploaderOpenId: string | null; mappedUploaderName: string | null;
     models: Array<{ model: string; tasks: number; points: number }>;
   }>;
   videos: Array<{
@@ -110,6 +112,7 @@ function Accounting({ language }: { language: "zh" | "en" }) {
   const [packagePoints, setPackagePoints] = useState("16300");
   const [packageCostCny, setPackageCostCny] = useState("649");
   const [busy, setBusy] = useState(false);
+  const [mappingBusy, setMappingBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -119,7 +122,7 @@ function Accounting({ language }: { language: "zh" | "en" }) {
     const payload = await response.json() as AccountingData;
     if (!response.ok || !payload.success) throw new Error(payload.message || "Accounting unavailable");
     setData(payload);
-    if (payload.period) setSelectedWeek(payload.period.start.slice(0, 10));
+    if (payload.period) setSelectedWeek(payload.period.weekStart);
     if (payload.setting) {
       setPackagePoints(String(payload.setting.packagePoints));
       setPackageCostCny(String(payload.setting.packageCostCny));
@@ -153,13 +156,31 @@ function Accounting({ language }: { language: "zh" | "en" }) {
     } finally { setBusy(false); }
   };
 
+  const mapMember = async (memberId: string, uploaderOpenId: string) => {
+    if (!uploaderOpenId) return;
+    setMappingBusy(memberId); setError(""); setMessage("");
+    try {
+      const form = new FormData();
+      form.set("action", "map");
+      form.set("memberId", memberId);
+      form.set("uploaderOpenId", uploaderOpenId);
+      const response = await fetch("/api/weekly-report/accounting", { method: "POST", body: form });
+      const payload = await response.json() as { success?: boolean; message?: string };
+      if (!response.ok || !payload.success) throw new Error(payload.message || "Mapping failed");
+      setMessage(t("成员对应关系已保存，之后导入会自动识别。", "Member mapping saved. Future imports will match automatically."));
+      await load(selectedWeek);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Mapping failed");
+    } finally { setMappingBusy(""); }
+  };
+
   const formatNumber = (value: number | null, maximumFractionDigits = 0) => value === null ? "—" : new Intl.NumberFormat(language === "zh" ? "zh-CN" : "en-US", { maximumFractionDigits }).format(value);
   const money = (value: number | null) => value === null ? "—" : new Intl.NumberFormat(language === "zh" ? "zh-CN" : "en-US", { style: "currency", currency: "CNY", minimumFractionDigits: 2 }).format(value);
 
   return <section className="weekly-section accounting-section">
     {data?.canUpload && <form className="card accounting-upload" onSubmit={upload}>
       <div><p className="eyebrow">LIBTV CSV IMPORT</p><h2>{t("上传积分消耗明细", "Upload credit usage details")}</h2><p>{t("下载 LIBTV“团队积分消耗明细”CSV 后上传。重复文件和重叠记录不会重复计费。", "Upload the LIBTV team credit usage CSV. Duplicate files and overlapping records are not charged twice.")}</p></div>
-      <label>{t("CSV 文件", "CSV file")}<input id="libtv-csv" type="file" accept=".csv,text/csv" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required /></label>
+      <label className="accounting-file-field"><span>{t("CSV 文件", "CSV file")}</span><span className={`accounting-file-picker${file ? " selected" : ""}`}><input id="libtv-csv" className="accounting-file-input" type="file" accept=".csv,text/csv" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required /><b>{t("选择 CSV", "Choose CSV")}</b><em title={file?.name}>{file ? file.name : t("尚未选择文件", "No file selected")}</em></span></label>
       <label>{t("每人套餐积分", "Points per person")}<input type="number" min="1" step="1" value={packagePoints} onChange={(event) => setPackagePoints(event.target.value)} required /></label>
       <label>{t("每人套餐价格（人民币）", "Price per person (CNY)")}<input type="number" min="0.01" step="0.01" value={packageCostCny} onChange={(event) => setPackageCostCny(event.target.value)} required /></label>
       <button type="submit" disabled={busy || !file}>{busy ? t("正在分析…", "Analyzing…") : t("上传并分析", "Upload and analyze")}</button>
@@ -178,11 +199,13 @@ function Accounting({ language }: { language: "zh" | "en" }) {
       <article className="card"><small>{t("团队平均每条视频", "Team average per video")}</small><strong>{data.totals.videoCount ? money((data.totals.costCny ?? 0) / data.totals.videoCount) : "—"}</strong></article>
     </div>
     {data.members.length ? <div className="accounting-members">{data.members.map((member) => {
-      const memberVideos = data.videos.filter((video) => video.uploader_name.trim().toLocaleLowerCase() === member.memberName.trim().toLocaleLowerCase());
+      const memberVideos = data.videos.filter((video) => member.mappedUploaderOpenId
+        ? video.uploader_open_id === member.mappedUploaderOpenId
+        : video.uploader_name.trim().toLocaleLowerCase() === member.memberName.trim().toLocaleLowerCase());
       return <article className="card accounting-member" key={member.memberId}>
-        <header><div><p className="eyebrow">MEMBER ACCOUNTING</p><h2>{member.memberName}</h2><p>{formatNumber(member.taskCount)} {t("次创作任务", "creative tasks")} · {formatNumber(member.videoCount)} {t("条已批准视频", "approved videos")}</p></div><strong>{money(member.costCny)}</strong></header>
+        <header><div><p className="eyebrow">MEMBER ACCOUNTING</p><h2>{member.memberName}</h2><p>{formatNumber(member.taskCount)} {t("次创作任务", "creative tasks")} · {formatNumber(member.videoCount)} {t("条已批准视频", "approved videos")}</p></div><div className="accounting-member-side"><strong>{money(member.costCny)}</strong>{data.canUpload && <label className="accounting-member-map"><span>{t("对应网站成员", "Website member")}</span><select value={member.mappedUploaderOpenId ?? ""} disabled={mappingBusy === member.memberId} onChange={(event) => void mapMember(member.memberId, event.target.value)}><option value="" disabled>{t("选择一次即可自动识别", "Choose once to auto-match")}</option>{data.uploaders.map((uploader) => <option value={uploader.open_id} key={uploader.open_id}>{uploader.name}</option>)}</select></label>}</div></header>
         <div className="accounting-member-kpis"><div><small>{t("消耗积分", "Points used")}</small><b>{formatNumber(member.points)}</b></div><div><small>{t("平均每条积分", "Points per video")}</small><b>{formatNumber(member.perVideoPoints, 2)}</b></div><div><small>{t("平均每条成本", "Cost per video")}</small><b>{money(member.perVideoCostCny)}</b></div></div>
-        {!member.matched && <p className="accounting-warning">{t("未找到同名的已批准视频，暂时无法分摊到单条视频。", "No approved videos matched this member name, so per-video allocation is unavailable.")}</p>}
+        {!member.matched && <p className="accounting-warning">{t("尚未对应网站成员，选择一次后即可自动分摊到其本周视频。", "This LIBTV member is not mapped yet. Choose the website member once to enable weekly video allocation.")}</p>}
         <div className="accounting-models">{member.models.map((model) => <div key={model.model}><span><strong>{model.model}</strong><small>{model.tasks} {t("次任务", "tasks")}</small></span><b>{formatNumber(model.points)} {t("积分", "points")}</b></div>)}</div>
         {memberVideos.length > 0 && <div className="accounting-video-list"><div className="accounting-video-row header"><span>{t("视频", "Video")}</span><span>{t("分摊积分", "Allocated points")}</span><span>{t("人民币成本", "Cost (CNY)")}</span></div>{memberVideos.map((video) => <div className="accounting-video-row" key={video.id}><span><strong>{video.title}</strong><small>{new Date(video.created_at).toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", { timeZone: data.period?.timeZone })}</small></span><b>{formatNumber(video.allocatedPoints, 2)}</b><b>{money(video.allocatedCostCny)}</b></div>)}</div>}
       </article>;
