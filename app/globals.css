@@ -338,7 +338,7 @@
 .accounting-file-picker.selected em{color:var(--ink)}
 .accounting-upload button{height:40px;padding:0 15px;border:0;border-radius:10px;background:#6757e8;color:#fff;font-weight:900;cursor:pointer}
 .accounting-upload button:disabled{cursor:not-allowed;opacity:.48}
-.accounting-message{padding:11px 14px;border-radius:10px;font-size:9px;font-weight:800}
+.accounting-message{justify-self:stretch;width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;font-size:9px;font-weight:800;line-height:1.5}
 .accounting-message.success{border:1px solid #bfe7dc;background:#f2fbf8;color:#08765f}
 .accounting-message.error{border:1px solid #f0caca;background:#fff5f5;color:#a43d45}
 .accounting-toolbar{display:flex;align-items:end;justify-content:space-between;gap:14px}
