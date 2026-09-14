@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isApprover } from "../../../../../lib/approvals";
-import { getCurrentUser } from "../../../../../lib/server-auth";
-import { getLibTvAccounting, importLibTvCsv } from "../../../../../lib/libtv-accounting";
+import { isApprover } from "../../../../lib/approvals";
+import { getCurrentUser } from "../../../../lib/server-auth";
+import { getLibTvAccounting, importLibTvCsv } from "../../../../lib/libtv-accounting";
 
 export const dynamic = "force-dynamic";
 
