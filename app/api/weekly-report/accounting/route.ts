@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isApprover } from "../../../../lib/approvals";
 import { getCurrentUser } from "../../../../lib/server-auth";
-import { getLibTvAccounting, importLibTvCsv } from "../../../../lib/libtv-accounting";
+import { getLibTvAccounting, importLibTvCsv, saveLibTvMemberMapping } from "../../../../lib/libtv-accounting";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,11 @@ export async function POST(request: NextRequest) {
   if (!await isApprover(user.openId)) return NextResponse.json({ success: false, message: "Approver access required." }, { status: 403 });
   try {
     const form = await request.formData();
+    const action = String(form.get("action") ?? "import");
+    if (action === "map") {
+      await saveLibTvMemberMapping({ memberId: String(form.get("memberId") ?? ""), uploaderOpenId: String(form.get("uploaderOpenId") ?? ""), user });
+      return NextResponse.json({ success: true });
+    }
     const file = form.get("file");
     const packagePoints = Number(form.get("packagePoints") ?? 16300);
     const packageCostCny = Number(form.get("packageCostCny") ?? 649);
