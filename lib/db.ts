@@ -168,6 +168,41 @@ export async function ensureSchema() {
       value jsonb NOT NULL DEFAULT '{}',
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS libtv_imports (
+      file_hash text PRIMARY KEY,
+      original_filename text NOT NULL,
+      imported_by text REFERENCES meedoo_users(open_id) ON DELETE SET NULL,
+      package_points integer NOT NULL CHECK (package_points > 0),
+      package_cost_cny numeric(12,2) NOT NULL CHECK (package_cost_cny > 0),
+      source_row_count integer NOT NULL,
+      imported_row_count integer NOT NULL DEFAULT 0,
+      first_consumed_at timestamptz,
+      last_consumed_at timestamptz,
+      imported_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS libtv_credit_entries (
+      entry_key text PRIMARY KEY,
+      import_hash text NOT NULL REFERENCES libtv_imports(file_hash) ON DELETE RESTRICT,
+      source_row integer NOT NULL,
+      consumed_at timestamptz NOT NULL,
+      entry_type text NOT NULL,
+      model text,
+      task_details text,
+      project_name text,
+      task_id text,
+      member_id text,
+      member_name text,
+      member_alias text,
+      project_id text,
+      points integer NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS libtv_accounting_settings (
+      singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+      package_points integer NOT NULL CHECK (package_points > 0),
+      package_cost_cny numeric(12,2) NOT NULL CHECK (package_cost_cny > 0),
+      updated_by text REFERENCES meedoo_users(open_id) ON DELETE SET NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE INDEX IF NOT EXISTS uploads_uploader_created_idx ON uploads(uploader_open_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS uploads_status_idx ON uploads(status);
     CREATE INDEX IF NOT EXISTS upload_sessions_expiry_idx ON upload_sessions(expires_at);
@@ -179,6 +214,8 @@ export async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS publication_follower_attributions_publication_idx ON publication_follower_attributions(publication_id);
     CREATE INDEX IF NOT EXISTS uploads_review_status_submitted_idx ON uploads(review_status, submitted_at DESC);
     CREATE INDEX IF NOT EXISTS upload_reviews_upload_created_idx ON upload_reviews(upload_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS libtv_credit_entries_consumed_idx ON libtv_credit_entries(consumed_at DESC);
+    CREATE INDEX IF NOT EXISTS libtv_credit_entries_member_consumed_idx ON libtv_credit_entries(member_id, consumed_at DESC);
   `).then(() => undefined).catch((error) => { global.meedooSchemaReady = undefined; throw error; });
   return global.meedooSchemaReady;
 }
