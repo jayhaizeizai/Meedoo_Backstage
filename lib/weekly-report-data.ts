@@ -1,3 +1,4 @@
+import { viewMetricKeys } from "./social-platforms";
 import { query } from "./db";
 import { tiktokRetentionScore, storedTikTokRetention } from "./tiktok-retention";
 
@@ -61,13 +62,13 @@ const availableSum = (...values: Array<number | null>) => {
 
 function summarize(rows: WeeklyRow[]): WeeklyConversionMetrics {
   const totals = rows.reduce((result, row) => {
-    const viewKeys = row.platform === "instagram" ? ["reach", "views", "impressions"] : ["views", "reach", "impressions"];
+    const viewKeys = viewMetricKeys(row.platform);
     result.views += valueFrom(row.metrics, viewKeys) ?? 0;
-    result.likes += valueFrom(row.metrics, ["likes", "like_count"]) ?? 0;
+    result.likes += valueFrom(row.metrics, ["likes", "like_count", "reactions"]) ?? 0;
     result.comments += valueFrom(row.metrics, ["comments", "comment_count", "replies"]) ?? 0;
     result.shares += availableSum(
       valueFrom(row.metrics, ["shares", "share_count"]),
-      valueFrom(row.metrics, ["reposts", "repost_count", "repost"]),
+      valueFrom(row.metrics, ["reposts", "repost_count", "repost", "retweets", "retweet_count"]),
     );
     result.saves += valueFrom(row.metrics, ["saves", "favorites", "favorite_count", "bookmarks"]) ?? 0;
     result.followers += valueFrom(row.metrics, ["followers_gained", "new_followers", "subscribers_gained", "new_subscribers"])
@@ -85,12 +86,12 @@ function summarize(rows: WeeklyRow[]): WeeklyConversionMetrics {
 }
 
 function platformResult(row: WeeklyRow): WeeklyPlatformResult {
-  const viewKeys = row.platform === "instagram" ? ["reach", "views", "impressions"] : ["views", "reach", "impressions"];
+  const viewKeys = viewMetricKeys(row.platform);
   return {
     platform: row.platform,
     capturedAt: row.captured_at,
     website: null,
-    reposts: valueFrom(row.metrics, ["reposts", "repost_count", "repost"]),
+    reposts: valueFrom(row.metrics, ["reposts", "repost_count", "repost", "retweets", "retweet_count"]),
     shares: valueFrom(row.metrics, ["shares", "share_count"]),
     followers: valueFrom(row.metrics, ["followers_gained", "new_followers", "subscribers_gained", "new_subscribers"])
       ?? (row.attributed_followers === null ? null : Number(row.attributed_followers)),
@@ -100,7 +101,7 @@ function platformResult(row: WeeklyRow): WeeklyPlatformResult {
     saves: valueFrom(row.metrics, ["saves", "favorites", "favorite_count", "bookmarks"]),
     comments: valueFrom(row.metrics, ["comments", "comment_count", "replies"]),
     views: valueFrom(row.metrics, viewKeys),
-    likes: valueFrom(row.metrics, ["likes", "like_count"]),
+    likes: valueFrom(row.metrics, ["likes", "like_count", "reactions"]),
   };
 }
 

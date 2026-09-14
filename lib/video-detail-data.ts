@@ -1,3 +1,4 @@
+import { supportedPlatforms, viewMetricKeys } from "./social-platforms";
 import { query } from "./db";
 import { loadFollowerHistory } from "./follower-history";
 import { tiktokRetentionScore, storedTikTokRetention } from "./tiktok-retention";
@@ -12,7 +13,7 @@ export const videoMetricDefinitions = [
   { key: "comments", zh: "评论", en: "Comments" },
 ] as const;
 
-const platforms = ["tiktok", "instagram", "youtube"] as const;
+const platforms = supportedPlatforms;
 const checkpoints = [15, 30, 60, 120, 240, 480, 720, 1440];
 type MetricKey = typeof videoMetricDefinitions[number]["key"];
 type Metrics = Record<MetricKey, number | null>;
@@ -21,7 +22,7 @@ type UploadRow = { id: string; title: string; uploader_open_id: string | null; u
 type SnapshotRow = UploadRow & { publication_id: string; platform: string; post_url: string | null; publication_status: string; captured_at: string | null; metrics: Record<string, unknown> | null; attributed_followers: number | string | null };
 
 const aliases: Record<Exclude<MetricKey, "views">, string[]> = {
-  likes: ["likes", "like_count"], retention: [],
+  likes: ["likes", "like_count", "reactions"], retention: [],
   shares: ["shares", "share_count"],
   followers: ["followers_gained", "new_followers", "subscribers_gained", "new_subscribers"],
   saves: ["saves", "favorites", "favorite_count", "bookmarks"], comments: ["comments", "comment_count", "replies"],
@@ -43,12 +44,12 @@ function numberFrom(metrics: Record<string, unknown> | null, keys: string[]) {
 
 function normalize(platform: string, metrics: Record<string, unknown> | null, attributedFollowers: number | string | null = null, duration: number | string | null = null): Metrics {
   return Object.fromEntries(videoMetricDefinitions.map(({ key }) => [key, key === "views"
-    ? numberFrom(metrics, platform === "instagram" ? ["reach", "views", "impressions"] : ["views", "reach", "impressions"])
+    ? numberFrom(metrics, viewMetricKeys(platform))
     : key === "retention" ? tiktokRetentionScore(platform, metrics)
     : key === "followers" ? numberFrom(metrics, aliases.followers) ?? (attributedFollowers === null ? null : Number(attributedFollowers))
     : key === "shares" ? sumAvailable(
       numberFrom(metrics, aliases.shares),
-      numberFrom(metrics, ["reposts", "repost_count", "repost"]),
+      numberFrom(metrics, ["reposts", "repost_count", "repost", "retweets", "retweet_count"]),
     )
     : numberFrom(metrics, aliases[key])])) as Metrics;
 }

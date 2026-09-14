@@ -1,3 +1,4 @@
+import { assertFacebookDestination } from "./facebook-destination";
 import { invalidateDashboardCache } from "./dashboard-cache";
 import { stat } from "node:fs/promises";
 import { uploadTitle } from "./upload-title";
@@ -7,7 +8,7 @@ import { MeeDooUser } from "./auth";
 import { getUploadPostConfig, supportedPlatforms, UploadPostPlatform } from "./upload-post";
 import { UploadSession } from "./upload-staging";
 import {isVerticalNineSixteen,probeVideo} from "./video-probe";
-import { PlatformContent } from "./platform-content";
+import { PlatformContent, validatePlatformContent } from "./platform-content";
 
 export async function getUserRole(openId: string) {
   const result = await query<{ role: string }>(`SELECT role FROM meedoo_users WHERE open_id=$1`, [openId]);
@@ -19,8 +20,11 @@ export async function isApprover(openId: string) {
 }
 
 export async function submitForReview(input: { session: UploadSession; user: MeeDooUser; platformContent: PlatformContent; platforms: UploadPostPlatform[] }) {
-  const { profile } = getUploadPostConfig();
+  const { profile, facebookPageId } = getUploadPostConfig();
+  if (input.platforms.includes("facebook") && !facebookPageId) throw new Error("FACEBOOK_PAGE_REQUIRED");
   const probe=await probeVideo(input.session.media_path!);if(probe.width&&probe.height&&!isVerticalNineSixteen(probe.width,probe.height))throw new Error("INVALID_ASPECT_RATIO");
+  if (input.platforms.includes("facebook") && (!probe.duration || probe.duration < 3 || probe.duration > 90 || !probe.width || probe.width < 540 || !probe.height || probe.height < 960)) throw new Error("FACEBOOK_REELS_VIDEO_REQUIREMENTS");
+  if (input.platforms.includes("x") && (!probe.duration || probe.duration > 1200)) throw new Error("X_VIDEO_DURATION_LIMIT");
   const display=input.platformContent.youtube;
   await transaction(async (client) => {
     const transitioned = await client.query(`UPDATE upload_sessions SET status='submitted',expires_at=now()+interval '60 days',updated_at=now()
@@ -29,11 +33,13 @@ export async function submitForReview(input: { session: UploadSession; user: Mee
     await client.query(`INSERT INTO uploads(id,profile_username,title,caption,platform_content,original_filename,media_size_bytes,media_path,uploader_open_id,uploader_name,status,target_platforms,review_status,submitted_at,video_width,video_height,video_duration_seconds,video_codec)
       VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,'pending_review',$11,'pending',now(),$12,$13,$14,$15)`,
     [input.session.id,profile || "pending",uploadTitle({platform_content:input.platformContent,original_filename:input.session.original_filename}),display.caption,JSON.stringify(input.platformContent),input.session.original_filename,Number(input.session.expected_size),input.session.media_path,input.user.openId,input.user.name,input.platforms,probe.width,probe.height,probe.duration,probe.codec]);
+    if (input.platforms.includes("facebook")) await client.query("UPDATE uploads SET facebook_page_id=$2 WHERE id=$1", [input.session.id, facebookPageId]);
   });
   return input.session.id;
 }
 
 export type ReviewRecord = {
+  facebook_page_id: string | null;
   id: string; title: string; caption: string; uploader_open_id: string | null; uploader_name: string | null; status: string;
   review_status: string; review_comment: string | null; submitted_at: string | null; reviewed_at: string | null; created_at: string;
   target_platforms: string[]; original_filename: string | null; media_size_bytes: string | null; media_path: string | null;
@@ -75,8 +81,11 @@ export async function decideReview(id: string, reviewer: MeeDooUser, decision: "
     const locked = await client.query<ReviewRecord>(`SELECT * FROM uploads WHERE id=$1 AND removed_at IS NULL FOR UPDATE`, [id]);
     const upload = locked.rows[0];
     if (!upload || upload.review_status !== "pending") throw new Error("REVIEW_NOT_PENDING");
+    if (decision === "approved" && upload.target_platforms.includes("facebook")) await assertFacebookDestination(upload.facebook_page_id);
     if (decision === "rejected" && !comment.trim()) throw new Error("COMMENT_REQUIRED");
     if (platformContent) {
+      const invalid = validatePlatformContent(platformContent, upload.target_platforms);
+      if (invalid) throw new Error(invalid);
       const display = platformContent.youtube;
       await client.query(`UPDATE uploads SET title=$2,caption=$3,platform_content=$4::jsonb,updated_at=now() WHERE id=$1`,
         [id,uploadTitle({platform_content:platformContent,original_filename:upload.original_filename}),display.caption,JSON.stringify(platformContent)]);
@@ -101,6 +110,8 @@ export async function updateReviewContent(id: string, reviewer: MeeDooUser, plat
     const locked = await client.query<ReviewRecord>(`SELECT * FROM uploads WHERE id=$1 AND removed_at IS NULL FOR UPDATE`, [id]);
     const upload = locked.rows[0];
     if (!upload || upload.review_status !== "pending") throw new Error("REVIEW_NOT_PENDING");
+    const invalid = validatePlatformContent(platformContent, upload.target_platforms);
+    if (invalid) throw new Error(invalid);
     const display = platformContent.youtube;
     await client.query(`UPDATE uploads SET title=$2,caption=$3,platform_content=$4::jsonb,updated_at=now() WHERE id=$1`,
       [id,uploadTitle({platform_content:platformContent,original_filename:upload.original_filename}),display.caption,JSON.stringify(platformContent)]);

@@ -1,11 +1,13 @@
 export const UPLOAD_POST_ORIGIN = "https://api.upload-post.com";
-export const supportedPlatforms = ["tiktok", "instagram", "youtube"] as const;
+import { supportedPlatforms } from "./social-platforms";
+export { supportedPlatforms, requiredPlatforms } from "./social-platforms";
 export type UploadPostPlatform = typeof supportedPlatforms[number];
 
 export function getUploadPostConfig() {
   return {
     apiKey: process.env.UPLOAD_POST_API_KEY ?? "",
     profile: process.env.UPLOAD_POST_PROFILE ?? "",
+    facebookPageId: process.env.UPLOAD_POST_FACEBOOK_PAGE_ID?.trim() || null,
   };
 }
 

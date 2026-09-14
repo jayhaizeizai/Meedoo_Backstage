@@ -6,7 +6,7 @@ import { syncVideoMilestones } from "./video-milestones";
 import { db, ensureSchema, query, transaction } from "./db";
 import { flushNotifications } from "./notifications";
 import { syntheticUuid } from "./records";
-import { getUploadPostConfig, parseProviderResponse, uploadPostFetch } from "./upload-post";
+import { getUploadPostConfig, parseProviderResponse, uploadPostFetch, supportedPlatforms } from "./upload-post";
 import { cleanupExpiredUploadSessions } from "./upload-staging";
 import { runMaintenance } from "./maintenance";
 import { syncProfileAnalytics } from "./profile-analytics";
@@ -66,7 +66,7 @@ export async function syncHistory() {
   for (const row of rows) {
     const requestId = stringValue(row.request_id) ?? stringValue(row.external_id) ?? stringValue(row.job_id);
     const platform = stringValue(row.platform);
-    if (!requestId || !platform) continue;
+    if (!requestId || !platform || !supportedPlatforms.some(item => item === platform)) continue;
     const uploadTimestamp = Date.parse(stringValue(row.upload_timestamp) ?? "");
     if (Number.isFinite(historyAfter) && (!Number.isFinite(uploadTimestamp) || uploadTimestamp < historyAfter)) continue;
     const uploadId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(stringValue(row.external_id) ?? "")

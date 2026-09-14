@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { socialTextLength, socialTextLimit } from "../../../lib/social-platforms";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "../../../components/app-shell";
@@ -23,12 +24,12 @@ const contentMatches = (content: PlatformContent, platforms: string[]) => platfo
   && platforms.every((platform) => JSON.stringify(content[platform]) === JSON.stringify(content[platforms[0]]));
 
 function validateContent(content: PlatformContent) {
-  for (const platform of requiredPlatforms) {
+  for (const platform of Object.keys(content)) {
     const value = content[platform];
     if (!value?.title.trim() || !value.caption.trim()) return `${platform}: title and caption are required`;
     if (value.title.trim().length > 100) return `${platform}: title must be at most 100 characters`;
     if (/[<>]/.test(value.title) || /[<>]/.test(value.caption)) return `${platform}: < and > are not allowed`;
-    if (`${value.title.trim()}\n\n${value.caption.trim()}`.length > 2200) return `${platform}: title and caption must total at most 2,200 characters`;
+    if (socialTextLength(platform,`${value.title.trim()}\n\n${value.caption.trim()}`) > socialTextLimit(platform)) return `${platform}: title and caption must total at most ${socialTextLimit(platform)} weighted characters`;
     if (new TextEncoder().encode(value.caption.trim()).length > 5000) return `${platform}: caption must be at most 5,000 bytes`;
   }
   return "";
@@ -56,7 +57,7 @@ export default function ApprovalDetail() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message);
       const record = payload.record as RecordItem;
-      const initial = Object.fromEntries(requiredPlatforms.map((platform) => [platform, copyFor(record, platform)]));
+      const initial = Object.fromEntries(record.target_platforms.map((platform) => [platform, copyFor(record, platform)]));
       setItem(record); setContent(initial); setSharedContent(contentMatches(initial, record.target_platforms));
       setApprover(payload.approver); setHistory(payload.history ?? []); setMediaUrl(payload.mediaUrl); setMediaUnavailable(!payload.mediaUrl);
     }).catch((cause) => setError(cause.message));
@@ -65,7 +66,7 @@ export default function ApprovalDetail() {
   function updatePlatform(platform: string, field: keyof PostContent, value: string) {
     setSaved(false);
     setContent((current) => {
-      if (sharedContent) return Object.fromEntries(requiredPlatforms.map((id) => [id, { ...current[id], [field]: value }]));
+      if (sharedContent) return Object.fromEntries((item?.target_platforms ?? requiredPlatforms).map((id) => [id, { ...current[id], [field]: value }]));
       return { ...current, [platform]: { ...current[platform], [field]: value } };
     });
   }
@@ -74,7 +75,7 @@ export default function ApprovalDetail() {
     setSaved(false); setSharedContent(checked);
     if (checked) setContent((current) => {
       const source = current.youtube ?? current[requiredPlatforms[0]];
-      return Object.fromEntries(requiredPlatforms.map((platform) => [platform, { ...source }]));
+      return Object.fromEntries((item?.target_platforms ?? requiredPlatforms).map((platform) => [platform, { ...source }]));
     });
   }
 
@@ -133,7 +134,7 @@ export default function ApprovalDetail() {
           <span className={`review-badge ${item.review_status}`}>{item.review_status}</span>
           <h1>{heading}</h1>
           <p className="review-by">{item.uploader_name} · {new Date(item.submitted_at).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}</p>
-          {contentMatches(content, item.target_platforms) && <div className="copy-match-badge">✓ {text("三个平台内容一致", "Content matches across all platforms")}</div>}
+          {contentMatches(content, item.target_platforms) && <div className="copy-match-badge">✓ {text("所选平台内容一致", "Content matches across all platforms")}</div>}
           <dl className="review-metadata">
             <div><dt>{text("目标平台", "Platforms")}</dt><dd>{item.target_platforms.join(" · ")}</dd></div>
             <div><dt>{text("文件", "File")}</dt><dd>{item.original_filename}<small>{item.media_size_bytes ? ` ${(Number(item.media_size_bytes) / 1024 / 1024).toFixed(1)} MB` : ""}</small></dd></div>
@@ -142,9 +143,9 @@ export default function ApprovalDetail() {
           {editable ? <section className="approval-content-editor">
             <header><div><h2>{text("发布内容", "Publishing content")}</h2><p>{text("审批员可以在发布前修正标题和文案。", "Approvers can correct titles and captions before publishing.")}</p></div><label className="approval-sync-toggle"><input type="checkbox" checked={sharedContent} onChange={(event) => toggleShared(event.target.checked)} />{text("三平台同步", "Sync all platforms")}</label></header>
             {sharedContent ? <ContentFields platform="youtube" value={content.youtube} onChange={updatePlatform} text={text} shared />
-              : requiredPlatforms.map((platform) => <ContentFields key={platform} platform={platform} value={content[platform]} onChange={updatePlatform} text={text} />)}
+              : item.target_platforms.map((platform) => <ContentFields key={platform} platform={platform} value={content[platform]} onChange={updatePlatform} text={text} />)}
             <div className="approval-save-row"><button disabled={busy} onClick={() => void saveContent()}>{busy ? text("保存中…", "Saving…") : text("保存内容修改", "Save content changes")}</button>{saved && <span>✓ {text("已保存", "Saved")}</span>}</div>
-          </section> : <section className="approval-content-readonly">{contentMatches(content, item.target_platforms) ? <ReadOnlyContent label={text("三平台共用内容", "Shared across all platforms")} value={content[item.target_platforms[0]]} /> : item.target_platforms.map((platform) => <ReadOnlyContent key={platform} label={platform} value={content[platform]} />)}</section>}
+          </section> : <section className="approval-content-readonly">{contentMatches(content, item.target_platforms) ? <ReadOnlyContent label={text("所选平台共用内容", "Shared across all platforms")} value={content[item.target_platforms[0]]} /> : item.target_platforms.map((platform) => <ReadOnlyContent key={platform} label={platform} value={content[platform]} />)}</section>}
           {editable && <><label>{text("审批评价（拒绝时必填）", "Review comment (required for rejection)")}<textarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={1000} /></label><div className="review-actions"><button disabled={busy} className="reject" onClick={() => requestDecision("rejected")}>{text("不通过", "Reject")}</button><button disabled={busy} className="approve" onClick={() => requestDecision("approved")}>✓ {text("批准并发布", "Approve & publish")}</button></div></>}
           {history.length > 0 && <section className="review-history"><h2>{text("审批历史", "Review history")}</h2>{history.map((event, index) => <div key={`${event.created_at}-${index}`}><strong>{event.decision}</strong><span>{event.reviewer_name} · {new Date(event.created_at).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}</span>{event.comment && <p>{event.comment}</p>}</div>)}</section>}
         </aside>
@@ -157,7 +158,7 @@ export default function ApprovalDetail() {
 function ContentFields({ platform, value, onChange, text, shared = false }: { platform: string; value?: PostContent; onChange: (platform: string, field: keyof PostContent, value: string) => void; text: (zh: string, en: string) => string; shared?: boolean }) {
   const content = value ?? { title: "", caption: "" };
   const combined = content.title.trim().length + (content.caption.trim() ? 2 + content.caption.trim().length : 0);
-  return <div className="approval-content-fields"><strong>{shared ? text("三平台共用内容", "Shared across all platforms") : platform}</strong><label><span>{text("标题", "Title")} <small>{content.title.length}/100</small></span><input maxLength={100} value={content.title} onChange={(event) => onChange(platform, "title", event.target.value)} /></label><label><span>{text("文案", "Caption")} <small>{combined}/2,200</small></span><textarea maxLength={2200} value={content.caption} onChange={(event) => onChange(platform, "caption", event.target.value)} /></label></div>;
+  return <div className="approval-content-fields"><strong>{shared ? text("所选平台共用内容", "Shared across all platforms") : platform}</strong><label><span>{text("标题", "Title")} <small>{content.title.length}/100</small></span><input maxLength={100} value={content.title} onChange={(event) => onChange(platform, "title", event.target.value)} /></label><label><span>{text("文案", "Caption")} <small>{socialTextLength(platform,`${content.title.trim()}\n\n${content.caption.trim()}`)}/{socialTextLimit(platform)}</small></span><textarea maxLength={2200} value={content.caption} onChange={(event) => onChange(platform, "caption", event.target.value)} /></label></div>;
 }
 
 function ReadOnlyContent({ label, value }: { label: string; value?: PostContent }) {

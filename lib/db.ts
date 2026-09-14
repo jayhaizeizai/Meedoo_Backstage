@@ -215,6 +215,7 @@ export async function ensureSchema() {
     ALTER TABLE notifications ADD COLUMN IF NOT EXISTS lark_attempted_at timestamptz;
     CREATE INDEX IF NOT EXISTS uploads_uploader_created_idx ON uploads(uploader_open_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS uploads_status_idx ON uploads(status);
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS facebook_page_id text;
     CREATE INDEX IF NOT EXISTS upload_sessions_expiry_idx ON upload_sessions(expires_at);
     CREATE INDEX IF NOT EXISTS publications_status_idx ON publications(status);
     CREATE UNIQUE INDEX IF NOT EXISTS publications_platform_post_unique

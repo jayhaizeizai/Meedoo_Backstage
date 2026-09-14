@@ -1,3 +1,4 @@
+import { supportedPlatforms, viewMetricKeys } from "./social-platforms";
 import { query } from "./db";
 import { loadFollowerHistory } from "./follower-history";
 import { equivalentRetention } from "./equivalent-retention";
@@ -13,7 +14,7 @@ export const metricDefinitions = [
   { key: "comments", zh: "评论", en: "Comments", weight: 6 },
 ] as const;
 
-const platforms = ["tiktok", "instagram", "youtube"] as const;
+const platforms = supportedPlatforms;
 type MetricKey = typeof metricDefinitions[number]["key"];
 type Metrics = Record<MetricKey, number | null>;
 
@@ -43,7 +44,7 @@ type SnapshotRow = Row & {
 };
 
 const aliases: Record<Exclude<MetricKey, "views">, string[]> = {
-  likes: ["likes", "like_count"],
+  likes: ["likes", "like_count", "reactions"],
   retention: [],
   shares: ["shares", "share_count"],
   followers: ["followers_gained", "new_followers", "subscribers_gained", "new_subscribers"],
@@ -66,7 +67,7 @@ function numberFrom(metrics: Record<string, unknown> | null, keys: string[]) {
 }
 
 function normalize(row: Row): Metrics {
-  const viewKeys = row.platform === "instagram" ? ["reach", "views", "impressions"] : ["views", "reach", "impressions"];
+  const viewKeys = viewMetricKeys(row.platform);
   return Object.fromEntries(metricDefinitions.map(({ key }) => [
     key,
     key === "views" ? numberFrom(row.metrics, viewKeys) : key === "retention"
@@ -75,7 +76,7 @@ function normalize(row: Row): Metrics {
       ? numberFrom(row.metrics, aliases.followers) ?? (row.attributed_followers === null ? null : Number(row.attributed_followers))
       : key === "shares" ? sumAvailable(
         numberFrom(row.metrics, aliases.shares),
-        numberFrom(row.metrics, ["reposts", "repost_count", "repost"]),
+        numberFrom(row.metrics, ["reposts", "repost_count", "repost", "retweets", "retweet_count"]),
       )
       : numberFrom(row.metrics, aliases[key]),
   ])) as Metrics;

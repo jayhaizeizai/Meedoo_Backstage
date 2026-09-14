@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { platformMeta, type SocialPlatform } from "../../../../lib/social-platforms";
 import { TikTokRetentionChart } from "../../../../components/tiktok-retention-chart";
 import type { TikTokRetention } from "../../../../lib/tiktok-retention";
 import { useParams } from "next/navigation";
@@ -9,7 +10,7 @@ import { AppShell } from "../../../../components/app-shell";
 import { useLanguage } from "../../../../components/language-provider";
 
 type MetricKey = "views" | "likes" | "retention" | "shares" | "followers" | "saves" | "comments";
-type Platform = "tiktok" | "instagram" | "youtube";
+type Platform = SocialPlatform;
 type PlatformKey = "all" | Platform;
 type Metrics = Record<MetricKey, number | null>;
 type Point = { minute: number; metrics: Record<PlatformKey, Metrics> };
@@ -20,7 +21,6 @@ type DetailData = {
   timeline: { target: { fallback: boolean; points: Point[] }; owner: { count: number; fallbackCount: number; points: Point[] }; team: { count: number; fallbackCount: number; points: Point[] } };
 };
 
-const platformMeta: Record<Platform, { name: string; icon: string }> = { tiktok: { name: "TikTok", icon: "♪" }, instagram: { name: "Instagram", icon: "◎" }, youtube: { name: "YouTube", icon: "▶" } };
 const platforms = Object.keys(platformMeta) as Platform[];
 
 function format(value: number | null, key: MetricKey, language: "zh" | "en") {

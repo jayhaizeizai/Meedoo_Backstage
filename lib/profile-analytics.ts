@@ -1,4 +1,5 @@
 import { PoolClient } from "pg";
+import { viewMetricKeys } from "./social-platforms";
 import { transaction } from "./db";
 import { getUploadPostConfig, parseProviderResponse, supportedPlatforms, uploadPostFetch, UploadPostPlatform } from "./upload-post";
 
@@ -25,7 +26,7 @@ function followersFrom(value: AnyRecord | null) {
 
 function viewsFrom(platform: UploadPostPlatform, metrics: AnyRecord | null) {
   if (!metrics) return null;
-  const keys = platform === "instagram" ? ["reach", "views", "impressions"] : ["views", "impressions", "reach"];
+  const keys = viewMetricKeys(platform);
   for (const key of keys) {
     const parsed = numeric(metrics[key]);
     if (parsed !== null) return Math.max(0, parsed);
@@ -74,8 +75,11 @@ async function attributeFollowerGain(client: PoolClient, platform: UploadPostPla
 }
 
 export async function syncProfileAnalytics() {
-  const { profile } = getUploadPostConfig();
-  const response = await uploadPostFetch(`/api/analytics/${encodeURIComponent(profile)}?platforms=${supportedPlatforms.join(",")}`);
+  const { profile, facebookPageId } = getUploadPostConfig();
+  const selected = supportedPlatforms.filter(platform => platform !== "facebook" || facebookPageId);
+  const params = new URLSearchParams({ platforms: selected.join(",") });
+  if (facebookPageId) params.set("page_id", facebookPageId);
+  const response = await uploadPostFetch(`/api/analytics/${encodeURIComponent(profile)}?${params}`);
   const payload = await parseProviderResponse(response);
   if (!response.ok) throw new Error("UPLOAD_POST_PROFILE_ANALYTICS_FAILED");
   const root = record(payload.platforms) ?? payload;
@@ -93,7 +97,7 @@ export async function syncProfileAnalytics() {
       const inserted = await client.query<{ id: string; captured_at: string }>(`INSERT INTO profile_metric_snapshots(platform,captured_at,followers,metrics)
         VALUES($1,$2,$3,$4::jsonb) ON CONFLICT(platform,captured_at) DO UPDATE SET followers=excluded.followers,metrics=excluded.metrics
         RETURNING id::text,captured_at`, [platform, capturedAt.toISOString(), followers, JSON.stringify(metrics)]);
-      const attribution = await attributeFollowerGain(client, platform, inserted.rows[0].id, inserted.rows[0].captured_at, followers);
+      const attribution = platform === "facebook" || platform === "x" ? { attributed: 0, estimatedAttribution: false } : await attributeFollowerGain(client, platform, inserted.rows[0].id, inserted.rows[0].captured_at, followers);
       return { available: true, followers, ...attribution };
     });
   }

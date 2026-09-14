@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
+import { platformMeta, type SocialPlatform } from "../../lib/social-platforms";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
 
 type MetricKey = "views" | "likes" | "retention" | "shares" | "followers" | "saves" | "comments";
-type Platform = "tiktok" | "instagram" | "youtube";
+type Platform = SocialPlatform;
 type Metrics = Record<MetricKey, number | null>;
 type PlatformAggregate = { metrics: Metrics; engagementRate: number | null; videoCount: number; mix: number[] };
 type Person = { legacyWatchQuality: { value: number | null; ratio: number | null; score: number | null }; id: string; name: string; role: string; avatar: string | null; videoCount: number; metrics: Metrics; ratios: Metrics; scores: Metrics; totalScore: number; mix: number[]; engagementRate: number | null };
@@ -22,11 +23,6 @@ type DashboardData = {
   videos: Video[];
 };
 
-const platformMeta: Record<Platform, { name: string; className: string; icon: string }> = {
-  tiktok: { name: "TikTok", className: "tt", icon: "♪" },
-  instagram: { name: "Instagram", className: "ig", icon: "◎" },
-  youtube: { name: "YouTube", className: "yt", icon: "▶" },
-};
 // Temporarily hide rankings while keeping the implementation for later.
 const leaderboardEnabled = false;
 const allPlatforms = Object.keys(platformMeta) as Platform[];
@@ -187,7 +183,7 @@ function Kpis({ values, labels, language }: { values: string[]; labels: string[]
 }
 
 function PlatformMix({ mix, title, language }: { mix: number[]; title: string; language: "zh" | "en" }) {
-  return <section className="card panel"><div className="panel-head"><div><h2>{title}</h2><p>{language === "zh" ? "按浏览 / 触达分布" : "Distribution by views / reach"}</p></div></div><div className="platform-share">{allPlatforms.map((platform, index) => <div className="share-row" key={platform}><span><i className={`pi ${platformMeta[platform].className}`}>{platformMeta[platform].icon}</i>{platformMeta[platform].name}</span><div className="track"><i style={{ width: `${mix[index] ?? 0}%`, background: ["#252936", "#d55a85", "#ff4c4c"][index] }} /></div><b>{(mix[index] ?? 0).toFixed(1)}%</b></div>)}</div></section>;
+  return <section className="card panel"><div className="panel-head"><div><h2>{title}</h2><p>{language === "zh" ? "按浏览 / 触达分布" : "Distribution by views / reach"}</p></div></div><div className="platform-share">{allPlatforms.map((platform, index) => <div className="share-row" key={platform}><span><i className={`pi ${platformMeta[platform].className}`}>{platformMeta[platform].icon}</i>{platformMeta[platform].name}</span><div className="track"><i style={{ width: `${mix[index] ?? 0}%`, background: platformMeta[platform].color }} /></div><b>{(mix[index] ?? 0).toFixed(1)}%</b></div>)}</div></section>;
 }
 
 function MetricsTable({ definitions, metrics, ratios, scores, legacy, language }: { definitions: DashboardData["metricDefinitions"]; metrics: Metrics; ratios: Metrics; scores: Metrics; legacy: Person["legacyWatchQuality"]; language: "zh" | "en" }) {
