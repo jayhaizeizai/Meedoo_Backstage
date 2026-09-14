@@ -203,6 +203,12 @@ export async function ensureSchema() {
       updated_by text REFERENCES meedoo_users(open_id) ON DELETE SET NULL,
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS libtv_member_mappings (
+      member_id text PRIMARY KEY,
+      uploader_open_id text NOT NULL REFERENCES meedoo_users(open_id) ON DELETE CASCADE,
+      updated_by text REFERENCES meedoo_users(open_id) ON DELETE SET NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE INDEX IF NOT EXISTS uploads_uploader_created_idx ON uploads(uploader_open_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS uploads_status_idx ON uploads(status);
     CREATE INDEX IF NOT EXISTS upload_sessions_expiry_idx ON upload_sessions(expires_at);
