@@ -43,20 +43,25 @@ export default function UploadPage() {
             <h1>{text("上传并提交审批", "Upload & submit for review")}</h1>
             <p>
               {text(
-                "审批通过后，系统才会发布到五平台。",
-                "Your video is published to the all five platforms only after approval.",
+                "审批通过后，系统才会发布到已启用平台。",
+                "Your video is published to the enabled platforms only after approval.",
               )}
             </p>
           </div>
           <div
             className="platform-flow"
-            aria-label="TikTok, Instagram, YouTube Shorts, Facebook, X"
+            aria-label={platformOptions
+              .filter((p) => platforms.includes(p.id))
+              .map((p) => p.name)
+              .join(", ")}
           >
-            {platformOptions.map((platform) => (
-              <i className={`pi ${platform.className}`} key={platform.id}>
-                {platform.icon}
-              </i>
-            ))}
+            {platformOptions
+              .filter((p) => platforms.includes(p.id))
+              .map((platform) => (
+                <i className={`pi ${platform.className}`} key={platform.id}>
+                  {platform.icon}
+                </i>
+              ))}
           </div>
         </div>
 
@@ -129,8 +134,8 @@ export default function UploadPage() {
             {connection?.configured && !selectedPlatformsConnected && (
               <div className="publish-error connection-warning">
                 {text(
-                  "请先连接全部五个平台，并配置 Facebook 公共主页。",
-                  "Connect all five platforms and configure the Facebook Page first.",
+                  "请先连接所有已启用平台；启用 Facebook 时还需配置公共主页。",
+                  "Connect enabled platforms; configure a Page if Facebook is enabled.",
                 )}
               </div>
             )}
@@ -151,8 +156,8 @@ export default function UploadPage() {
                       `Uploading ${uploadProgress ?? 0}%`,
                     )
                 : text(
-                    "提交五平台审批 →",
-                    "Submit all five platforms for review →",
+                    "提交已启用平台审批 →",
+                    "Submit enabled platforms for review →",
                   )}
             </button>
             {uploadProgress !== null && (

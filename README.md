@@ -109,7 +109,7 @@ docs/                        专项说明、历史发布记录
 4. 轮询、Webhook、定时同步回收状态并保存 Provider ID、平台原生 ID 和链接。
 
 - 最大 1.5 GB、16 MB 分片，支持断点续传；视频要求竖屏 9:16，另有平台限制。
-- 新提交固定 TikTok、Instagram、YouTube、Facebook、X 五个平台，默认共用文案，可关闭同步独立编辑。
+- 新提交使用服务器启用的平台，默认共用文案，可关闭同步独立编辑。五个平台分别通过 `MEEDOO_PLATFORM_TIKTOK_ENABLED`、`MEEDOO_PLATFORM_INSTAGRAM_ENABLED`、`MEEDOO_PLATFORM_YOUTUBE_ENABLED`、`MEEDOO_PLATFORM_FACEBOOK_ENABLED`、`MEEDOO_PLATFORM_X_ENABLED` 控制；未配置默认启用，`true/1/on` 启用，其他显式值关闭。修改 `/etc/meedoo/meedoo.env` 后重启服务生效，不需重建前端。正式服目前 Facebook/X 为 `false`，测试服保留五个平台。关闭的平台从上传入口、数据筛选与分布中隐藏，并禁止新提交、审批发布和重试；历史记录和数据同步保留。旧五平台待审批记录如含关闭平台，必须先处理目标平台或重新启用，不能静默漏发。
 - 历史三平台记录继续兼容，不应强制补为五平台重新发布。
 - Facebook 固定目标 Page ID，X 限制为单帖，细节见 [Facebook/X 接入](docs/facebook-x.md)。
 - 重试结果不明确时保持待核对状态，不能盲目再次发布，避免重复帖。

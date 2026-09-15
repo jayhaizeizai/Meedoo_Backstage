@@ -1,3 +1,4 @@
+import { getEnabledPlatforms } from "../../../../lib/platform-settings";
 import { assertFacebookDestination } from "../../../../lib/facebook-destination";
 import { updateUploadSummary } from "../../../../lib/publication-status";
 import { expireDashboardCache } from "../../../../lib/dashboard-cache";
@@ -35,6 +36,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { success: false, message: "Invalid retry request." },
       { status: 400 },
+    );
+  if (!getEnabledPlatforms().includes(body.platform as UploadPostPlatform))
+    return NextResponse.json(
+      {
+        success: false,
+        message: "This platform is disabled.",
+        code: "PLATFORM_DISABLED",
+      },
+      { status: 409 },
     );
   const found = await query<{
     facebook_page_id: string | null;

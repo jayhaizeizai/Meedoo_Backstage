@@ -1,3 +1,4 @@
+import { getEnabledPlatforms } from "../../../../lib/platform-settings";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
@@ -20,6 +21,7 @@ export async function GET() {
       required: getLarkConfig().required,
       user,
       role,
+      enabledPlatforms: getEnabledPlatforms(),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

@@ -1,3 +1,4 @@
+import { getEnabledPlatforms } from "./platform-settings";
 import { assertFacebookDestination } from "./facebook-destination";
 import { expireDashboardCache } from "./dashboard-cache";
 import { createMediaUrl } from "./media-url";
@@ -39,6 +40,11 @@ export async function publishApprovedUpload(uploadId: string) {
     (item): item is UploadPostPlatform =>
       supportedPlatforms.includes(item as UploadPostPlatform),
   );
+  if (
+    !platforms.length ||
+    platforms.some((p) => !getEnabledPlatforms().includes(p))
+  )
+    throw new Error("PLATFORM_DISABLED");
   const { profile } = getUploadPostConfig();
   const youtube = contentForPlatform(
     upload.platform_content,

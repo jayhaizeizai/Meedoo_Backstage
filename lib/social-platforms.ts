@@ -1,4 +1,4 @@
-// Shared, browser-safe definitions: all five channels are part of every new submission.
+// Browser-safe catalog. Runtime availability is provided by the server.
 export const supportedPlatforms = [
   "tiktok",
   "instagram",

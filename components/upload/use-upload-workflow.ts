@@ -1,11 +1,7 @@
 "use client";
 import { prepareVideoUpload } from "./upload-transport";
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
-import {
-  requiredPlatforms,
-  socialTextLength,
-  socialTextLimit,
-} from "../../lib/social-platforms";
+import { socialTextLength, socialTextLimit } from "../../lib/social-platforms";
 import { titleForSelectedFile } from "../../lib/upload-title";
 import { useAuth } from "../auth-provider";
 import { useLanguage } from "../language-provider";
@@ -27,7 +23,7 @@ import {
 } from "./upload-model";
 export function useUploadWorkflow() {
   const { text } = useLanguage();
-  const { user } = useAuth();
+  const { user, enabledPlatforms } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -35,7 +31,7 @@ export function useUploadWorkflow() {
   const [platformContent, setPlatformContent] =
     useState<PlatformContentState>(emptyPlatformContent);
   const [syncPlatformContent, setSyncPlatformContent] = useState(true);
-  const platforms: readonly string[] = requiredPlatforms;
+  const platforms: readonly string[] = enabledPlatforms;
   const connection = usePlatformConnection(user);
   const [publishing, setPublishing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -263,7 +259,8 @@ export function useUploadWorkflow() {
   }
 
   const connectedCount = platformOptions.filter(
-    (platform) => connection?.connected[platform.id],
+    (platform) =>
+      platforms.includes(platform.id) && connection?.connected[platform.id],
   ).length;
   const invalidPlatform = platformOptions
     .filter(({ id }) => platforms.includes(id))
@@ -291,11 +288,8 @@ export function useUploadWorkflow() {
         `${invalidPlatform.name} 的标题和文案均为必填，并且必须符合长度与字符规则。`,
         `${invalidPlatform.name} requires both a valid title and caption.`,
       )
-    : requiredPlatforms.some((id) => !platforms.includes(id))
-      ? text(
-          "必须连接全部五个平台，并配置 Facebook 公共主页后才能提交审批。",
-          "Connect all five platforms and configure the Facebook Page before submitting.",
-        )
+    : !platforms.length
+      ? text("当前没有启用的发布平台。", "No publishing platforms are enabled.")
       : "";
   const selectedPlatformsConnected = platforms.every(
     (platform) =>
@@ -306,7 +300,7 @@ export function useUploadWorkflow() {
   const canPublish = Boolean(
     file &&
       !validationError &&
-      requiredPlatforms.every((id) => platforms.includes(id)) &&
+      platforms.length > 0 &&
       user &&
       connection?.configured &&
       selectedPlatformsConnected &&
@@ -317,8 +311,8 @@ export function useUploadWorkflow() {
       ? { zh: "检查平台连接", en: "Checking platform connections" }
       : connection.configured
         ? {
-            zh: `${connectedCount}/5 平台已连接`,
-            en: `${connectedCount}/5 platforms connected`,
+            zh: `${connectedCount}/${platforms.length} 平台已连接`,
+            en: `${connectedCount}/${platforms.length} platforms connected`,
           }
         : { zh: "等待 Upload-Post 配置", en: "Awaiting Upload-Post setup" };
 

@@ -1,4 +1,5 @@
 "use client";
+import { useAuth } from "../../../../components/auth-provider";
 
 import Link from "next/link";
 import {
@@ -90,7 +91,9 @@ export default function VideoDetailPage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<DetailData | null>(null);
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState<Platform[]>(platforms);
+  const { enabledPlatforms } = useAuth();
+  const [selection, setSelected] = useState<Platform[]>(platforms);
+  const selected = selection.filter((p) => enabledPlatforms.includes(p));
   useEffect(() => {
     void fetch(`/api/videos/${encodeURIComponent(params.id)}/analytics`, {
       cache: "no-store",
@@ -198,7 +201,7 @@ export default function VideoDetailPage() {
                 </small>
               </div>
               <div className="platform-selector">
-                {platforms.map((platform) => (
+                {enabledPlatforms.map((platform) => (
                   <button
                     key={platform}
                     className={selected.includes(platform) ? "active" : ""}

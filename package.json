@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node scripts/verify-upload-transport.cjs && node scripts/verify-tiktok-retention.cjs && node scripts/verify-facebook-x.cjs",
+    "test": "node scripts/verify-platform-settings.cjs && node scripts/verify-upload-transport.cjs && node scripts/verify-tiktok-retention.cjs && node scripts/verify-facebook-x.cjs",
     "test:integration": "node scripts/verify-reliability.cjs && node scripts/verify-tiktok-retention.cjs --db && node scripts/verify-facebook-x.cjs --db"
   },
   "dependencies": {

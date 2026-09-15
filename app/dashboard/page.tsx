@@ -1,4 +1,5 @@
 "use client";
+import { useAuth } from "../../components/auth-provider";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
@@ -379,7 +380,9 @@ function TrendCard({
   data: DashboardData;
   language: "zh" | "en";
 }) {
-  const [selected, setSelected] = useState<Platform[]>(allPlatforms);
+  const { enabledPlatforms } = useAuth();
+  const [selection, setSelected] = useState<Platform[]>(allPlatforms);
+  const selected = selection.filter((p) => enabledPlatforms.includes(p));
   function toggle(platform: Platform) {
     setSelected((current) =>
       current.includes(platform)
@@ -451,9 +454,10 @@ function PlatformSelector({
   selected: Platform[];
   toggle: (platform: Platform) => void;
 }) {
+  const { enabledPlatforms } = useAuth();
   return (
     <div className="platform-selector">
-      {allPlatforms.map((platform) => (
+      {enabledPlatforms.map((platform) => (
         <button
           key={platform}
           className={selected.includes(platform) ? "active" : ""}
@@ -801,6 +805,7 @@ function PlatformMix({
   title: string;
   language: "zh" | "en";
 }) {
+  const { enabledPlatforms: useAuthEnabled } = useAuth();
   return (
     <section className="card panel">
       <div className="panel-head">
@@ -814,25 +819,28 @@ function PlatformMix({
         </div>
       </div>
       <div className="platform-share">
-        {allPlatforms.map((platform, index) => (
-          <div className="share-row" key={platform}>
-            <span>
-              <i className={`pi ${platformMeta[platform].className}`}>
-                {platformMeta[platform].icon}
-              </i>
-              {platformMeta[platform].name}
-            </span>
-            <div className="track">
-              <i
-                style={{
-                  width: `${mix[index] ?? 0}%`,
-                  background: platformMeta[platform].color,
-                }}
-              />
-            </div>
-            <b>{(mix[index] ?? 0).toFixed(1)}%</b>
-          </div>
-        ))}
+        {allPlatforms.map(
+          (platform, index) =>
+            useAuthEnabled.includes(platform) && (
+              <div className="share-row" key={platform}>
+                <span>
+                  <i className={`pi ${platformMeta[platform].className}`}>
+                    {platformMeta[platform].icon}
+                  </i>
+                  {platformMeta[platform].name}
+                </span>
+                <div className="track">
+                  <i
+                    style={{
+                      width: `${mix[index] ?? 0}%`,
+                      background: platformMeta[platform].color,
+                    }}
+                  />
+                </div>
+                <b>{(mix[index] ?? 0).toFixed(1)}%</b>
+              </div>
+            ),
+        )}
       </div>
     </section>
   );

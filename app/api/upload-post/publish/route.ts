@@ -1,10 +1,10 @@
+import { platformSelectionEnabled } from "../../../../lib/platform-settings";
 import { uploadTitle } from "../../../../lib/upload-title";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "../../../../lib/server-auth";
 import { getOwnedUploadSession } from "../../../../lib/upload-staging";
 import {
   supportedPlatforms,
-  requiredPlatforms,
   getUploadPostConfig,
   UploadPostPlatform,
 } from "../../../../lib/upload-post";
@@ -36,6 +36,12 @@ export async function POST(request: NextRequest) {
   ].filter((item): item is UploadPostPlatform =>
     supportedPlatforms.includes(item as UploadPostPlatform),
   );
+  if (!platformSelectionEnabled(platforms))
+    return error(
+      "Select all currently enabled platforms; disabled platforms cannot be submitted.",
+      400,
+      "ALL_PLATFORMS_REQUIRED",
+    );
   const staged = await getOwnedUploadSession(id, user.openId);
   if (!staged?.media_path || staged.status !== "ready")
     return error(
@@ -45,7 +51,7 @@ export async function POST(request: NextRequest) {
     );
   if (!platformContent)
     return error(
-      "A title and caption are required for all five platforms.",
+      "A title and caption are required for all enabled platforms.",
       400,
       "PLATFORM_CONTENT_REQUIRED",
     );
@@ -55,12 +61,6 @@ export async function POST(request: NextRequest) {
       "Each platform requires a valid title and caption. Titles must be 1–100 characters; title and caption together must be at most 2,200 characters.",
       400,
       validationCode,
-    );
-  if (requiredPlatforms.some((platform) => !platforms.includes(platform)))
-    return error(
-      "TikTok, Instagram, YouTube, Facebook, and X must all be selected.",
-      400,
-      "ALL_PLATFORMS_REQUIRED",
     );
   if (platforms.includes("facebook") && !getUploadPostConfig().facebookPageId)
     return error(

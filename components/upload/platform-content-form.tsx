@@ -35,23 +35,25 @@ export function PlatformContentForm({
           <div>
             <h2>
               {syncPlatformContent
-                ? text("五平台共用内容", "Shared content for all platforms")
+                ? text("已启用平台共用内容", "Shared content for all platforms")
                 : text("各平台独立内容", "Content for each platform")}
             </h2>
             <p>
               {syncPlatformContent
                 ? text(
-                    "填写一次，用于五平台",
-                    "Enter once and use it across all five platforms",
+                    "填写一次，用于已启用平台",
+                    "Enter once and use it across enabled platforms",
                   )
                 : text(
-                    "分别填写五平台的标题和文案",
+                    "分别填写已启用平台的标题和文案",
                     "Customize the title and caption for each platform",
                   )}
             </p>
           </div>
         </div>
-        <small>{platforms.length} / 5</small>
+        <small>
+          {platforms.length} / {platforms.length}
+        </small>
       </div>
       <div
         className={`provider-state${connection?.configured ? " ready" : ""}`}
@@ -110,13 +112,13 @@ export function PlatformContentForm({
         <span>{syncPlatformContent ? "✓" : ""}</span>
         <div>
           <strong>
-            {text("同步五平台内容", "Keep platform content in sync")}
+            {text("同步已启用平台内容", "Keep platform content in sync")}
           </strong>
           <small>
             {syncPlatformContent
               ? text(
-                  "编辑任意一项会同步到五平台",
-                  "Edits apply to all five platforms",
+                  "编辑任意一项会同步到已启用平台",
+                  "Edits apply to enabled platforms",
                 )
               : text("已开启独立编辑", "Platform fields can now differ")}
           </small>
@@ -147,7 +149,7 @@ export function PlatformContentForm({
                     ))}
                 </span>
                 <strong>
-                  {text("五平台共用", "Shared across all five platforms")}
+                  {text("已启用平台共用", "Shared across enabled platforms")}
                 </strong>
               </header>
               <label className="label field-label" htmlFor="shared-title">
@@ -169,11 +171,16 @@ export function PlatformContentForm({
               <label className="label field-label" htmlFor="shared-caption">
                 <span>{text("文案（必填）", "Caption (required)")}</span>
                 <small>
-                  {socialTextLength(
-                    "x",
-                    `${content.title.trim()}\n\n${content.caption.trim()}`,
-                  )}{" "}
-                  / 280 (X) · {combined} / 2,200
+                  {platforms.includes("x") && (
+                    <>
+                      {socialTextLength(
+                        "x",
+                        `${content.title.trim()}\n\n${content.caption.trim()}`,
+                      )}{" "}
+                      / 280 (X) ·{" "}
+                    </>
+                  )}
+                  {combined} / 2,200
                 </small>
               </label>
               <textarea
@@ -281,11 +288,11 @@ export function PlatformContentForm({
           ? `⚠ ${validationError}`
           : syncPlatformContent
             ? text(
-                "共用标题和文案会保存为五平台内容；取消勾选后可分别修改。",
-                "The shared title and caption are saved for all five platforms; turn sync off to customize them.",
+                "共用标题和文案会保存为已启用平台内容；取消勾选后可分别修改。",
+                "The shared title and caption are saved for enabled platforms; turn sync off to customize them.",
               )
             : text(
-                "五平台标题和文案必须全部填写。标题 1–100 字；每组标题与文案合计 ≤2,200 字；不可包含 < 或 >。",
+                "已启用平台标题和文案必须全部填写。标题 1–100 字；每组标题与文案合计 ≤2,200 字；不可包含 < 或 >。",
                 "All five platforms’ titles and captions are required. Each title is 1–100 chars; each title + caption is ≤2,200 chars; no < or >.",
               )}
       </small>
