@@ -226,7 +226,8 @@ export default function VideoDetailPage() {
               (data.video.tiktokRetention.length ? (
                 data.video.tiktokRetention.map((item) => (
                   <TikTokRetentionChart
-                    key={item.publicationId}
+                    key={`${data.video.id}:${item.publicationId}`}
+                    videoId={data.video.id}
                     {...item}
                     language={language}
                   />

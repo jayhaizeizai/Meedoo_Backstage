@@ -3021,3 +3021,34 @@
 .platform-selector {
   flex-wrap: wrap;
 }
+
+.retention-media-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+}
+.retention-video-panel {
+  min-width: 0;
+}
+.retention-video-panel video {
+  display: block;
+  width: 100%;
+  max-height: 440px;
+  background: #111827;
+  border-radius: 12px;
+}
+.retention-media-layout .retention-curve-plot {
+  min-width: 0;
+}
+.retention-media-layout .retention-curve-plot svg {
+  cursor: crosshair;
+}
+@media (max-width: 850px) {
+  .retention-media-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .retention-video-panel video {
+    max-height: 360px;
+  }
+}
