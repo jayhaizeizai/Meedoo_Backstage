@@ -4,7 +4,6 @@ import { getCurrentUser } from "../../../../lib/server-auth";
 import {
   getLibTvAccounting,
   importLibTvCsv,
-  saveLibTvMemberMapping,
 } from "../../../../lib/libtv-accounting";
 
 export const dynamic = "force-dynamic";
@@ -52,14 +51,15 @@ export async function POST(request: NextRequest) {
   try {
     const form = await request.formData();
     const action = String(form.get("action") ?? "import");
-    if (action === "map") {
-      await saveLibTvMemberMapping({
-        memberId: String(form.get("memberId") ?? ""),
-        uploaderOpenId: String(form.get("uploaderOpenId") ?? ""),
-        user,
-      });
-      return NextResponse.json({ success: true });
-    }
+    if (action !== "import")
+      return NextResponse.json(
+        {
+          success: false,
+          code: "ACCOUNTING_ACTION_DISABLED",
+          message: "Member mappings are managed in server configuration.",
+        },
+        { status: 400 },
+      );
     const file = form.get("file");
     const packagePoints = Number(form.get("packagePoints") ?? 16300);
     const packageCostCny = Number(form.get("packageCostCny") ?? 649);

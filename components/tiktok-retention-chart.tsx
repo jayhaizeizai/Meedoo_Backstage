@@ -211,8 +211,8 @@ export function TikTokRetentionChart({
       )}
       <p className="retention-explanation">
         {t(
-          "曲线分 = 留存曲线面积 ÷ 视频时长 × 100，表示整段视频的平均留存水平，不等于完播率。建议比较时长相近的视频；播放量少时先观察。此分数不参与综合分或奖金。",
-          "Curve score = area under the retention curve ÷ video duration × 100. It measures average retention across the video, not completion. Compare videos of similar length and treat low-view samples cautiously. Excluded from personal and bonus scores.",
+          "曲线分 = 留存曲线面积 ÷ 视频时长 × 100，表示整段视频的平均留存水平。",
+          "Curve score = area under the retention curve ÷ video duration × 100. It measures average retention across the video.",
         )}
       </p>
       {data?.inferredStart && (

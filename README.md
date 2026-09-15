@@ -138,7 +138,17 @@ Analytics 按最久未尝试记录轮转，每轮最多 80 条并有时间预算
 - 人民币成本 = 创作积分 × 649 ÷ 16,300。
 - 统计全部成员创作积分，排除 `member_id = 0` 系统每日清零；文件和记录均有去重。
 - 批准视频取自 `uploads`：`review_status = 'approved'`、`removed_at IS NULL`、`created_at` 在所选周内。不是 CSV 任务数，也不是审批时间。
-- 只有 approver 可上传 CSV、设置映射；映射保存在 `libtv_member_mappings`，重新导入继续使用。
+- 只有 approver 可上传 CSV；成员对应关系只在服务器配置文件维护，页面只读展示，旧 `action=map` API 已禁用。
+
+### Accounting 成员对应配置
+
+实际配置：`/etc/meedoo/libtv-member-mappings.json`，可用 `LIBTV_MEMBER_MAPPINGS_FILE` 指定其他绝对路径。仓库的 `config/libtv-member-mappings.example.json` 仅为示例，不能直接作为真实配置使用。
+
+- 首次部署前，载入该服务器的环境后执行 `pnpm accounting:mappings:export`，将其 `libtv_member_mappings` 原样导出；不会覆盖已有文件或修改旧表。正式环境仍需明确发布授权。
+- `memberId` 对应 LIBTV CSV 的成员 ID，`uploaderOpenId` 对应网站 `meedoo_users.open_id`；两种 ID 都是字符串，目前按一对一映射校验。`memberName`、`uploaderName` 只供维护者辨认，重命名不影响匹配。Haniya → Yihan Liang、XiaoAn → 小安的正式映射在正式部署时从正式数据库导出，不能复制测试环境的用户 ID。
+- 配置实时从服务端读取，修改后刷新 Accounting 即生效，无需重建或重启。先写临时文件、校验 JSON 后原子替换，保留部署前备份和服务可读的私有权限。
+- 未配置成员不自动按姓名归并；仅明确 ID 映射参与个人视频分摊。空列表表示没有映射。丢失/损坏文件、重复成员 ID 或网站用户 ID、无效网站用户会使接口报错，不静默退回旧表，避免核算用错人。
+- 配置留在 `/etc/meedoo`，不要随源码覆盖；旧数据库表保留供回滚及审计，应用不再读取或写入它。
 
 ## 数据表
 

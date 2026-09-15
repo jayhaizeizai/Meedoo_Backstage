@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "memberId": "replace-with-libtv-member-id",
+      "memberName": "Haniya",
+      "uploaderOpenId": "replace-with-website-user-open-id",
+      "uploaderName": "Yihan Liang"
+    },
+    {
+      "memberId": "replace-with-another-libtv-member-id",
+      "memberName": "XiaoAn",
+      "uploaderOpenId": "replace-with-another-website-user-open-id",
+      "uploaderName": "小安"
+    }
+  ]
+}

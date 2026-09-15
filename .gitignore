@@ -6,3 +6,5 @@ node_modules/
 *.tsbuildinfo
 .env*
 !.env.example
+
+config/libtv-member-mappings.json

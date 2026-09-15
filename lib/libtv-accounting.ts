@@ -1,3 +1,4 @@
+import { loadLibTvMemberMappings } from "./libtv-member-config";
 import { createHash } from "node:crypto";
 import { MeeDooUser } from "./auth";
 import { query, transaction } from "./db";
@@ -226,28 +227,6 @@ function weekWindow(value?: string | null) {
   return null;
 }
 
-const normalizeName = (value: string) =>
-  value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
-
-export async function saveLibTvMemberMapping(input: {
-  memberId: string;
-  uploaderOpenId: string;
-  user: MeeDooUser;
-}) {
-  if (!input.memberId.trim() || !input.uploaderOpenId.trim())
-    throw new Error("MAPPING_INVALID");
-  const uploader = await query<{ open_id: string }>(
-    "SELECT open_id FROM meedoo_users WHERE open_id=$1",
-    [input.uploaderOpenId],
-  );
-  if (!uploader.rowCount) throw new Error("MAPPING_UPLOADER_NOT_FOUND");
-  await query(
-    `INSERT INTO libtv_member_mappings(member_id,uploader_open_id,updated_by,updated_at) VALUES($1,$2,$3,now())
-    ON CONFLICT(member_id) DO UPDATE SET uploader_open_id=excluded.uploader_open_id,updated_by=excluded.updated_by,updated_at=now()`,
-    [input.memberId, input.uploaderOpenId, input.user.openId],
-  );
-}
-
 export async function getLibTvAccounting(requestedWeek?: string | null) {
   const weeks = await query<{
     week_start: string;
@@ -272,21 +251,18 @@ export async function getLibTvAccounting(requestedWeek?: string | null) {
   const uploaders = await query<{ open_id: string; name: string }>(
     "SELECT open_id,name FROM meedoo_users ORDER BY name",
   );
-  const mappings = await query<{ member_id: string; uploader_open_id: string }>(
-    "SELECT member_id,uploader_open_id FROM libtv_member_mappings",
-  );
-  const mappingByMember = new Map(
-    mappings.rows.map((row) => [row.member_id, row.uploader_open_id]),
-  );
+  const mappingByMember = await loadLibTvMemberMappings();
   const uploaderNameById = new Map(
     uploaders.rows.map((row) => [row.open_id, row.name]),
   );
+  for (const uploader of mappingByMember.values())
+    if (!uploaderNameById.has(uploader))
+      throw new Error("LIBTV_MAPPING_UPLOADER_NOT_FOUND");
   if (!selectedWeek)
     return {
       period: null,
       availableWeeks: weeks.rows.map((row) => row.week_start),
       setting,
-      uploaders: uploaders.rows,
       members: [],
       videos: [],
       totals: { points: 0, costCny: null, videoCount: 0 },
@@ -327,10 +303,10 @@ export async function getLibTvAccounting(requestedWeek?: string | null) {
     .map(([memberId, rows]) => {
       const memberName = rows[0].member_alias?.trim() || rows[0].member_name;
       const mappedUploaderOpenId = mappingByMember.get(memberId) ?? null;
-      const memberUploads = uploads.rows.filter((upload) =>
-        mappedUploaderOpenId
-          ? upload.uploader_open_id === mappedUploaderOpenId
-          : normalizeName(upload.uploader_name) === normalizeName(memberName),
+      const memberUploads = uploads.rows.filter(
+        (upload) =>
+          mappedUploaderOpenId !== null &&
+          upload.uploader_open_id === mappedUploaderOpenId,
       );
       const points = rows.reduce(
         (sum, row) => sum + Math.abs(Number(row.points)),
@@ -371,14 +347,14 @@ export async function getLibTvAccounting(requestedWeek?: string | null) {
     })
     .sort((left, right) => right.points - left.points);
   const videos = uploads.rows.map((upload) => {
-    const member = members.find((item) =>
-      item.mappedUploaderOpenId
-        ? item.mappedUploaderOpenId === upload.uploader_open_id
-        : normalizeName(item.memberName) ===
-          normalizeName(upload.uploader_name),
+    const member = members.find(
+      (item) =>
+        item.mappedUploaderOpenId !== null &&
+        item.mappedUploaderOpenId === upload.uploader_open_id,
     );
     return {
       ...upload,
+      libtvMemberId: member?.memberId ?? null,
       allocatedPoints: member?.perVideoPoints ?? null,
       allocatedCostCny: member?.perVideoCostCny ?? null,
     };
@@ -393,7 +369,6 @@ export async function getLibTvAccounting(requestedWeek?: string | null) {
     },
     availableWeeks: weeks.rows.map((row) => row.week_start),
     setting,
-    uploaders: uploaders.rows,
     members,
     videos,
     totals: {

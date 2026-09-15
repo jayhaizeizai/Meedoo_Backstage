@@ -66,7 +66,6 @@ type AccountingData = {
     timeZone: string;
   } | null;
   availableWeeks: string[];
-  uploaders: Array<{ open_id: string; name: string }>;
   setting: {
     packagePoints: number;
     packageCostCny: number;
@@ -93,6 +92,7 @@ type AccountingData = {
     uploader_open_id: string | null;
     uploader_name: string;
     created_at: string;
+    libtvMemberId: string | null;
     allocatedPoints: number | null;
     allocatedCostCny: number | null;
   }>;
@@ -287,7 +287,6 @@ function Accounting({ language }: { language: "zh" | "en" }) {
   const [packagePoints, setPackagePoints] = useState("16300");
   const [packageCostCny, setPackageCostCny] = useState("649");
   const [busy, setBusy] = useState(false);
-  const [mappingBusy, setMappingBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -376,40 +375,6 @@ function Accounting({ language }: { language: "zh" | "en" }) {
       );
     } finally {
       setBusy(false);
-    }
-  };
-
-  const mapMember = async (memberId: string, uploaderOpenId: string) => {
-    if (!uploaderOpenId) return;
-    setMappingBusy(memberId);
-    setError("");
-    setMessage("");
-    try {
-      const form = new FormData();
-      form.set("action", "map");
-      form.set("memberId", memberId);
-      form.set("uploaderOpenId", uploaderOpenId);
-      const response = await fetch("/api/weekly-report/accounting", {
-        method: "POST",
-        body: form,
-      });
-      const payload = (await response.json()) as {
-        success?: boolean;
-        message?: string;
-      };
-      if (!response.ok || !payload.success)
-        throw new Error(payload.message || "Mapping failed");
-      setMessage(
-        t(
-          "成员对应关系已保存，之后导入会自动识别。",
-          "Member mapping saved. Future imports will match automatically.",
-        ),
-      );
-      await load(selectedWeek);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Mapping failed");
-    } finally {
-      setMappingBusy("");
     }
   };
 
@@ -560,11 +525,8 @@ function Accounting({ language }: { language: "zh" | "en" }) {
           {data.members.length ? (
             <div className="accounting-members">
               {data.members.map((member) => {
-                const memberVideos = data.videos.filter((video) =>
-                  member.mappedUploaderOpenId
-                    ? video.uploader_open_id === member.mappedUploaderOpenId
-                    : video.uploader_name.trim().toLocaleLowerCase() ===
-                      member.memberName.trim().toLocaleLowerCase(),
+                const memberVideos = data.videos.filter(
+                  (video) => video.libtvMemberId === member.memberId,
                 );
                 return (
                   <article
@@ -584,36 +546,11 @@ function Accounting({ language }: { language: "zh" | "en" }) {
                       </div>
                       <div className="accounting-member-side">
                         <strong>{money(member.costCny)}</strong>
-                        {data.canUpload && (
-                          <label className="accounting-member-map">
-                            <span>{t("对应网站成员", "Website member")}</span>
-                            <select
-                              value={member.mappedUploaderOpenId ?? ""}
-                              disabled={mappingBusy === member.memberId}
-                              onChange={(event) =>
-                                void mapMember(
-                                  member.memberId,
-                                  event.target.value,
-                                )
-                              }
-                            >
-                              <option value="" disabled>
-                                {t(
-                                  "选择一次即可自动识别",
-                                  "Choose once to auto-match",
-                                )}
-                              </option>
-                              {data.uploaders.map((uploader) => (
-                                <option
-                                  value={uploader.open_id}
-                                  key={uploader.open_id}
-                                >
-                                  {uploader.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
+                        <small>
+                          {t("对应网站成员", "Website member")}:{" "}
+                          {member.mappedUploaderName ??
+                            t("尚未配置", "Not configured")}
+                        </small>
                       </div>
                     </header>
                     <div className="accounting-member-kpis">
@@ -633,8 +570,8 @@ function Accounting({ language }: { language: "zh" | "en" }) {
                     {!member.matched && (
                       <p className="accounting-warning">
                         {t(
-                          "尚未对应网站成员，选择一次后即可自动分摊到其本周视频。",
-                          "This LIBTV member is not mapped yet. Choose the website member once to enable weekly video allocation.",
+                          "暂无对应的已批准视频；成员对应关系由管理员维护。",
+                          "No matching approved videos. Member mappings are maintained by the administrator.",
                         )}
                       </p>
                     )}
