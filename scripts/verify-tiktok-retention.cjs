@@ -18,6 +18,7 @@ const {
   computeTikTokRetention: compute,
   withTikTokRetention,
   tiktokRetentionScore,
+  retentionVersion,
 } = require("../lib/tiktok-retention.ts");
 const curve = (fractions) => ({
   retention: fractions.map((percentage, second) => ({
@@ -30,6 +31,34 @@ close(compute(curve([1, 0.8, 0.6, 0.4]), 3).score, 70);
 close(compute(curve([0.5, 0.5, 0.5, 0.5]), 3).score, 50);
 close(compute(curve([0, 0, 0, 0]), 3).score, 0);
 close(compute(curve([1, 0.8, 0.6, 0.4]), 2.5).score, 75);
+const tail = compute(curve([1, 0.8, 0.6]), 2.5);
+close(tail.score, 76); // (0.9 + 0.7 + 0.6 * 0.5) / 2.5 * 100
+close(tail.estimatedTailSeconds, 0.5);
+assert.equal(tail.segments[0].length, 3); // No fabricated plotted points.
+assert.equal(tail.segments[0].at(-1).second, 2);
+assert.equal(compute(curve([1, 0.8, 0.6]), 3).status, "incomplete_curve");
+assert.equal(compute(curve([1, 0.8, 0.6]), 3.1).status, "incomplete_curve");
+assert.equal(compute(curve([1]), 0.9).score, null);
+assert.equal(
+  compute(
+    {
+      retention: [
+        { second: 0, percentage: 1 },
+        { second: 2, percentage: 0.5 },
+      ],
+    },
+    2.5,
+  ).score,
+  null,
+);
+close(compute(curve([0, 0]), 1.999).score, 0);
+assert.equal(compute(curve([1, 1]), 1).estimatedTailSeconds, 0);
+const observed = compute(
+  curve(Array.from({ length: 35 }, () => 0.4)),
+  34.922125,
+);
+close(observed.score, 40);
+close(observed.estimatedTailSeconds, 0.922125);
 const start = compute(
   {
     retention: [
@@ -177,6 +206,39 @@ async function databaseTest() {
       75,
     );
     assert.equal(await backfillTikTokRetention(), 0);
+    // Reprocess stored v1 missing-tail results, even when duration is unchanged.
+    await db.query(
+      "UPDATE uploads SET video_duration_seconds=3.5 WHERE id=$1",
+      [id],
+    );
+    await db.query(
+      "UPDATE metric_snapshots SET metrics=jsonb_set(metrics,'{meedoo_tiktok_retention}',$2::jsonb) WHERE publication_id=$1",
+      [
+        tt,
+        JSON.stringify({
+          version: 1,
+          duration: 3.5,
+          status: "incomplete_curve",
+          score: null,
+        }),
+      ],
+    );
+    assert.equal(await backfillTikTokRetention(), 1);
+    const revised = (
+      await db.query(
+        "SELECT metrics FROM metric_snapshots WHERE publication_id=$1",
+        [tt],
+      )
+    ).rows[0].metrics;
+    assert.equal(revised.meedoo_tiktok_retention.version, retentionVersion);
+    close(revised.meedoo_tiktok_retention.score, ((2.1 + 0.2) / 3.5) * 100);
+    close(revised.meedoo_tiktok_retention.estimatedTailSeconds, 0.5);
+    assert.equal(await backfillTikTokRetention(), 0);
+    await db.query(
+      "UPDATE uploads SET video_duration_seconds=2.5 WHERE id=$1",
+      [id],
+    );
+    await backfillTikTokRetention();
     // Exercise the real sync insertion with a mocked read-only provider.
     const filename = path.resolve(__dirname, "../lib/upload-post.ts");
     require.cache[filename] = {

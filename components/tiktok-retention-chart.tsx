@@ -41,7 +41,7 @@ export function TikTokRetentionChart({
       "Video duration is missing; the curve score is unavailable.",
     ),
     incomplete_curve: t(
-      "曲线未覆盖完整视频或存在缺点，暂不计算曲线分。",
+      "曲线存在采样缺口或末尾缺少至少 1 秒，暂不计算曲线分。",
       "The curve has gaps or does not cover the full video; the score is unavailable.",
     ),
     invalid_curve: t(
@@ -215,6 +215,14 @@ export function TikTokRetentionChart({
           "Curve score = area under the retention curve ÷ video duration × 100. It measures average retention across the video.",
         )}
       </p>
+      {data?.status === "complete" && data.estimatedTailSeconds > 0 && (
+        <p className="retention-explanation">
+          {t(
+            `末尾 ${data.estimatedTailSeconds.toFixed(3)} 秒沿用最后一个采样点的留存率近似计算；图中仅显示平台实际采样点。`,
+            `The final ${data.estimatedTailSeconds.toFixed(3)} seconds are estimated using the last reported retention rate. The chart shows reported points only.`,
+          )}
+        </p>
+      )}
       {data?.inferredStart && (
         <p className="retention-explanation">
           {t(

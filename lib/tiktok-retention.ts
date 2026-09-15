@@ -1,4 +1,4 @@
-export const retentionVersion = 1;
+export const retentionVersion = 2;
 export const retentionField = "meedoo_tiktok_retention";
 export type RetentionPoint = { second: number; percentage: number };
 export type TikTokRetention = {
@@ -14,6 +14,7 @@ export type TikTokRetention = {
   threeSecondRate: number | null;
   completionRate: number | null;
   inferredStart: boolean;
+  estimatedTailSeconds: number;
   segments: RetentionPoint[][];
 };
 
@@ -43,6 +44,7 @@ export function computeTikTokRetention(
         ? completion * 100
         : null,
     inferredStart: false,
+    estimatedTailSeconds: 0,
     segments: [],
   };
   if (!Array.isArray(metrics.retention) || !metrics.retention.length)
@@ -106,6 +108,12 @@ export function computeTikTokRetention(
     result.status = "missing_duration";
     return result;
   }
+  const last = integrationPoints.at(-1)!;
+  const tailSeconds = duration - last.second;
+  // Only complete the final fractional second. Never bridge an internal gap.
+  if (tailSeconds > 0 && tailSeconds < 1 && points.length >= 2) {
+    integrationPoints.push({ second: duration, percentage: last.percentage });
+  }
   if (
     integrationPoints[0].second !== 0 ||
     integrationPoints.at(-1)!.second < duration
@@ -129,6 +137,7 @@ export function computeTikTokRetention(
         (b.second - a.second);
     area += ((a.percentage + atEnd) / 2) * (end - a.second);
   }
+  result.estimatedTailSeconds = tailSeconds > 0 ? tailSeconds : 0;
   result.status = "complete";
   result.score = Math.max(0, Math.min(100, (area / duration) * 100));
   return result;
