@@ -101,6 +101,12 @@ docs/                        专项说明、历史发布记录
 
 ## 关键流程与规则
 
+### 视频生成（MiniMax H3）
+
+视频流程中的 `/generate` 支持参考图、首尾帧、提示词、时长、比例、清晰度和成片预览下载。国内站密钥通过服务器 `MINIMAX_API_KEY` 配置，前端不配置或接触密钥。任务绑定登录员工及需求名称，保存平台实际返回的 Token/秒数；费用按国内单价快照预估，缺失用量不填零。生成不会自动发布，下载后走原上传审批流程。
+
+入口：`app/generate/page.tsx`；服务端：`lib/generation.ts`；纯参数与计费规则：`lib/generation-model.ts`；接口：`app/api/generation/`；样式：`styles/generation.css`。任务/素材保存在 `generation_tasks`、`generation_assets`，成片长期保存。需要安装独立 `meedoo-generation.timer`，在浏览器关闭后继续回收任务。上线配置、异常任务对账与验证方法见 [MiniMax 接手说明](docs/minimax-generation.md)。
+
 ### 上传、审批、发布
 
 1. `/api/uploads/init` 创建会话，通过 `/api/uploads/[id]/chunks/[index]` 上传分片，`/complete` 合并并校验视频。

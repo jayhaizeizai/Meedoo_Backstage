@@ -6,7 +6,13 @@ import { useLanguage } from "./language-provider";
 import { useAuth } from "./auth-provider";
 
 type AppShellProps = {
-  active: "upload" | "dashboard" | "weekly-report" | "records" | "approvals";
+  active:
+    | "generate"
+    | "upload"
+    | "dashboard"
+    | "weekly-report"
+    | "records"
+    | "approvals";
   status: { zh: string; en: string };
   children: React.ReactNode;
 };
@@ -70,6 +76,14 @@ export function AppShell({ active, status, children }: AppShellProps) {
               {text("视频流程", "Video workflow")}
             </h2>
             <div className="nav-group-links">
+              <Link
+                className={active === "generate" ? "active" : ""}
+                href="/generate"
+                title={text("生成视频", "Generate video")}
+              >
+                <span aria-hidden="true">✦</span>
+                <i>{text("生成视频", "Generate video")}</i>
+              </Link>
               <Link
                 className={active === "upload" ? "active" : ""}
                 href="/upload"
