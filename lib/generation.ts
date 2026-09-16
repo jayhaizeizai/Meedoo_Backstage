@@ -282,13 +282,14 @@ function permittedOutput(value: string) {
     url.username ||
     url.password ||
     (url.port && url.port !== "443") ||
-    ![
-      "hailuoai.com",
-      "minimax.io",
-      "minimax.cn",
-      "minimaxi.com",
-      "minimax.chat",
-    ].some((h) => url.hostname === h || url.hostname.endsWith(`.${h}`))
+    (url.hostname !== "algeng-video-infer.oss-cn-shanghai.aliyuncs.com" &&
+      ![
+        "hailuoai.com",
+        "minimax.io",
+        "minimax.cn",
+        "minimaxi.com",
+        "minimax.chat",
+      ].some((h) => url.hostname === h || url.hostname.endsWith(`.${h}`)))
   )
     throw Error("OUTPUT_HOST_UNSUPPORTED");
   return url;
