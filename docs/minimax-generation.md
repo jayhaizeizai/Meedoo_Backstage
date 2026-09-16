@@ -31,6 +31,8 @@ Official references: [Create](https://platform.minimax.cn/docs/api-reference/vid
 The model picker uses `lib/generation-model.ts` as a shared capability registry. API adapters live in `lib/generation-provider.ts`; task ownership, idempotency, storage and expiry remain in `lib/generation.ts`. Legacy tasks without `input.model` remain MiniMax H3. New tasks freeze the model and audio option in `input`; changing either cannot reuse a request UUID.
 
 - `seedance-2.0` → `doubao-seedance-2-0-260128`: 4–15 seconds, up to nine reference images.
+- `seedance-2.0-fast` → `doubao-seedance-2-0-fast-260128`: 4–15 seconds, up to nine reference images, 480p/720p.
+- `seedance-2.0-mini` → `doubao-seedance-2-0-mini-260615`: 4–15 seconds, up to nine reference images, 480p/720p.
 - `seedance-2.5` → `doubao-seedance-2-5-260628`: 4–30 seconds, up to 30 reference images.
 - Initial integration offers 480p/720p, text/reference images or first/last frames, and an audio toggle. Video/audio reference uploads, editing and extension are not implemented.
 - Server-only `ARK_API_KEY`, fixed origin `https://ark.cn-beijing.volces.com/api/v3`. The `apikey-…` resource identifier is not a model/endpoint ID. `GET /models` and task listing verified authentication and the two model identifiers; this does not prove paid generation entitlement. No paid smoke generation has been run.

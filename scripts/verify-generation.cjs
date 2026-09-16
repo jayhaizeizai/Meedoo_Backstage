@@ -342,6 +342,8 @@ if (process.argv.includes("--db"))
         for (const [alias, apiModel] of [
           ["seedance-2.0", "doubao-seedance-2-0-260128"],
           ["seedance-2.5", "doubao-seedance-2-5-260628"],
+          ["seedance-2.0-fast", "doubao-seedance-2-0-fast-260128"],
+          ["seedance-2.0-mini", "doubao-seedance-2-0-mini-260615"],
         ]) {
           const input = {
             ...base,
@@ -381,9 +383,9 @@ if (process.argv.includes("--db"))
               .size > 0,
           );
         }
-        assert.equal(posted, 2);
+        assert.equal(posted, 4);
         console.log(
-          "PASS Seedance 2.0/2.5: provider routing, immutable model/audio, one submission, real file storage, returned tokens, 14-day deadline; MiniMax legacy compatibility",
+          "PASS Seedance 2.0/Fast/Mini/2.5: provider routing, immutable model/audio, one submission, real file storage, returned tokens, 14-day deadline; MiniMax legacy compatibility",
         );
       } finally {
         if (previousMedia === undefined) delete process.env.MEEDOO_MEDIA_DIR;

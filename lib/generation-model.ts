@@ -15,6 +15,22 @@ export const generationModels = {
     maxImages: 9,
     resolutions: ["480p", "720p"],
   },
+  "seedance-2.0-fast": {
+    label: "Seedance 2.0 Fast",
+    provider: "ark",
+    apiModel: "doubao-seedance-2-0-fast-260128",
+    maxDuration: 15,
+    maxImages: 9,
+    resolutions: ["480p", "720p"],
+  },
+  "seedance-2.0-mini": {
+    label: "Seedance 2.0 Mini",
+    provider: "ark",
+    apiModel: "doubao-seedance-2-0-mini-260615",
+    maxDuration: 15,
+    maxImages: 9,
+    resolutions: ["480p", "720p"],
+  },
   "seedance-2.5": {
     label: "Seedance 2.5",
     provider: "ark",
