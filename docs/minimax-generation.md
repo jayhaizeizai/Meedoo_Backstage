@@ -70,7 +70,7 @@ MiniMax images are saved unchanged on the server and queued for provider upload 
 
 `GET /api/generation/assets/:id/sync` returns owner-only status; `POST` enqueues preparation for existing images (including a model switch), and `POST ?retry=1` explicitly retries a failed upload. Responses never expose provider file IDs, credential fingerprints or private URLs. Each thumbnail shows synchronization status and a retry action. Generation can wait in `preparing` for unfinished references and never submits until all references are ready.
 
-Uploads retain original bytes, allow up to 300 seconds, and retry network/timeout/429/5xx failures up to three attempts with a 30-second minimum delay. One advisory-locked transfer runs at a time to avoid bandwidth/pool exhaustion; owner/content/key cache reuse and expiry are unchanged. Only classified error codes are logged. Paid generation requests are never automatically resubmitted after an ambiguous response. Failed historical tasks are not retried automatically.
+Uploads retain original bytes, allow up to 300 seconds, and retry network/timeout/429/5xx failures up to three attempts with a 30-second minimum delay. Up to five advisory-locked transfers run concurrently across processes; each upload reuses its worker DB connection to avoid pool exhaustion; owner/content/key cache reuse and expiry are unchanged. Only classified error codes are logged. Paid generation requests are never automatically resubmitted after an ambiguous response. Failed historical tasks are not retried automatically.
 
 Checks: `node scripts/verify-generation-files.cjs` on TEST with an isolated schema covers ownership, pre-upload, bounded transient retries, manual retry, concurrency, cache reuse, and paid-submission boundaries. A separate large synthetic PNG file-only live check must confirm upstream transfer without submitting a paid video generation.
 
@@ -84,3 +84,9 @@ Generate a real-browser test with `node scripts/verify-image-compression-browser
 
 ## Automatic record titles
 The generation form no longer asks for a requirement name. The server derives a stable record title from the first 40 Unicode characters of the prompt (whitespace normalized); old clients may still supply a name. The existing database column and historical record titles are retained. A missing name no longer disables submission or causes validation failure; prompts and generation settings remain required.
+
+
+## Five concurrent reference uploads
+Asset callbacks and the generation timer share a draining queue with five workers. PostgreSQL advisory slots enforce a global ceiling of five actual uploads across concurrent requests/processes. A completed worker immediately claims the next eligible image; pending work no longer waits for the next minute merely because an earlier image held the old single-transfer lock. Cache hits are resolved during enqueue, including when all five upload slots are occupied. Retry delays and maximum attempts remain unchanged; future retries and interrupted work retain the timer fallback. Each queue run has a bounded 480-second budget and starts a new transfer only with enough time for its five-minute timeout.
+
+`verify-generation-files.cjs` now exercises eight queued files: peak five uploads, an independent sixth request denied a slot, immediate refill while four earlier uploads remain blocked, cache readiness during saturation, shared callback coalescing, and successful draining without a timer tick. One DB connection per transfer prevents the previous two-connections-per-upload pattern from exhausting the ten-connection pool. No paid video submissions occur in these queue tests.

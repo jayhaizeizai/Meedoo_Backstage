@@ -1,12 +1,12 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { enqueueImageSync, processImageSync } from "../../../../lib/generation-image-sync";
+import { enqueueImageSync, drainImageSyncQueue } from "../../../../lib/generation-image-sync";
 import { storeGenerationImage } from "../../../../lib/generation";
 import {
   generationError,
   generationUser,
 } from "../../../../lib/generation-http";
 export const runtime = "nodejs";
-export const maxDuration = 360;
+export const maxDuration = 600;
 export async function POST(request: NextRequest) {
   try {
     const user = await generationUser(request);
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const asset = await storeGenerationImage(user.openId, file);
     if (data.get("model") === "minimax-h3") {
       await enqueueImageSync(asset.id, user.openId);
-      after(async () => { await processImageSync(asset.id); });
+      after(async () => { await drainImageSyncQueue(); });
     }
     return NextResponse.json({
       success: true,

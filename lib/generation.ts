@@ -25,7 +25,7 @@ import {
 } from "./generation-model";
 
 import { minimaxImageReference } from "./generation-minimax-files";
-import { enqueueImageSync, imageSyncStatus, processImageSync } from "./generation-image-sync";
+import { enqueueImageSync, imageSyncStatus, drainImageSyncQueue } from "./generation-image-sync";
 const run = promisify(execFile);
 import {
   ProviderError,
@@ -328,9 +328,10 @@ export async function prepareGeneration(
     );
     const refs = new Map<string, string>();
     try {
-      for (const asset of task.input.assets) {
+      for (const asset of task.input.assets)
         await enqueueImageSync(asset.id, task.owner_id);
-        await processImageSync(asset.id, deadline);
+      await drainImageSyncQueue(deadline);
+      for (const asset of task.input.assets) {
         const sync = await imageSyncStatus(asset.id, task.owner_id);
         if (sync.status === "failed") throw Error("INPUT_UPLOAD_FAILED");
         if (sync.status !== "ready") return;
@@ -627,11 +628,7 @@ export async function syncGenerationTasks() {
       /* Durable preparation will resume next tick. */
     }
   }
-  const images = await query("SELECT asset_id FROM generation_image_sync WHERE status IN ('pending','uploading','retrying') AND next_attempt_at<=now() ORDER BY next_attempt_at LIMIT 10");
-  for (const image of images.rows) {
-    if (deadline - Date.now() < 310000) break;
-    await processImageSync(image.asset_id, deadline);
-  }
+  await drainImageSyncQueue(deadline);
 }
 export async function generationList(userId: string) {
   await generationSchema();

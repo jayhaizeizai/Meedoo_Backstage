@@ -43,7 +43,7 @@ require.extensions[".ts"] = (m, f) =>
     const {
       minimaxImageReference,
     } = require("../lib/generation-minimax-files.ts");
-    const { enqueueImageSync, processImageSync, imageSyncStatus } = require("../lib/generation-image-sync.ts");
+    const { enqueueImageSync, processImageSync, imageSyncStatus, drainImageSyncQueue } = require("../lib/generation-image-sync.ts");
     await generationSchema();
     await query(
       "INSERT INTO meedoo_users(open_id,name) VALUES('file-owner','File Owner'),('file-other','File Other')",
@@ -211,6 +211,57 @@ require.extensions[".ts"] = (m, f) =>
       ).status,
       "submitted_unknown",
     );
+    const parallelIds = [];
+    for (let i = 0; i < 8; i++) {
+      const id = randomUUID(), file = path.join(temp, id + ".png");
+      fs.writeFileSync(file, "parallel fixture " + i);
+      await query("INSERT INTO generation_assets(id,owner_id,path,mime,filename) VALUES($1,'file-owner',$2,'image/png','parallel.png')", [id, file]);
+      await enqueueImageSync(id, "file-owner");
+      parallelIds.push(id);
+    }
+    let active = 0, peak = 0, started = 0;
+    const releases = [];
+    global.fetch = async (url) => {
+      assert.ok(String(url).endsWith('/v1/files/upload'), 'No generation calls in image workers');
+      started++; active++; peak = Math.max(peak, active);
+      const fileId = 'parallel-' + started;
+      await new Promise((resolve) => releases.push(resolve));
+      active--;
+      return Response.json({ file: { file_id: fileId }, base_resp: { status_code: 0 } });
+    };
+    const until = async (condition) => {
+      const expires = Date.now() + 5000;
+      while (!condition()) {
+        assert.ok(Date.now() < expires, 'Concurrent queue stalled');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    };
+    const drain = drainImageSyncQueue();
+    assert.equal(drainImageSyncQueue(), drain, 'Coalesce duplicate callbacks');
+    try {
+      await until(() => started === 5);
+      assert.equal(peak, 5);
+      // A cached asset becomes ready even while all five transfer slots are occupied.
+      assert.equal((await enqueueImageSync(ids[1], 'file-owner')).status, 'ready');
+      const waiting = (await query("SELECT asset_id FROM generation_image_sync WHERE asset_id=ANY($1::uuid[]) AND status='pending'", [parallelIds])).rows[0].asset_id;
+      assert.equal(await processImageSync(waiting), false, 'Sixth independent request cannot exceed global cap');
+      releases.shift()();
+      await until(() => started === 6);
+      assert.equal(active, 5, 'Refill freed slot without waiting for the other four');
+      while (started < 8 || active) {
+        for (const release of releases.splice(0)) release();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await drain;
+      assert.equal(peak, 5);
+      assert.equal(started, 8);
+      for (const id of parallelIds) assert.equal((await imageSyncStatus(id, 'file-owner')).status, 'ready');
+    } finally {
+      // Release all simulated uploads even when an assertion fails.
+      const releaser = setInterval(() => { for (const release of releases.splice(0)) release(); }, 10);
+      await drain.finally(() => clearInterval(releaser));
+    }
+    console.log('PASS five-slot global cap, immediate slot refill, cache hit while saturated, coalesced callbacks, eight files drained without timer');
     console.log(
       "PASS file cache: int64 IDs, content deduplication, owner isolation, key rotation, expiry, concurrent upload and submission locks, durable preparation, no paid call after upload failure, no ambiguous resubmission, readable failure code",
     );

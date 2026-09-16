@@ -1,6 +1,16 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { db, query } from "./db";
+import type { PoolClient } from "pg";
+
+export async function cachedMinimaxImageReference(assetId: string, ownerId: string, client: PoolClient) {
+  const asset = (await client.query("SELECT path FROM generation_assets WHERE id=$1 AND owner_id=$2", [assetId, ownerId])).rows[0];
+  if (!asset) throw Error("INVALID_ASSETS");
+  const digest = createHash("sha256").update(await readFile(asset.path)).digest("hex");
+  const credential = createHash("sha256").update(process.env.MINIMAX_API_KEY || "").digest("hex");
+  const cached = (await client.query("SELECT file_id FROM generation_minimax_files WHERE owner_id=$1 AND content_sha256=$2 AND credential_sha256=$3 AND expires_at>now()+interval '10 minutes'", [ownerId, digest, credential])).rows[0];
+  return cached ? `mm_file://${cached.file_id}` : null;
+}
 
 // MiniMax retains video_generation_input for seven days; refresh a day early.
 const cacheLifetimeMs = 6 * 86400000;
@@ -8,11 +18,12 @@ export async function minimaxImageReference(
   assetId: string,
   ownerId: string,
   deadline = Date.now() + 330000,
+  connection?: PoolClient,
 ) {
   const key = process.env.MINIMAX_API_KEY;
   if (!key) throw Error("NOT_CONFIGURED");
   const asset = (
-    await query(
+    await (connection ? connection.query.bind(connection) : query)(
       "SELECT path,mime FROM generation_assets WHERE id=$1 AND owner_id=$2",
       [assetId, ownerId],
     )
@@ -24,7 +35,7 @@ export async function minimaxImageReference(
   const digest = createHash("sha256").update(bytes).digest("hex");
   const credential = createHash("sha256").update(key).digest("hex");
   const lock = `${ownerId}:${digest}:${credential}`;
-  const client = await db().connect();
+  const client = connection || await db().connect();
   let locked = false;
   try {
     // A non-blocking lock avoids exhausting the DB pool while another task uploads this image.
@@ -93,6 +104,6 @@ export async function minimaxImageReference(
       await client.query("SELECT pg_advisory_unlock(hashtextextended($1,7))", [
         lock,
       ]);
-    client.release();
+    if (!connection) client.release();
   }
 }
