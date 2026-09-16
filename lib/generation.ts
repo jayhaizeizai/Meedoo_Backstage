@@ -56,6 +56,7 @@ export async function generationSchema() {
       status text NOT NULL DEFAULT 'pending', attempts integer NOT NULL DEFAULT 0,
       error_code text, next_attempt_at timestamptz NOT NULL DEFAULT now(),
       expires_at timestamptz, credential_sha256 text NOT NULL);
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS provider_error jsonb;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_expires_at timestamptz;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_deleted_at timestamptz;
     UPDATE generation_tasks SET media_expires_at=updated_at+interval '14 days'
@@ -285,7 +286,7 @@ async function submitReservedGeneration(
       e instanceof ProviderError &&
       [400, 401, 402, 403, 404, 413, 422, 429].includes(e.status);
     await query(
-      "UPDATE generation_tasks SET status=$2,error_code=$3,updated_at=now() WHERE id=$1",
+      "UPDATE generation_tasks SET status=$2,error_code=$3,provider_error=$4,updated_at=now() WHERE id=$1",
       [
         id,
         definite ? "failed" : "submitted_unknown",
@@ -296,6 +297,7 @@ async function submitReservedGeneration(
               ? "PROVIDER_PAYMENT_REQUIRED"
               : e.message
           : "SUBMISSION_UNCERTAIN",
+        e instanceof ProviderError ? JSON.stringify({ http_status: e.status, ...e.diagnostic, code: e.code }) : null,
       ],
     );
   }
@@ -634,7 +636,7 @@ export async function generationList(userId: string) {
   await generationSchema();
   const approver = await generationApprover(userId);
   const tasks = await query(
-    "SELECT id,owner_name,requirement,input,status,usage,estimated_cost,error_code,created_at,updated_at,media_expires_at,(media_deleted_at IS NOT NULL OR COALESCE(media_expires_at<=now(),false)) expired,(media_path IS NOT NULL AND media_deleted_at IS NULL AND media_expires_at>now()) available FROM generation_tasks WHERE ($2::boolean OR owner_id=$1) ORDER BY created_at DESC LIMIT 100",
+    "SELECT id,owner_name,requirement,input,status,usage,estimated_cost,error_code,provider_error,created_at,updated_at,media_expires_at,(media_deleted_at IS NOT NULL OR COALESCE(media_expires_at<=now(),false)) expired,(media_path IS NOT NULL AND media_deleted_at IS NULL AND media_expires_at>now()) available FROM generation_tasks WHERE ($2::boolean OR owner_id=$1) ORDER BY created_at DESC LIMIT 100",
     [userId, approver],
   );
   const totals = await query(

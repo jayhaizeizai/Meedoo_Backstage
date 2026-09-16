@@ -1,9 +1,22 @@
 import { generationModel, type GenerationInput } from "./generation-model";
 
+export function safeProviderDiagnostic(data: any, requestId?: string | null) {
+  const token = (v: unknown) => typeof v === "string" && /^[a-zA-Z0-9_.-]{1,120}$/.test(v) ? v : undefined;
+  const message = typeof data?.error?.message === "string" ? data.error.message : "";
+  const parameter = /(?:parameter|field)\s+[`'"]([^`'"]+)[`'"]/i.exec(message)?.[1];
+  // Preserve only structured identifiers and known field names; never upstream prose or URLs.
+  return {
+    code: token(data?.error?.code),
+    request_id: token(requestId) || token(data?.request_id) || token(/Request id:\s*([a-zA-Z0-9_-]+)/i.exec(message)?.[1]),
+    parameter: parameter && /^(model|content(?:\[\d+\])?(?:\.(?:image_url|url|text|role))?|duration|resolution|ratio|generate_audio)$/.test(parameter) ? parameter : undefined,
+  };
+}
+
 export class ProviderError extends Error {
   constructor(
     public status: number,
     public code?: string,
+    public diagnostic?: ReturnType<typeof safeProviderDiagnostic>,
   ) {
     super(`PROVIDER_${status}`);
   }
@@ -44,12 +57,8 @@ async function request(
   if (!response.ok) {
     // Never expose raw upstream messages, which can contain signed URLs or input content.
     const data = await response.json().catch(() => null);
-    const code =
-      typeof data?.error?.code === "string" &&
-      /^[a-zA-Z0-9_.-]{1,100}$/.test(data.error.code)
-        ? data.error.code
-        : undefined;
-    throw new ProviderError(response.status, code);
+    const diagnostic = safeProviderDiagnostic(data, response.headers.get("x-request-id"));
+    throw new ProviderError(response.status, diagnostic.code, diagnostic);
   }
   return response.json();
 }

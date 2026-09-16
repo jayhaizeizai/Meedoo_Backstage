@@ -29,6 +29,7 @@ type Task = {
   expired: boolean;
   media_expires_at: string | null;
   error_code: string | null;
+  provider_error?: { code?: string; request_id?: string; parameter?: string; http_status?: number } | null;
   created_at: string;
 };
 export default function GeneratePage() {
@@ -671,6 +672,16 @@ export default function GeneratePage() {
                                     `任务未完成（${current.error_code}）。`,
                                     `Task not completed (${current.error_code}).`,
                                   )}
+                  </p>
+                )}
+                {current.provider_error && (
+                  <p className="data-message" role="status">
+                    {current.provider_error.code === "ModelNotOpen"
+                      ? text("模型尚未开通，请在火山方舟控制台开通。", "Activate this model in the Ark console.")
+                      : text("平台拒绝了本次请求，请根据以下错误信息检查模型权限、参数或素材。", "The provider rejected this request. Check access, parameters or media using the details below.")}
+                    {current.provider_error.code && <><br />{text("错误码：", "Error: ")}{current.provider_error.code}</>}
+                    {current.provider_error.parameter && <><br />{text("相关参数：", "Parameter: ")}{current.provider_error.parameter}</>}
+                    {current.provider_error.request_id && <><br />{text("请求编号：", "Request ID: ")}{current.provider_error.request_id}</>}
                   </p>
                 )}
                 <div className="generation-usage">

@@ -18,6 +18,10 @@ const {
   estimateGenerationCost,
   normalizeGenerationUsage,
 } = require("../lib/generation-model.ts");
+const { safeProviderDiagnostic } = require("../lib/generation-provider.ts");
+assert.deepEqual(safeProviderDiagnostic({error:{code:"InvalidParameter",message:"The parameter `content[2].image_url` is invalid: https://private/image?token=secret Request id: test-123"}}), {code:"InvalidParameter",request_id:"test-123",parameter:"content[2].image_url"});
+assert.deepEqual(safeProviderDiagnostic({error:{code:"Bearer secret",message:"prompt contains private text"},request_id:"https://private"}), {code:undefined,request_id:undefined,parameter:undefined});
+assert.equal(safeProviderDiagnostic({error:{code:"ModelNotOpen"}},"trace-1").code,"ModelNotOpen");
 const base = {
   requestId: randomUUID(),
   requirement: "Episode 1",
