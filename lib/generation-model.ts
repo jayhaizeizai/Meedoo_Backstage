@@ -1,3 +1,35 @@
+export const generationModels = {
+  "minimax-h3": {
+    label: "MiniMax H3",
+    provider: "minimax",
+    apiModel: "MiniMax-H3",
+    maxDuration: 15,
+    maxImages: 9,
+    resolutions: ["768P", "2K"],
+  },
+  "seedance-2.0": {
+    label: "Seedance 2.0",
+    provider: "ark",
+    apiModel: "doubao-seedance-2-0-260128",
+    maxDuration: 15,
+    maxImages: 9,
+    resolutions: ["480p", "720p"],
+  },
+  "seedance-2.5": {
+    label: "Seedance 2.5",
+    provider: "ark",
+    apiModel: "doubao-seedance-2-5-260628",
+    maxDuration: 30,
+    maxImages: 30,
+    resolutions: ["480p", "720p"],
+  },
+} as const;
+export type GenerationModel = keyof typeof generationModels;
+export function generationModel(value?: string) {
+  const id = value ?? "minimax-h3";
+  if (!Object.hasOwn(generationModels, id)) throw Error("INVALID_INPUT");
+  return generationModels[id as GenerationModel];
+}
 export const generationRatios = [
   "9:16",
   "16:9",
@@ -8,11 +40,13 @@ export const generationRatios = [
 ] as const;
 export type GenerationInput = {
   requestId: string;
+  model?: GenerationModel;
+  generateAudio?: boolean;
   requirement: string;
   prompt: string;
   mode: "reference" | "frames";
   duration: number;
-  resolution: "768P" | "2K";
+  resolution: "768P" | "2K" | "480p" | "720p";
   ratio: string;
   assets: {
     id: string;
@@ -24,7 +58,9 @@ export const uuidPattern =
 export function validateGeneration(value: unknown): GenerationInput {
   if (!value || typeof value !== "object") throw Error("INVALID_INPUT");
   const v = value as GenerationInput;
+  const model = generationModel(v.model);
   if (
+    (v.generateAudio !== undefined && typeof v.generateAudio !== "boolean") ||
     !uuidPattern.test(v.requestId) ||
     typeof v.requirement !== "string" ||
     !v.requirement.trim() ||
@@ -35,11 +71,11 @@ export function validateGeneration(value: unknown): GenerationInput {
     !["reference", "frames"].includes(v.mode) ||
     !Number.isInteger(v.duration) ||
     v.duration < 4 ||
-    v.duration > 15 ||
-    !["768P", "2K"].includes(v.resolution) ||
+    v.duration > model.maxDuration ||
+    !(model.resolutions as readonly string[]).includes(v.resolution) ||
     !generationRatios.includes(v.ratio as (typeof generationRatios)[number]) ||
     !Array.isArray(v.assets) ||
-    v.assets.length > 9
+    v.assets.length > model.maxImages
   )
     throw Error("INVALID_INPUT");
   if (
@@ -63,6 +99,10 @@ export function validateGeneration(value: unknown): GenerationInput {
     throw Error("INVALID_INPUT");
   return {
     requestId: v.requestId,
+    model: v.model ?? "minimax-h3",
+    ...(model.provider === "ark"
+      ? { generateAudio: v.generateAudio ?? true }
+      : {}),
     requirement: v.requirement.trim(),
     prompt: v.prompt.trim(),
     mode: v.mode,

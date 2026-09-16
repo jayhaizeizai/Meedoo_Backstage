@@ -16,6 +16,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { db, query, transaction } from "./db";
 import {
+  generationModel,
+  generationModels,
   estimateGenerationCost,
   normalizeGenerationUsage,
   validateGeneration,
@@ -23,7 +25,12 @@ import {
 } from "./generation-model";
 
 const run = promisify(execFile);
-const origin = "https://api.minimax.cn";
+import {
+  ProviderError,
+  providerConfigured,
+  submitGeneration,
+  queryGeneration,
+} from "./generation-provider";
 const directory = () =>
   path.join(process.env.MEEDOO_MEDIA_DIR || "/opt/meedoo/media", "generation");
 let schema: Promise<unknown> | undefined;
@@ -37,6 +44,7 @@ export async function generationSchema() {
     status text NOT NULL, usage jsonb, estimated_cost numeric NOT NULL, pricing_version text NOT NULL DEFAULT 'cn-2026-09-16',
     media_path text, error_code text, last_checked_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(owner_id,request_id));
+    ALTER TABLE generation_tasks ALTER COLUMN estimated_cost DROP NOT NULL;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_expires_at timestamptz;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_deleted_at timestamptz;
     UPDATE generation_tasks SET media_expires_at=updated_at+interval '14 days'
@@ -154,34 +162,12 @@ export async function storeGenerationImage(userId: string, file: File) {
     throw Error("INVALID_IMAGE");
   }
 }
-class ProviderError extends Error {
-  constructor(public status: number) {
-    super(`PROVIDER_${status}`);
-  }
-}
-async function provider(endpoint: string, body?: unknown) {
-  const key = process.env.MINIMAX_API_KEY;
-  if (!key) throw Error("NOT_CONFIGURED");
-  const response = await fetch(origin + endpoint, {
-    method: body ? "POST" : "GET",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-    cache: "no-store",
-    signal: AbortSignal.timeout(body ? 45000 : 15000),
-    redirect: "error",
-  });
-  if (!response.ok) throw new ProviderError(response.status);
-  return response.json();
-}
 export async function createGeneration(
   user: { openId: string; name: string },
   body: unknown,
 ) {
   const input = validateGeneration(body);
-  if (!process.env.MINIMAX_API_KEY) throw Error("NOT_CONFIGURED");
+  if (!providerConfigured(input.model)) throw Error("NOT_CONFIGURED");
   await generationSchema();
   const reserved = await transaction(async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,5))", [
@@ -200,6 +186,10 @@ export async function createGeneration(
       ) {
         // jsonb key ordering differs; compare canonical values below.
         const comparable = (v: GenerationInput) => [
+          v.model ?? "minimax-h3",
+          generationModel(v.model).provider === "ark"
+            ? (v.generateAudio ?? true)
+            : null,
           v.requirement,
           v.prompt,
           v.mode,
@@ -232,7 +222,7 @@ export async function createGeneration(
     if (assets.length !== input.assets.length) throw Error("INVALID_ASSETS");
     const id = randomUUID();
     await client.query(
-      "INSERT INTO generation_tasks(id,owner_id,owner_name,request_id,requirement,input,status,estimated_cost) VALUES($1,$2,$3,$4,$5,$6,'submitting',$7)",
+      "INSERT INTO generation_tasks(id,owner_id,owner_name,request_id,requirement,input,status,estimated_cost,pricing_version) VALUES($1,$2,$3,$4,$5,$6,'submitting',$7,$8)",
       [
         id,
         user.openId,
@@ -240,77 +230,75 @@ export async function createGeneration(
         input.requestId,
         input.requirement,
         JSON.stringify(input),
-        estimateGenerationCost(
-          input.duration,
-          input.resolution,
-          input.assets.length,
-        ),
+        generationModel(input.model).provider === "ark"
+          ? null
+          : estimateGenerationCost(
+              input.duration,
+              input.resolution,
+              input.assets.length,
+            ),
+        generationModel(input.model).provider === "ark"
+          ? "not-estimated"
+          : "cn-2026-09-16",
       ],
     );
     return { id, fresh: true };
   });
   if (!reserved.fresh) return reserved.id;
   try {
-    const result = await provider("/v2/video_generation", {
-      model: "MiniMax-H3",
-      content: [
-        { type: "text", text: input.prompt },
-        ...input.assets.map((a) => ({
-          type: "image_url",
-          image_url: { url: imageUrl(a.id) },
-          role: a.role,
-        })),
-      ],
-      resolution: input.resolution,
-      duration: input.duration,
-      ratio: input.mode === "frames" ? "adaptive" : input.ratio,
-    });
-    if (typeof result.task_id !== "string" || !result.task_id)
-      throw Error("INVALID_PROVIDER_RESULT");
+    const providerId = await submitGeneration(input, imageUrl);
     await query(
       "UPDATE generation_tasks SET provider_id=$2,status='queued',updated_at=now() WHERE id=$1",
-      [reserved.id, result.task_id],
+      [reserved.id, providerId],
     );
   } catch (e) {
     // A timeout or 5xx may have accepted the paid task: never automatically resubmit.
     const definite =
       e instanceof ProviderError &&
-      [400, 401, 402, 403, 413, 422, 429].includes(e.status);
+      [400, 401, 402, 403, 404, 413, 422, 429].includes(e.status);
     await query(
       "UPDATE generation_tasks SET status=$2,error_code=$3,updated_at=now() WHERE id=$1",
       [
         reserved.id,
         definite ? "failed" : "submitted_unknown",
-        e instanceof ProviderError ? e.message : "SUBMISSION_UNCERTAIN",
+        e instanceof ProviderError
+          ? e.status === 403
+            ? "PROVIDER_ACCESS_DENIED"
+            : e.status === 402
+              ? "PROVIDER_PAYMENT_REQUIRED"
+              : e.message
+          : "SUBMISSION_UNCERTAIN",
       ],
     );
   }
   return reserved.id;
 }
-function permittedOutput(value: string) {
+export function permittedOutput(value: string, model?: string) {
   const url = new URL(value);
   if (
     url.protocol !== "https:" ||
     url.username ||
     url.password ||
     (url.port && url.port !== "443") ||
-    (url.hostname !== "algeng-video-infer.oss-cn-shanghai.aliyuncs.com" &&
-      ![
-        "hailuoai.com",
-        "minimax.io",
-        "minimax.cn",
-        "minimaxi.com",
-        "minimax.chat",
-      ].some((h) => url.hostname === h || url.hostname.endsWith(`.${h}`)))
+    (generationModel(model).provider === "ark"
+      ? url.hostname !== "ark-acg-cn-beijing.tos-cn-beijing.volces.com"
+      : url.hostname !== "algeng-video-infer.oss-cn-shanghai.aliyuncs.com" &&
+        ![
+          "hailuoai.com",
+          "minimax.io",
+          "minimax.cn",
+          "minimaxi.com",
+          "minimax.chat",
+        ].some((h) => url.hostname === h || url.hostname.endsWith(`.${h}`)))
   )
     throw Error("OUTPUT_HOST_UNSUPPORTED");
   return url;
 }
-async function saveOutput(id: string, value: string) {
+async function saveOutput(id: string, value: string, model?: string) {
   await mkdir(directory(), { recursive: true, mode: 0o700 });
   const output = path.join(directory(), `${id}.mp4`);
   if ((await stat(output).catch(() => null))?.size) return output;
-  let url = permittedOutput(value),
+  let url = permittedOutput(value, model),
     response: Response | undefined;
   for (let i = 0; i < 4; i++) {
     response = await fetch(url, {
@@ -321,7 +309,7 @@ async function saveOutput(id: string, value: string) {
       const location = response.headers.get("location");
       await response.body?.cancel();
       if (!location) throw Error("OUTPUT_DOWNLOAD_FAILED");
-      url = permittedOutput(new URL(location, url).href);
+      url = permittedOutput(new URL(location, url).href, model);
       continue;
     }
     break;
@@ -410,9 +398,7 @@ export async function refreshGeneration(id: string, userId?: string) {
       "UPDATE generation_tasks SET last_checked_at=now() WHERE id=$1",
       [id],
     );
-    const { task: result } = await provider(
-      `/v2/query/video_generation/${encodeURIComponent(task.provider_id)}`,
-    );
+    const result = await queryGeneration(task.input, task.provider_id);
     if (
       !result ||
       result.id !== task.provider_id ||
@@ -437,7 +423,11 @@ export async function refreshGeneration(id: string, userId?: string) {
       typeof result.content?.url === "string"
     ) {
       try {
-        const saved = await saveOutput(id, result.content.url);
+        const saved = await saveOutput(
+          id,
+          result.content.url,
+          task.input.model,
+        );
         await client.query(
           "UPDATE generation_tasks SET media_path=$2,media_expires_at=COALESCE(media_expires_at,now()+interval '14 days'),error_code=NULL WHERE id=$1",
           [id, saved],
@@ -511,7 +501,7 @@ export async function cleanupGenerationOutputs() {
 }
 export async function syncGenerationTasks() {
   await cleanupGenerationOutputs();
-  if (!process.env.MINIMAX_API_KEY) return;
+  if (!process.env.MINIMAX_API_KEY && !process.env.ARK_API_KEY) return;
   await query(
     "UPDATE generation_tasks SET status='submitted_unknown',error_code='SUBMISSION_UNCERTAIN' WHERE status='submitting' AND created_at<now()-interval '5 minutes'",
   );
@@ -538,7 +528,8 @@ export async function generationList(userId: string) {
     [userId, approver],
   );
   return {
-    configured: Boolean(process.env.MINIMAX_API_KEY),
+    configured: Boolean(process.env.MINIMAX_API_KEY || process.env.ARK_API_KEY),
+    models: Object.keys(generationModels).filter(providerConfigured),
     approver,
     tasks: tasks.rows,
     summary: totals.rows,

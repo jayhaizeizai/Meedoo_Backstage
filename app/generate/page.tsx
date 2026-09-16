@@ -4,6 +4,9 @@ import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
 import {
   generationRatios,
+  generationModels,
+  generationModel,
+  type GenerationModel,
   type GenerationInput,
 } from "../../lib/generation-model";
 import "../../styles/generation.css";
@@ -29,13 +32,18 @@ type Task = {
 };
 export default function GeneratePage() {
   const { text, language } = useLanguage();
+  const [model, setModel] = useState<GenerationModel>("minimax-h3");
+  const [models, setModels] = useState<GenerationModel[]>([]);
+  const [generateAudio, setGenerateAudio] = useState(true);
+  const settings = generationModel(model);
   const [mode, setMode] = useState<"reference" | "frames">("reference"),
     [assets, setAssets] = useState<Asset[]>([]),
     [prompt, setPrompt] = useState(""),
     [requirement, setRequirement] = useState(""),
     [duration, setDuration] = useState(6),
     [ratio, setRatio] = useState("9:16"),
-    [resolution, setResolution] = useState<"768P" | "2K">("768P");
+    [resolution, setResolution] =
+      useState<GenerationInput["resolution"]>("768P");
   const [tasks, setTasks] = useState<Task[]>([]),
     [configured, setConfigured] = useState(false),
     [loaded, setLoaded] = useState(false),
@@ -94,6 +102,7 @@ export default function GeneratePage() {
     if (!r.ok) throw Error(d.code);
     setTasks(d.tasks);
     setConfigured(d.configured);
+    setModels(d.models ?? ["minimax-h3"]);
     setLoaded(true);
   }, []);
   useEffect(() => {
@@ -131,12 +140,13 @@ export default function GeneratePage() {
   }, [tasks, load]);
   async function upload(files: FileList | null, role: Asset["role"]) {
     if (!files?.length || uploading || busy) return;
-    const limit = role === "reference_image" ? 9 - assets.length : 1;
+    const limit =
+      role === "reference_image" ? settings.maxImages - assets.length : 1;
     if (files.length > limit) {
       setError(
         text(
-          "参考图最多 9 张，首帧和尾帧各 1 张。",
-          "Up to 9 references, or one image per frame.",
+          `参考图最多 ${settings.maxImages} 张，首帧和尾帧各 1 张。`,
+          `Up to ${settings.maxImages} references, or one image per frame.`,
         ),
       );
       return;
@@ -173,6 +183,8 @@ export default function GeneratePage() {
     setBusy(true);
     setError("");
     const params = {
+      model,
+      ...(settings.provider === "ark" ? { generateAudio } : {}),
       requirement,
       prompt,
       mode,
@@ -224,8 +236,8 @@ export default function GeneratePage() {
     <AppShell
       active="generate"
       status={{
-        zh: "MiniMax H3 · 视频生成",
-        en: "MiniMax H3 · Video generation",
+        zh: "AI · 视频生成",
+        en: "AI · Video generation",
       }}
     >
       <section className="page generation-page">
@@ -241,7 +253,7 @@ export default function GeneratePage() {
             </p>
           </div>
           <span className="generation-badge">
-            MiniMax H3 · {text("国内站", "China")}
+            {settings.label} · {text("国内站", "China")}
           </span>
         </header>
         {error && (
@@ -260,6 +272,52 @@ export default function GeneratePage() {
         <div className="generation-workspace">
           <section className="card generation-form">
             <h2>{text("创作设置", "Creation settings")}</h2>
+            <label>
+              {text("生成模型", "Generation model")}
+              <select
+                value={model}
+                disabled={busy || uploading}
+                onChange={(e) => {
+                  const next = e.target.value as GenerationModel;
+                  const options = generationModel(next);
+                  setModel(next);
+                  setResolution(options.provider === "ark" ? "720p" : "768P");
+                  setDuration((d) => Math.min(d, options.maxDuration));
+                  intent.current = null;
+                }}
+              >
+                {(Object.keys(generationModels) as GenerationModel[]).map(
+                  (id) => (
+                    <option key={id} value={id} disabled={!models.includes(id)}>
+                      {generationModels[id].label}
+                      {loaded && !models.includes(id)
+                        ? text("（未配置）", " (not configured)")
+                        : ""}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            {settings.provider === "ark" && (
+              <label>
+                <span>{text("生成声音", "Generate audio")}</span>
+                <select
+                  value={String(generateAudio)}
+                  onChange={(e) => setGenerateAudio(e.target.value === "true")}
+                >
+                  <option value="true">{text("开启", "On")}</option>
+                  <option value="false">{text("关闭", "Off")}</option>
+                </select>
+              </label>
+            )}
+            {assets.length > settings.maxImages && (
+              <p className="data-message">
+                {text(
+                  `当前模型最多支持 ${settings.maxImages} 张参考图，请移除多余图片。`,
+                  `This model supports up to ${settings.maxImages} reference images. Remove extra images.`,
+                )}
+              </p>
+            )}
             <label>
               {text("需求名称", "Requirement")}
               <input
@@ -301,8 +359,8 @@ export default function GeneratePage() {
               input(
                 "reference_image",
                 text(
-                  "添加参考图（最多 9 张）",
-                  "Add reference images (up to 9)",
+                  `添加参考图（最多 ${settings.maxImages} 张）`,
+                  `Add reference images (up to ${settings.maxImages})`,
                 ),
                 true,
               )
@@ -379,7 +437,7 @@ export default function GeneratePage() {
                 <input
                   type="number"
                   min={4}
-                  max={15}
+                  max={settings.maxDuration}
                   step={1}
                   value={duration}
                   onChange={(e) => setDuration(Number(e.target.value))}
@@ -402,11 +460,14 @@ export default function GeneratePage() {
                 <select
                   value={resolution}
                   onChange={(e) =>
-                    setResolution(e.target.value as "768P" | "2K")
+                    setResolution(
+                      e.target.value as GenerationInput["resolution"],
+                    )
                   }
                 >
-                  <option>768P</option>
-                  <option>2K</option>
+                  {settings.resolutions.map((r) => (
+                    <option key={r}>{r}</option>
+                  ))}
                 </select>
               </label>
             </div>
@@ -427,7 +488,9 @@ export default function GeneratePage() {
                 !requirement.trim() ||
                 !prompt.trim() ||
                 duration < 4 ||
-                duration > 15 ||
+                duration > settings.maxDuration ||
+                !models.includes(model) ||
+                assets.length > settings.maxImages ||
                 (mode === "frames" &&
                   !assets.some((a) => a.role === "first_frame"))
               }
@@ -481,7 +544,10 @@ export default function GeneratePage() {
             {current ? (
               <>
                 <h3>{current.requirement}</h3>
-                <p>{status(current.status)}</p>
+                <p>
+                  {generationModel(current.input.model).label} ·{" "}
+                  {status(current.status)}
+                </p>
                 {current.available ? (
                   <>
                     <video
@@ -521,20 +587,30 @@ export default function GeneratePage() {
                 )}
                 {current.error_code && (
                   <p className="data-message">
-                    {current.error_code === "OUTPUT_SAVE_PENDING"
+                    {current.error_code === "PROVIDER_ACCESS_DENIED"
                       ? text(
-                          "成片已生成，服务器保存待重试。请刷新。",
-                          "Video generated; saving needs another attempt. Refresh to retry.",
+                          "模型调用权限不足，请在对应平台确认模型已开通且密钥有权限。",
+                          "Model access denied. Check activation and key permissions with the provider.",
                         )
-                      : current.status === "submitted_unknown"
+                      : current.error_code === "PROVIDER_PAYMENT_REQUIRED"
                         ? text(
-                            "平台可能已接收任务，请联系管理员核对，避免重复扣费。",
-                            "The provider may have accepted this task. Ask an administrator to reconcile it before resubmitting.",
+                            "平台余额或额度不足，请联系管理员。",
+                            "Provider balance or quota is insufficient. Contact an administrator.",
                           )
-                        : text(
-                            `任务未完成（${current.error_code}）。`,
-                            `Task not completed (${current.error_code}).`,
-                          )}
+                        : current.error_code === "OUTPUT_SAVE_PENDING"
+                          ? text(
+                              "成片已生成，服务器保存待重试。请刷新。",
+                              "Video generated; saving needs another attempt. Refresh to retry.",
+                            )
+                          : current.status === "submitted_unknown"
+                            ? text(
+                                "平台可能已接收任务，请联系管理员核对，避免重复扣费。",
+                                "The provider may have accepted this task. Ask an administrator to reconcile it before resubmitting.",
+                              )
+                            : text(
+                                `任务未完成（${current.error_code}）。`,
+                                `Task not completed (${current.error_code}).`,
+                              )}
                   </p>
                 )}
                 <div className="generation-usage">
@@ -581,6 +657,7 @@ export default function GeneratePage() {
                 <tr>
                   {[
                     text("需求", "Requirement"),
+                    text("模型", "Model"),
                     text("创建人", "Creator"),
                     text("时间", "Created"),
                     text("状态", "Status"),
@@ -599,6 +676,7 @@ export default function GeneratePage() {
                         {t.requirement}
                       </button>
                     </td>
+                    <td>{generationModel(t.input.model).label}</td>
                     <td>{t.owner_name}</td>
                     <td>
                       {new Date(t.created_at).toLocaleString(
