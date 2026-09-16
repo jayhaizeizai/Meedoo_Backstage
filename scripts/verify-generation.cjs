@@ -115,6 +115,7 @@ if (process.argv.includes("--db"))
     try {
       const { query } = require("../lib/db.ts"),
         {
+          cleanupGenerationOutputs,
           createGeneration,
           generationList,
           refreshGeneration,
@@ -172,6 +173,76 @@ if (process.argv.includes("--db"))
         own.tasks.find((x) => x.id === uncertainId).status,
         "submitted_unknown",
       );
+      const path = require("node:path"),
+        os = require("node:os");
+      const temp = fs.mkdtempSync(path.join(os.tmpdir(), "generation-expiry-"));
+      const oldMedia = process.env.MEEDOO_MEDIA_DIR;
+      process.env.MEEDOO_MEDIA_DIR = temp;
+      const folder = path.join(temp, "generation");
+      fs.mkdirSync(folder);
+      const output = path.join(folder, `${id}.mp4`);
+      const upload = path.join(temp, "uploaded.mp4");
+      const reference = path.join(folder, "reference.image");
+      fs.writeFileSync(output, "fixture");
+      fs.writeFileSync(upload, "keep upload");
+      fs.writeFileSync(reference, "keep reference");
+      try {
+        await query(
+          "UPDATE generation_tasks SET media_path=$2,media_expires_at=now()+interval '1 day' WHERE id=$1",
+          [id, output],
+        );
+        await cleanupGenerationOutputs();
+        assert.ok(fs.existsSync(output));
+        await query(
+          "UPDATE generation_tasks SET media_expires_at=now()-interval '1 second',media_path=$2 WHERE id=$1",
+          [id, upload],
+        );
+        await cleanupGenerationOutputs();
+        assert.ok(fs.existsSync(upload));
+        assert.equal(
+          (
+            await query(
+              "SELECT media_deleted_at FROM generation_tasks WHERE id=$1",
+              [id],
+            )
+          ).rows[0].media_deleted_at,
+          null,
+        );
+        await query("UPDATE generation_tasks SET media_path=$2 WHERE id=$1", [
+          id,
+          output,
+        ]);
+        own = await generationList(user.openId);
+        assert.equal(own.tasks.find((t) => t.id === id).expired, true);
+        assert.equal(own.tasks.find((t) => t.id === id).available, false);
+        await cleanupGenerationOutputs();
+        await cleanupGenerationOutputs();
+        assert.equal(fs.existsSync(output), false);
+        assert.ok(fs.existsSync(upload) && fs.existsSync(reference));
+        const before = calls;
+        await refreshGeneration(id, user.openId);
+        assert.equal(
+          calls,
+          before,
+          "expired output must never be fetched again",
+        );
+        const retained = (await generationList(user.openId)).tasks.find(
+          (t) => t.id === id,
+        );
+        assert.equal(retained.status, "succeeded");
+        assert.equal(retained.usage.output_seconds, 6);
+        assert.equal(retained.expired, true);
+        console.log(
+          "PASS expiry: deadline, narrow deletion, retained usage, idempotence, no re-download",
+        );
+      } finally {
+        if (oldMedia === undefined) delete process.env.MEEDOO_MEDIA_DIR;
+        else process.env.MEEDOO_MEDIA_DIR = oldMedia;
+        for (const file of [output, upload, reference])
+          fs.rmSync(file, { force: true });
+        fs.rmdirSync(folder);
+        fs.rmdirSync(temp);
+      }
       console.log(
         "PASS isolated DB: ownership, single paid submission per request, conflict rejection, missing token accounting, uncertain submission not retried",
       );

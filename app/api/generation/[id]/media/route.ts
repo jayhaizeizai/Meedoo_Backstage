@@ -25,7 +25,7 @@ async function serve(
     await generationSchema();
     const row = (
       await query(
-        "SELECT owner_id,media_path FROM generation_tasks WHERE id=$1 AND status='succeeded'",
+        "SELECT owner_id,media_path FROM generation_tasks WHERE id=$1 AND status='succeeded' AND media_deleted_at IS NULL AND media_expires_at>now()",
         [id],
       )
     ).rows[0];

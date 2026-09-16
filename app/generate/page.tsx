@@ -22,16 +22,10 @@ type Task = {
   status: string;
   usage: Record<string, number> | null;
   available: boolean;
+  expired: boolean;
+  media_expires_at: string | null;
   error_code: string | null;
   created_at: string;
-};
-type Summary = {
-  owner_name: string;
-  requirement: string;
-  tasks: number;
-  succeeded: number;
-  tokens: string | null;
-  missing_tokens: number;
 };
 export default function GeneratePage() {
   const { text, language } = useLanguage();
@@ -43,7 +37,6 @@ export default function GeneratePage() {
     [ratio, setRatio] = useState("9:16"),
     [resolution, setResolution] = useState<"768P" | "2K">("768P");
   const [tasks, setTasks] = useState<Task[]>([]),
-    [summary, setSummary] = useState<Summary[]>([]),
     [configured, setConfigured] = useState(false),
     [loaded, setLoaded] = useState(false),
     [busy, setBusy] = useState(false),
@@ -100,7 +93,6 @@ export default function GeneratePage() {
     const d = await r.json();
     if (!r.ok) throw Error(d.code);
     setTasks(d.tasks);
-    setSummary(d.summary);
     setConfigured(d.configured);
     setLoaded(true);
   }, []);
@@ -120,7 +112,7 @@ export default function GeneratePage() {
       const active = tasks.filter(
         (t) =>
           ["queued", "running"].includes(t.status) ||
-          (t.status === "succeeded" && !t.available),
+          (t.status === "succeeded" && !t.available && !t.expired),
       );
       if (!active.length) return;
       polling.current = true;
@@ -516,12 +508,14 @@ export default function GeneratePage() {
                   <div className="generation-placeholder">
                     <span>✦</span>
                     <p>
-                      {current.status === "succeeded"
-                        ? text(
-                            "正在保存成片，请稍后刷新。",
-                            "Saving the generated video. Refresh shortly.",
-                          )
-                        : status(current.status)}
+                      {current.expired
+                        ? text("文件已过期", "File expired")
+                        : current.status === "succeeded"
+                          ? text(
+                              "正在保存成片，请稍后刷新。",
+                              "Saving the generated video. Refresh shortly.",
+                            )
+                          : status(current.status)}
                     </p>
                   </div>
                 )}
@@ -577,8 +571,8 @@ export default function GeneratePage() {
           <h2>{text("生成记录", "Generation history")}</h2>
           <p>
             {text(
-              "记录按登录账号归属；审批人可查看团队记录。",
-              "Records belong to the signed-in account; approvers can view the team.",
+              "成片保存 14 天后自动清理，请及时下载。生成记录保留；审批人可查看团队记录。",
+              "Generated files are automatically deleted after 14 days. Download them in time. Records remain; approvers can view the team.",
             )}
           </p>
           <div className="generation-table-scroll">
@@ -622,6 +616,8 @@ export default function GeneratePage() {
                         >
                           {text("下载视频", "Download video")} ↓
                         </a>
+                      ) : t.expired ? (
+                        text("文件已过期", "File expired")
                       ) : t.status === "succeeded" ? (
                         text("保存中", "Saving")
                       ) : (
@@ -636,49 +632,6 @@ export default function GeneratePage() {
           {!tasks.length && (
             <p>{text("暂无生成记录。", "No generation history yet.")}</p>
           )}
-        </section>
-        <section className="card generation-history">
-          <h2>{text("按需求汇总用量", "Usage by requirement")}</h2>
-          <small>
-            {text(
-              "累计记录；Token 未返回的任务不按零计算。",
-              "All-time records. Missing token usage is not counted as zero.",
-            )}
-          </small>
-          <div className="generation-table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  {[
-                    text("创建人／需求", "Creator / requirement"),
-                    text("成功／总任务", "Succeeded / total"),
-                    text("已报告 Token", "Reported tokens"),
-                    text("Token 未返回", "Tokens missing"),
-                  ].map((h) => (
-                    <th key={h}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {summary.map((s, i) => (
-                  <tr key={i}>
-                    <td>
-                      {s.owner_name} · {s.requirement}
-                    </td>
-                    <td>
-                      {s.succeeded} / {s.tasks}
-                    </td>
-                    <td>
-                      {s.tokens === null
-                        ? "—"
-                        : Number(s.tokens).toLocaleString()}
-                    </td>
-                    <td>{s.missing_tokens}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </section>
       </section>
     </AppShell>

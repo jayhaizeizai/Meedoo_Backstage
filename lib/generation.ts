@@ -1,5 +1,13 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+  realpath,
+  unlink,
+} from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -29,6 +37,10 @@ export async function generationSchema() {
     status text NOT NULL, usage jsonb, estimated_cost numeric NOT NULL, pricing_version text NOT NULL DEFAULT 'cn-2026-09-16',
     media_path text, error_code text, last_checked_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(owner_id,request_id));
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_expires_at timestamptz;
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_deleted_at timestamptz;
+    UPDATE generation_tasks SET media_expires_at=updated_at+interval '14 days'
+      WHERE media_path IS NOT NULL AND media_expires_at IS NULL;
     CREATE INDEX IF NOT EXISTS generation_tasks_owner_created ON generation_tasks(owner_id,created_at DESC);`).catch(
     (e) => {
       schema = undefined;
@@ -384,6 +396,9 @@ export async function refreshGeneration(id: string, userId?: string) {
     )
       throw Error("NOT_FOUND");
     if (
+      task.media_deleted_at ||
+      (task.media_expires_at &&
+        new Date(task.media_expires_at).getTime() <= Date.now()) ||
       !task.provider_id ||
       ["failed", "cancelled"].includes(task.status) ||
       (task.status === "succeeded" && task.media_path) ||
@@ -424,7 +439,7 @@ export async function refreshGeneration(id: string, userId?: string) {
       try {
         const saved = await saveOutput(id, result.content.url);
         await client.query(
-          "UPDATE generation_tasks SET media_path=$2,error_code=NULL WHERE id=$1",
+          "UPDATE generation_tasks SET media_path=$2,media_expires_at=COALESCE(media_expires_at,now()+interval '14 days'),error_code=NULL WHERE id=$1",
           [id, saved],
         );
       } catch {
@@ -442,14 +457,66 @@ export async function refreshGeneration(id: string, userId?: string) {
     client.release();
   }
 }
-export async function syncGenerationTasks() {
-  if (!process.env.MINIMAX_API_KEY) return;
+// Only generated output files are eligible; uploaded videos and reference images are untouched.
+export async function cleanupGenerationOutputs() {
   await generationSchema();
+  const expired = await query(
+    "SELECT id FROM generation_tasks WHERE media_expires_at<=now() AND media_deleted_at IS NULL ORDER BY media_expires_at LIMIT 100",
+  );
+  for (const { id } of expired.rows) {
+    const client = await db().connect();
+    let locked = false;
+    try {
+      locked = (
+        await client.query(
+          "SELECT pg_try_advisory_lock(hashtextextended($1,6)) locked",
+          [id],
+        )
+      ).rows[0].locked;
+      if (!locked) continue;
+      const task = (
+        await client.query(
+          "SELECT media_path FROM generation_tasks WHERE id=$1 AND media_expires_at<=now() AND media_deleted_at IS NULL",
+          [id],
+        )
+      ).rows[0];
+      if (!task) continue;
+      if (task.media_path) {
+        const expected = path.resolve(directory(), `${id}.mp4`);
+        if (path.resolve(task.media_path) !== expected)
+          throw Error("CLEANUP_PATH_INVALID");
+        // Resolve the parent too, so a replaced/symlinked generation directory cannot target uploads.
+        if ((await realpath(directory())) !== path.resolve(directory()))
+          throw Error("CLEANUP_PATH_INVALID");
+        await unlink(expected).catch((e: NodeJS.ErrnoException) => {
+          if (e.code !== "ENOENT") throw e;
+        });
+      }
+      await client.query(
+        "UPDATE generation_tasks SET media_path=NULL,media_deleted_at=now(),error_code=NULL WHERE id=$1",
+        [id],
+      );
+    } catch {
+      // Retry on the next timer run without logging private paths or provider data.
+      console.error("Generation output cleanup deferred");
+    } finally {
+      if (locked)
+        await client.query(
+          "SELECT pg_advisory_unlock(hashtextextended($1,6))",
+          [id],
+        );
+      client.release();
+    }
+  }
+}
+export async function syncGenerationTasks() {
+  await cleanupGenerationOutputs();
+  if (!process.env.MINIMAX_API_KEY) return;
   await query(
     "UPDATE generation_tasks SET status='submitted_unknown',error_code='SUBMISSION_UNCERTAIN' WHERE status='submitting' AND created_at<now()-interval '5 minutes'",
   );
   const tasks = await query(
-    "SELECT id FROM generation_tasks WHERE provider_id IS NOT NULL AND (status IN ('queued','running') OR (status='succeeded' AND media_path IS NULL)) AND created_at>now()-interval '7 days' ORDER BY last_checked_at NULLS FIRST LIMIT 5",
+    "SELECT id FROM generation_tasks WHERE provider_id IS NOT NULL AND media_deleted_at IS NULL AND (media_expires_at IS NULL OR media_expires_at>now()) AND (status IN ('queued','running') OR (status='succeeded' AND media_path IS NULL)) AND created_at>now()-interval '7 days' ORDER BY last_checked_at NULLS FIRST LIMIT 5",
   );
   for (const t of tasks.rows) {
     try {
@@ -463,7 +530,7 @@ export async function generationList(userId: string) {
   await generationSchema();
   const approver = await generationApprover(userId);
   const tasks = await query(
-    "SELECT id,owner_name,requirement,input,status,usage,estimated_cost,error_code,created_at,updated_at,(media_path IS NOT NULL) available FROM generation_tasks WHERE ($2::boolean OR owner_id=$1) ORDER BY created_at DESC LIMIT 100",
+    "SELECT id,owner_name,requirement,input,status,usage,estimated_cost,error_code,created_at,updated_at,media_expires_at,(media_deleted_at IS NOT NULL OR COALESCE(media_expires_at<=now(),false)) expired,(media_path IS NOT NULL AND media_deleted_at IS NULL AND media_expires_at>now()) available FROM generation_tasks WHERE ($2::boolean OR owner_id=$1) ORDER BY created_at DESC LIMIT 100",
     [userId, approver],
   );
   const totals = await query(
