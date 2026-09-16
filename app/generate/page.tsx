@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
 import {
-  estimateGenerationCost,
   generationRatios,
   type GenerationInput,
 } from "../../lib/generation-model";
@@ -22,7 +21,6 @@ type Task = {
   input: GenerationInput;
   status: string;
   usage: Record<string, number> | null;
-  estimated_cost: string;
   available: boolean;
   error_code: string | null;
   created_at: string;
@@ -34,7 +32,6 @@ type Summary = {
   succeeded: number;
   tokens: string | null;
   missing_tokens: number;
-  estimated_cost: string | null;
 };
 export default function GeneratePage() {
   const { text, language } = useLanguage();
@@ -213,7 +210,6 @@ export default function GeneratePage() {
     }
   }
   const current = tasks.find((t) => t.id === selected) || tasks[0];
-  const estimate = estimateGenerationCost(duration, resolution, assets.length);
   const input = (role: Asset["role"], label: string, multiple = false) => (
     <label className="generation-drop">
       <span>{label}</span>
@@ -430,18 +426,6 @@ export default function GeneratePage() {
                 )}
               </small>
             )}
-            <div className="generation-estimate">
-              <span>{text("本次预估费用", "Estimated cost")}</span>
-              <strong>
-                ¥{Number.isFinite(estimate) ? estimate.toFixed(2) : "—"}
-              </strong>
-            </div>
-            <small>
-              {text(
-                "按国内公开单价估算，实际扣费以 MiniMax 账单为准。",
-                "Estimate based on China list prices. Actual charges follow your MiniMax bill.",
-              )}
-            </small>
             <button
               className="primary generation-submit"
               disabled={
@@ -571,12 +555,6 @@ export default function GeneratePage() {
                     <small>{text("输出秒数", "Output seconds")}</small>
                     <strong>{current.usage?.output_seconds ?? "—"}</strong>
                   </div>
-                  <div>
-                    <small>{text("预估费用", "Estimated cost")}</small>
-                    <strong>
-                      ¥{Number(current.estimated_cost).toFixed(2)}
-                    </strong>
-                  </div>
                 </div>
               </>
             ) : (
@@ -613,7 +591,7 @@ export default function GeneratePage() {
                     text("时间", "Created"),
                     text("状态", "Status"),
                     text("Token", "Tokens"),
-                    text("预估费用", "Estimated cost"),
+                    text("下载", "Download"),
                   ].map((h) => (
                     <th key={h}>{h}</th>
                   ))}
@@ -636,7 +614,20 @@ export default function GeneratePage() {
                     </td>
                     <td>{status(t.status)}</td>
                     <td>{t.usage?.total_tokens?.toLocaleString() ?? "—"}</td>
-                    <td>¥{Number(t.estimated_cost).toFixed(2)}</td>
+                    <td>
+                      {t.available ? (
+                        <a
+                          className="generation-record-download"
+                          href={`/api/generation/${t.id}/media?download=1`}
+                        >
+                          {text("下载视频", "Download video")} ↓
+                        </a>
+                      ) : t.status === "succeeded" ? (
+                        text("保存中", "Saving")
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -650,8 +641,8 @@ export default function GeneratePage() {
           <h2>{text("按需求汇总用量", "Usage by requirement")}</h2>
           <small>
             {text(
-              "累计记录；费用只汇总成功任务的预估值。Token 未返回的任务不按零计算。",
-              "All-time records; costs sum successful-task estimates. Missing token usage is not counted as zero.",
+              "累计记录；Token 未返回的任务不按零计算。",
+              "All-time records. Missing token usage is not counted as zero.",
             )}
           </small>
           <div className="generation-table-scroll">
@@ -663,7 +654,6 @@ export default function GeneratePage() {
                     text("成功／总任务", "Succeeded / total"),
                     text("已报告 Token", "Reported tokens"),
                     text("Token 未返回", "Tokens missing"),
-                    text("预估费用", "Estimated cost"),
                   ].map((h) => (
                     <th key={h}>{h}</th>
                   ))}
@@ -684,11 +674,6 @@ export default function GeneratePage() {
                         : Number(s.tokens).toLocaleString()}
                     </td>
                     <td>{s.missing_tokens}</td>
-                    <td>
-                      {s.estimated_cost === null
-                        ? "—"
-                        : `¥${Number(s.estimated_cost).toFixed(2)}`}
-                    </td>
                   </tr>
                 ))}
               </tbody>

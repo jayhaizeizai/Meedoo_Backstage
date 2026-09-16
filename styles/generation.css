@@ -171,19 +171,6 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
-.generation-estimate {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #f4f1ff;
-  padding: 14px;
-  border-radius: 10px;
-  color: #6547d5;
-  font-size: 13px;
-}
-.generation-estimate strong {
-  font-size: 20px;
-}
 .generation-submit {
   width: 100%;
   padding: 14px;
@@ -251,7 +238,7 @@
 }
 .generation-usage {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   border-top: 1px solid #eeeaf6;
   padding-top: 18px;
@@ -337,4 +324,9 @@
   .generation-submit:hover:not(:disabled) {
     background: #6745d9;
   }
+}
+
+.generation-record-download {
+  color: #7552e7;
+  text-decoration: none;
 }
