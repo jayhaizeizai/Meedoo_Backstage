@@ -29,13 +29,18 @@ const base = {
   assets: [],
 };
 assert.equal(validateGeneration(base).duration, 6);
+assert.equal(validateGeneration({ ...base, requirement: undefined }).requirement, base.prompt);
+assert.equal(validateGeneration({ ...base, requirement: " " }).requirement, base.prompt);
+assert.equal(validateGeneration({ ...base, requirement: undefined, prompt: "🐶".repeat(50) }).requirement, "🐶".repeat(40) + "…");
+assert.equal(validateGeneration({ ...base, requirement: undefined, prompt: "  A\n  dog  " }).requirement, "A dog");
+assert.equal(validateGeneration(base).requirement, "Episode 1");
 for (const patch of [
   { duration: 0 },
   { duration: 16 },
   { duration: 4.5 },
   { resolution: "1080P" },
   { ratio: "adaptive" },
-  { requirement: "" },
+  { requirement: 42 },
   { prompt: "" },
   { requestId: "invalid" },
   { mode: "frames" },
@@ -190,7 +195,7 @@ if (process.argv.includes("--db"))
         calls++;
         throw Error("Simulated timeout");
       };
-      const uncertain = { ...base, requestId: randomUUID() };
+      const uncertain = { ...base, requirement: undefined, requestId: randomUUID() };
       const uncertainId = await createGeneration(user, uncertain);
       assert.equal(await createGeneration(user, uncertain), uncertainId);
       assert.equal(calls, 2);

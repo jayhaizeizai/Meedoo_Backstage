@@ -42,7 +42,6 @@ export default function GeneratePage() {
   const [mode, setMode] = useState<"reference" | "frames">("reference"),
     [assets, setAssets] = useState<Asset[]>([]),
     [prompt, setPrompt] = useState(""),
-    [requirement, setRequirement] = useState(""),
     [duration, setDuration] = useState(6),
     [ratio, setRatio] = useState("9:16"),
     [resolution, setResolution] =
@@ -91,8 +90,8 @@ export default function GeneratePage() {
         "Up to 3 tasks can run at once. Please wait.",
       ),
       INVALID_INPUT: text(
-        "请检查需求名称、提示词和生成参数。",
-        "Check the requirement, prompt and generation settings.",
+        "请检查提示词和生成参数。",
+        "Check the prompt and generation settings.",
       ),
       UNAUTHORIZED: text("请重新登录。", "Please sign in again."),
       REQUEST_CONFLICT: text(
@@ -229,7 +228,6 @@ export default function GeneratePage() {
     const params = {
       model,
       ...(settings.provider === "ark" ? { generateAudio } : {}),
-      requirement,
       prompt,
       mode,
       duration,
@@ -363,18 +361,6 @@ export default function GeneratePage() {
                 )}
               </p>
             )}
-            <label>
-              {text("需求名称", "Requirement")}
-              <input
-                maxLength={160}
-                value={requirement}
-                onChange={(e) => setRequirement(e.target.value)}
-                placeholder={text(
-                  "例如：比熊犬系列 · 第 3 集",
-                  "e.g. Bichon series · Episode 3",
-                )}
-              />
-            </label>
             <div
               className="generation-tabs"
               role="group"
@@ -549,7 +535,6 @@ export default function GeneratePage() {
                 !configured ||
                 busy ||
                 uploading ||
-                !requirement.trim() ||
                 !prompt.trim() ||
                 duration < 4 ||
                 duration > settings.maxDuration ||
@@ -731,7 +716,7 @@ export default function GeneratePage() {
               <thead>
                 <tr>
                   {[
-                    text("需求", "Requirement"),
+                    text("视频", "Video"),
                     text("模型", "Model"),
                     text("创建人", "Creator"),
                     text("时间", "Created"),

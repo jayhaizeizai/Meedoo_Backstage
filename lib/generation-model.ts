@@ -78,9 +78,8 @@ export function validateGeneration(value: unknown): GenerationInput {
   if (
     (v.generateAudio !== undefined && typeof v.generateAudio !== "boolean") ||
     !uuidPattern.test(v.requestId) ||
-    typeof v.requirement !== "string" ||
-    !v.requirement.trim() ||
-    v.requirement.length > 160 ||
+    (v.requirement !== undefined && typeof v.requirement !== "string") ||
+    (typeof v.requirement === "string" && v.requirement.length > 160) ||
     typeof v.prompt !== "string" ||
     !v.prompt.trim() ||
     [...v.prompt].length > 7000 ||
@@ -119,7 +118,11 @@ export function validateGeneration(value: unknown): GenerationInput {
     ...(model.provider === "ark"
       ? { generateAudio: v.generateAudio ?? true }
       : {}),
-    requirement: v.requirement.trim(),
+    // Preserve old clients' names; new clients need only supply a prompt.
+    requirement: v.requirement?.trim() || (() => {
+      const title = [...v.prompt.trim().replace(/\s+/g, " ")];
+      return title.slice(0, 40).join("") + (title.length > 40 ? "…" : "");
+    })(),
     prompt: v.prompt.trim(),
     mode: v.mode,
     duration: v.duration,
