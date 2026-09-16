@@ -73,3 +73,10 @@ MiniMax images are saved unchanged on the server and queued for provider upload 
 Uploads retain original bytes, allow up to 300 seconds, and retry network/timeout/429/5xx failures up to three attempts with a 30-second minimum delay. One advisory-locked transfer runs at a time to avoid bandwidth/pool exhaustion; owner/content/key cache reuse and expiry are unchanged. Only classified error codes are logged. Paid generation requests are never automatically resubmitted after an ambiguous response. Failed historical tasks are not retried automatically.
 
 Checks: `node scripts/verify-generation-files.cjs` on TEST with an isolated schema covers ownership, pre-upload, bounded transient retries, manual retry, concurrency, cache reuse, and paid-submission boundaries. A separate large synthetic PNG file-only live check must confirm upstream transfer without submitting a paid video generation.
+
+
+## Optional reference compression (TEST first)
+
+On the generation page, selecting images larger than 5 MiB opens a confirmation dialog before any upload in that selection. Users can compress only those large images to at most 1 MiB, keep originals, or cancel. Images at or below 5 MiB are unchanged. The original local files are never overwritten. Browser JPEG encoding first adjusts quality (0.94 down to 0.72), then proportionally reduces resolution if necessary; transparent areas become white, disclosed in the dialog. Unsupported decoding (for example HEIC in some browsers) fails explicitly and users can reselect originals. No automatic compression occurs on the server. Both reference and first/last-frame inputs use this opt-in flow.
+
+Generate a real-browser test with `node scripts/verify-image-compression-browser.cjs /tmp/compression-check.html`; open the file in a browser and require PASS. It uses a random 2048-square PNG larger than 5 MiB, tests actual encoding to <=1 MiB, exact threshold, original file preservation, aspect ratio, and unsupported decode handling. No provider API calls.

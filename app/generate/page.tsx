@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
+import { useReferenceCompression } from "../../components/generation-image-compression";
 import {
   generationRatios,
   generationModels,
@@ -32,6 +33,7 @@ type Task = {
 };
 export default function GeneratePage() {
   const { text, language } = useLanguage();
+  const compression = useReferenceCompression();
   const [model, setModel] = useState<GenerationModel>("minimax-h3");
   const [models, setModels] = useState<GenerationModel[]>([]);
   const [generateAudio, setGenerateAudio] = useState(true);
@@ -79,6 +81,10 @@ export default function GeneratePage() {
       INVALID_IMAGE: text(
         "图片须为 JPG、PNG、WEBP 或 HEIC，最大 30 MB，宽高 256–5760 像素，宽高比 0.4–2.5。",
         "Use JPG, PNG, WEBP or HEIC up to 30 MB, 256–5760 pixels per side, aspect ratio 0.4–2.5.",
+      ),
+      COMPRESSION_FAILED: text(
+        "浏览器无法压缩这张图片。请重新选择图片并保留原图上传，或先转换为 JPG / PNG。",
+        "Your browser could not compress this image. Select it again and upload the original, or convert it to JPG / PNG first.",
       ),
       TOO_MANY_TASKS: text(
         "最多同时处理 3 个任务，请等待当前任务完成。",
@@ -189,7 +195,9 @@ export default function GeneratePage() {
     setUploading(true);
     setError("");
     try {
-      for (const file of Array.from(files)) {
+      const prepared = await compression.prepareFiles(Array.from(files));
+      if (!prepared) return;
+      for (const file of prepared) {
         if (file.size > 30 * 1024 * 1024) throw Error("INVALID_IMAGE");
         const form = new FormData();
         form.set("file", file);
@@ -277,6 +285,7 @@ export default function GeneratePage() {
       }}
     >
       <section className="page generation-page">
+        {compression.dialog}
         <header className="generation-header">
           <div>
             <p className="eyebrow">CREATE · REVIEW · PUBLISH</p>
@@ -414,7 +423,9 @@ export default function GeneratePage() {
             )}
             {uploading && (
               <small role="status">
-                {text("正在上传图片…", "Uploading images…")}
+                {compression.compressing
+                  ? text("正在压缩图片…", "Compressing images…")
+                  : text("正在准备并上传图片…", "Preparing and uploading images…")}
               </small>
             )}
             <div className="generation-assets">

@@ -227,4 +227,4 @@ pnpm build
 
 每次交接记录分支/提交、变更目的、验证项目、两台服务器版本、备份位置、未完成项及需要的账号权限；不记录秘密值。
 
-MiniMax 参考图在选图后同步到平台，原图不压缩；缩略图下可查看状态并重试。实现及排障见 [生成模块文档](docs/minimax-generation.md#reference-pre-upload-2026-09-16)。
+MiniMax 参考图在选图后同步到平台，默认保留原图；超过 5 MB 时可选择压缩到约 1 MB 后上传；缩略图下可查看状态并重试。实现及排障见 [生成模块文档](docs/minimax-generation.md#reference-pre-upload-2026-09-16)。

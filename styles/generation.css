@@ -338,3 +338,24 @@
   color: #7552e7;
   text-decoration: none;
 }
+.generation-compression-dialog {
+  width: min(520px, calc(100vw - 40px));
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid #e4ddf8;
+  border-radius: 18px;
+  padding: 26px;
+  color: #243052;
+  box-shadow: 0 20px 80px #151a2c33;
+}
+.generation-compression-dialog::backdrop { background: #151a2c66; }
+.generation-compression-dialog h2 { margin: 0 0 14px; font-size: 20px; }
+.generation-compression-dialog p { font-size: 13px; line-height: 1.7; color: #65728a; }
+.generation-compression-dialog ul { padding: 0; list-style: none; max-height: 200px; overflow: auto; }
+.generation-compression-dialog li { display: flex; gap: 12px; justify-content: space-between; padding: 8px 0; font-size: 13px; }
+.generation-compression-dialog li span { overflow-wrap: anywhere; min-width: 0; }
+.generation-compression-dialog li strong { white-space: nowrap; }
+.generation-compression-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+.generation-compression-actions button { border: 1px solid #ded7ef; border-radius: 9px; padding: 10px 14px; cursor: pointer; background: #faf9ff; color: #6046a2; }
+.generation-compression-actions button.primary { background: #7957ed; color: white; border-color: #7957ed; }
