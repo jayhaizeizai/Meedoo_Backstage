@@ -35,6 +35,7 @@ export default function GeneratePage() {
   const [model, setModel] = useState<GenerationModel>("minimax-h3");
   const [models, setModels] = useState<GenerationModel[]>([]);
   const [generateAudio, setGenerateAudio] = useState(true);
+  const [imageSync, setImageSync] = useState<Record<string, string>>({});
   const settings = generationModel(model);
   const [mode, setMode] = useState<"reference" | "frames">("reference"),
     [assets, setAssets] = useState<Asset[]>([]),
@@ -139,6 +140,39 @@ export default function GeneratePage() {
     }, 15000);
     return () => clearInterval(timer);
   }, [tasks, load]);
+  const syncImage = useCallback(async (id: string, retry = false, manual = false) => {
+    try {
+      if (retry) setImageSync((v) => ({ ...v, [id]: "pending" }));
+      const response = await fetch(`/api/generation/assets/${id}/sync${manual ? "?retry=1" : ""}`, {
+        method: retry ? "POST" : "GET", cache: "no-store",
+      });
+      if (!response.ok) throw Error("SYNC_UNAVAILABLE");
+      const result = await response.json();
+      setImageSync((v) => ({ ...v, [id]: result.status }));
+    } catch {
+      setImageSync((v) => ({ ...v, [id]: "unavailable" }));
+    }
+  }, []);
+  useEffect(() => {
+    if (model !== "minimax-h3" || !assets.length) return;
+    let active = true, checking = false;
+    // Includes images uploaded while another model was selected.
+    void (async () => {
+      for (const asset of assets) {
+        if (!active) break;
+        await syncImage(asset.id, true);
+      }
+    })();
+    const timer = setInterval(() => {
+      if (!active || checking || document.hidden) return;
+      checking = true;
+      void (async () => {
+        try { for (const asset of assets) { if (!active) break; await syncImage(asset.id); } }
+        finally { checking = false; }
+      })();
+    }, 5000);
+    return () => { active = false; clearInterval(timer); };
+  }, [assets, model, syncImage]);
   async function upload(files: FileList | null, role: Asset["role"]) {
     if (!files?.length || uploading || busy) return;
     const limit =
@@ -159,6 +193,7 @@ export default function GeneratePage() {
         if (file.size > 30 * 1024 * 1024) throw Error("INVALID_IMAGE");
         const form = new FormData();
         form.set("file", file);
+        form.set("model", model);
         const r = await fetch("/api/generation/assets", {
           method: "POST",
           body: form,
@@ -404,6 +439,23 @@ export default function GeneratePage() {
                           : text("尾帧", "Last frame")}
                     </span>
                   </button>
+                  {model === "minimax-h3" && (
+                    <div className="generation-image-status" aria-live="polite">
+                      <small>{imageSync[a.id] === "ready"
+                        ? text("已就绪", "Ready")
+                        : imageSync[a.id] === "failed"
+                          ? text("同步失败", "Sync failed")
+                          : imageSync[a.id] === "retrying"
+                            ? text("自动重试中", "Retrying")
+                            : imageSync[a.id] === "unavailable"
+                              ? text("状态读取失败", "Status unavailable")
+                              : text("同步中…", "Syncing…")}</small>
+                      {["failed", "unavailable"].includes(imageSync[a.id]) &&
+                        <button type="button" onClick={() => void syncImage(a.id, true, true)}>
+                          {text("重试", "Retry")}
+                        </button>}
+                    </div>
+                  )}
                   <button
                     type="button"
                     disabled={busy || uploading}
@@ -492,6 +544,7 @@ export default function GeneratePage() {
                 duration > settings.maxDuration ||
                 !models.includes(model) ||
                 assets.length > settings.maxImages ||
+                (model === "minimax-h3" && assets.some((a) => imageSync[a.id] === "failed")) ||
                 (mode === "frames" &&
                   !assets.some((a) => a.role === "first_frame"))
               }

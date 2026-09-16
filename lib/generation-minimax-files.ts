@@ -7,7 +7,7 @@ const cacheLifetimeMs = 6 * 86400000;
 export async function minimaxImageReference(
   assetId: string,
   ownerId: string,
-  deadline = Date.now() + 180000,
+  deadline = Date.now() + 330000,
 ) {
   const key = process.env.MINIMAX_API_KEY;
   if (!key) throw Error("NOT_CONFIGURED");
@@ -42,7 +42,7 @@ export async function minimaxImageReference(
       )
     ).rows[0];
     if (cached) return `mm_file://${cached.file_id}`;
-    const remaining = Math.min(90000, deadline - Date.now());
+    const remaining = Math.min(300000, deadline - Date.now());
     if (remaining <= 0) throw Error("INPUT_UPLOAD_BUSY");
     const ext: Record<string, string> = {
       "image/jpeg": "jpg",
@@ -64,7 +64,12 @@ export async function minimaxImageReference(
       body: form,
       redirect: "error",
       signal: AbortSignal.timeout(remaining),
+    }).catch((e: unknown) => {
+      throw Error(e instanceof Error && ["TimeoutError", "AbortError"].includes(e.name)
+        ? "INPUT_UPLOAD_TIMEOUT" : "INPUT_UPLOAD_NETWORK");
     });
+    if (response.status === 429 || response.status >= 500)
+      throw Error("INPUT_UPLOAD_TEMPORARY");
     // Preserve int64 file IDs without passing them through JavaScript floating-point numbers.
     const raw = await response.text();
     const result = JSON.parse(

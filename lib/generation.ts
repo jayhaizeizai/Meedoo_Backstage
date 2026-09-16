@@ -25,6 +25,7 @@ import {
 } from "./generation-model";
 
 import { minimaxImageReference } from "./generation-minimax-files";
+import { enqueueImageSync, imageSyncStatus, processImageSync } from "./generation-image-sync";
 const run = promisify(execFile);
 import {
   ProviderError,
@@ -50,6 +51,11 @@ export async function generationSchema() {
       credential_sha256 text NOT NULL, file_id text NOT NULL, expires_at timestamptz NOT NULL,
       PRIMARY KEY(owner_id,content_sha256,credential_sha256));
     ALTER TABLE generation_tasks ALTER COLUMN estimated_cost DROP NOT NULL;
+    CREATE TABLE IF NOT EXISTS generation_image_sync (
+      asset_id uuid PRIMARY KEY REFERENCES generation_assets(id),
+      status text NOT NULL DEFAULT 'pending', attempts integer NOT NULL DEFAULT 0,
+      error_code text, next_attempt_at timestamptz NOT NULL DEFAULT now(),
+      expires_at timestamptz, credential_sha256 text NOT NULL);
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_expires_at timestamptz;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_deleted_at timestamptz;
     UPDATE generation_tasks SET media_expires_at=updated_at+interval '14 days'
@@ -296,7 +302,7 @@ async function submitReservedGeneration(
 }
 export async function prepareGeneration(
   id: string,
-  deadline = Date.now() + 180000,
+  deadline = Date.now() + 480000,
 ) {
   await generationSchema();
   const client = await db().connect();
@@ -322,11 +328,17 @@ export async function prepareGeneration(
     );
     const refs = new Map<string, string>();
     try {
-      for (const asset of task.input.assets)
+      for (const asset of task.input.assets) {
+        await enqueueImageSync(asset.id, task.owner_id);
+        await processImageSync(asset.id, deadline);
+        const sync = await imageSyncStatus(asset.id, task.owner_id);
+        if (sync.status === "failed") throw Error("INPUT_UPLOAD_FAILED");
+        if (sync.status !== "ready") return;
         refs.set(
           asset.id,
           await minimaxImageReference(asset.id, task.owner_id, deadline),
         );
+      }
     } catch (e) {
       // Nothing has been submitted for generation yet. Busy uploads can safely resume next tick.
       if (e instanceof Error && e.message === "INPUT_UPLOAD_BUSY") return;
@@ -586,7 +598,7 @@ export async function cleanupGenerationOutputs() {
   }
 }
 export async function syncGenerationTasks() {
-  const deadline = Date.now() + 180000;
+  const deadline = Date.now() + 480000;
   await cleanupGenerationOutputs();
   if (!process.env.MINIMAX_API_KEY && !process.env.ARK_API_KEY) return;
   await query(
@@ -614,6 +626,11 @@ export async function syncGenerationTasks() {
     } catch {
       /* Durable preparation will resume next tick. */
     }
+  }
+  const images = await query("SELECT asset_id FROM generation_image_sync WHERE status IN ('pending','uploading','retrying') AND next_attempt_at<=now() ORDER BY next_attempt_at LIMIT 10");
+  for (const image of images.rows) {
+    if (deadline - Date.now() < 310000) break;
+    await processImageSync(image.asset_id, deadline);
   }
 }
 export async function generationList(userId: string) {

@@ -43,6 +43,7 @@ require.extensions[".ts"] = (m, f) =>
     const {
       minimaxImageReference,
     } = require("../lib/generation-minimax-files.ts");
+    const { enqueueImageSync, processImageSync, imageSyncStatus } = require("../lib/generation-image-sync.ts");
     await generationSchema();
     await query(
       "INSERT INTO meedoo_users(open_id,name) VALUES('file-owner','File Owner'),('file-other','File Other')",
@@ -59,12 +60,14 @@ require.extensions[".ts"] = (m, f) =>
     let uploads = 0,
       paid = 0,
       failUpload = false,
+      timeoutUpload = false,
       uncertain = false;
     global.fetch = async (url, options) => {
       if (String(url).endsWith("/v1/files/upload")) {
         uploads++;
         assert.equal(options.body.get("purpose"), "video_generation_input");
         assert.ok(options.body.get("file").size);
+        if (timeoutUpload) throw new DOMException("simulated timeout", "TimeoutError");
         if (failUpload)
           return Response.json(
             { base_resp: { status_code: 2013 } },
@@ -172,6 +175,28 @@ require.extensions[".ts"] = (m, f) =>
       "INPUT_UPLOAD_FAILED",
     );
     failUpload = false;
+    // A pre-upload job never generates video, retries transient errors at most three times,
+    // and can be manually resumed without changing an existing failed generation task.
+    await assert.rejects(enqueueImageSync(ids[3], "file-other", true), /NOT_FOUND/);
+    await enqueueImageSync(ids[3], "file-owner", true);
+    timeoutUpload = true;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await query("UPDATE generation_image_sync SET next_attempt_at=now() WHERE asset_id=$1", [ids[3]]);
+      await processImageSync(ids[3]);
+      const state = await imageSyncStatus(ids[3], "file-owner");
+      assert.equal(state.attempts, attempt);
+      assert.equal(state.status, attempt === 3 ? "failed" : "retrying");
+      assert.equal(state.error_code, "INPUT_UPLOAD_TIMEOUT");
+    }
+    assert.equal(paid, 1);
+    timeoutUpload = false;
+    await enqueueImageSync(ids[3], "file-owner", true);
+    const beforeUploads = uploads;
+    await Promise.all([processImageSync(ids[3]), processImageSync(ids[3])]);
+    assert.equal(uploads, beforeUploads + 1);
+    assert.equal((await imageSyncStatus(ids[3], "file-owner")).status, "ready");
+    assert.equal(paid, 1);
+    // Already-uploaded asset is ready before a generation request exists.
     uncertain = true;
     const uncertainId = await createGeneration(user, {
       ...input,

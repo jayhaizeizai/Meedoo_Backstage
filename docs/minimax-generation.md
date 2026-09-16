@@ -62,3 +62,14 @@ Repeated production H3 tasks returned error 2013: `content[3/4].image_url: media
 Verify on TEST only with `node scripts/verify-generation-files.cjs` (isolated schema, mocked uploads/generation). Real file-only smoke tests may upload a generated fixture, verify cache reuse and retrieve it, then delete that fixture; do not generate paid videos as an incidental test.
 
 Official [file upload contract and lifetime](https://platform.minimax.cn/docs/api-reference/file-management-upload).
+
+
+## Reference pre-upload (2026-09-16)
+
+MiniMax images are saved unchanged on the server and queued for provider upload as soon as they are selected. No resizing or lossy compression is applied. The asset POST persists a `generation_image_sync` job and Next.js `after` starts processing after the HTTP response; the generation timer resumes pending/retrying jobs after page closure or process restart. Seedance does not enqueue MiniMax image uploads.
+
+`GET /api/generation/assets/:id/sync` returns owner-only status; `POST` enqueues preparation for existing images (including a model switch), and `POST ?retry=1` explicitly retries a failed upload. Responses never expose provider file IDs, credential fingerprints or private URLs. Each thumbnail shows synchronization status and a retry action. Generation can wait in `preparing` for unfinished references and never submits until all references are ready.
+
+Uploads retain original bytes, allow up to 300 seconds, and retry network/timeout/429/5xx failures up to three attempts with a 30-second minimum delay. One advisory-locked transfer runs at a time to avoid bandwidth/pool exhaustion; owner/content/key cache reuse and expiry are unchanged. Only classified error codes are logged. Paid generation requests are never automatically resubmitted after an ambiguous response. Failed historical tasks are not retried automatically.
+
+Checks: `node scripts/verify-generation-files.cjs` on TEST with an isolated schema covers ownership, pre-upload, bounded transient retries, manual retry, concurrency, cache reuse, and paid-submission boundaries. A separate large synthetic PNG file-only live check must confirm upstream transfer without submitting a paid video generation.

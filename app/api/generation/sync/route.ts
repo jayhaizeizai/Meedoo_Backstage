@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncGenerationTasks } from "../../../../lib/generation";
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 600;
 export async function POST(request: NextRequest) {
   if (
     !process.env.CRON_SECRET ||
