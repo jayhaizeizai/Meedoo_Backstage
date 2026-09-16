@@ -2,7 +2,7 @@
 
 `/generate` is the bilingual model-selectable creation page within Video workflow. Shared credentials are server-only: `MINIMAX_API_KEY` in `/etc/meedoo/meedoo.env`, API origin fixed to `https://api.minimax.cn`. Never add a browser API-key field or expose this key in responses/logs.
 
-The original reference page is https://minimax-video-studio.a1173657596.chatgpt.site/ . Integrated inputs: up to nine reference images, first frame with optional last frame, prompt, 4–15 seconds, aspect ratio, 768P/2K. In first/last-frame mode the provider determines aspect ratio from the image. Images are uploaded separately (30 MB each), validated with ffprobe, stored privately, and supplied to MiniMax through 24-hour signed image URLs. The public image exception is scoped to generation assets, not arbitrary files or videos.
+The original reference page is https://minimax-video-studio.a1173657596.chatgpt.site/ . Integrated inputs: up to nine reference images, first frame with optional last frame, prompt, 4–15 seconds, aspect ratio, 768P/2K. In first/last-frame mode the provider determines aspect ratio from the image. Images are uploaded separately (30 MB each), validated with ffprobe, stored privately, and supplied to Seedance through 24-hour signed image URLs. MiniMax reference images are uploaded to its Files API first and referenced by mm_file IDs; see cache details below. The public image exception is scoped to generation assets, not arbitrary files or videos.
 
 ## Ownership, accounting and reliability
 
@@ -44,3 +44,21 @@ The model picker uses `lib/generation-model.ts` as a shared capability registry.
 Sources: [official Ark SDK](https://github.com/volcengine/volcengine-python-sdk/blob/master/volcenginesdkarkruntime/resources/content_generation/tasks.py), [official response schema](https://github.com/volcengine/volcengine-python-sdk/blob/master/volcenginesdkarkruntime/types/content_generation/content_generation_task.py), [Seedance 2.0 paper](https://arxiv.org/abs/2604.14148), [Seedance 2.5 announcement](https://seed.bytedance.com/en/blog/one-take-creation-flexible-referencing-introducing-seedance-2-5).
 
 `node scripts/verify-generation.cjs --db` is TEST-only and uses an isolated schema and fake provider. It verifies model routing, immutable audio/model selection, deduplication, local MP4 persistence, token accounting, legacy H3 compatibility and expiry without paid API submissions.
+
+
+## MiniMax reference image cache (media URL reachability fix)
+
+Repeated production H3 tasks returned error 2013: `content[3/4].image_url: media url unreachable`. The images existed and the signed URL returned HTTP 200 from Backstage, which does not prove the provider can download them. The server now sends image bytes using `POST https://api.minimax.cn/v1/files/upload`, purpose `video_generation_input`, then puts `mm_file://{file_id}` into each generation image URL.
+
+- Implementation: `lib/generation-minimax-files.ts`; additive table `generation_minimax_files`.
+- Cache key: owner + SHA-256 image contents + SHA-256 credential fingerprint. A new local asset with identical bytes can reuse a file within the same owner/key; another owner or rotated key cannot. No API keys, signed image URLs or provider messages are stored in cache entries.
+- MiniMax documents a seven-day file lifetime; cached IDs are reused for six days, with a ten-minute safety margin. A cache miss/expiry uploads again. int64 file IDs are parsed losslessly as strings.
+- Per-image advisory locks prevent concurrent duplicate uploads; a busy image remains pending for a later timer run. Per-task locks protect preparation/submission.
+- Image-based MiniMax requests are reserved as `preparing` and return immediately. The generation timer uploads references, persists `submitting` immediately before the generation POST, then records the remote ID. Browser refresh is not required. All references must be ready before the generation call. Failed uploads produce `INPUT_UPLOAD_FAILED`; no video task was submitted. Ambiguous paid submissions remain `submitted_unknown` and are never automatically repeated.
+- Preparation is bounded per sync run; local durable state and individual cache entries allow interrupted preparation to resume. Initial upload can take longer than an ordinary cached submission.
+- New remote media-unreachable errors map to `INPUT_MEDIA_UNREACHABLE` for a readable UI explanation. Existing failed records are retained and are never automatically resubmitted or billed again.
+- The reference cache is separate from 14-day output deletion. It does not delete user reference images or uploaded/published videos, and does not change Seedance transport.
+
+Verify on TEST only with `node scripts/verify-generation-files.cjs` (isolated schema, mocked uploads/generation). Real file-only smoke tests may upload a generated fixture, verify cache reuse and retrieve it, then delete that fixture; do not generate paid videos as an incidental test.
+
+Official [file upload contract and lifetime](https://platform.minimax.cn/docs/api-reference/file-management-upload).

@@ -24,6 +24,7 @@ import {
   type GenerationInput,
 } from "./generation-model";
 
+import { minimaxImageReference } from "./generation-minimax-files";
 const run = promisify(execFile);
 import {
   ProviderError,
@@ -44,6 +45,10 @@ export async function generationSchema() {
     status text NOT NULL, usage jsonb, estimated_cost numeric NOT NULL, pricing_version text NOT NULL DEFAULT 'cn-2026-09-16',
     media_path text, error_code text, last_checked_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(owner_id,request_id));
+    CREATE TABLE IF NOT EXISTS generation_minimax_files (
+      owner_id text NOT NULL REFERENCES meedoo_users(open_id), content_sha256 text NOT NULL,
+      credential_sha256 text NOT NULL, file_id text NOT NULL, expires_at timestamptz NOT NULL,
+      PRIMARY KEY(owner_id,content_sha256,credential_sha256));
     ALTER TABLE generation_tasks ALTER COLUMN estimated_cost DROP NOT NULL;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_expires_at timestamptz;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_deleted_at timestamptz;
@@ -208,7 +213,7 @@ export async function createGeneration(
     }
     const count = (
       await client.query(
-        "SELECT count(*)::int n FROM generation_tasks WHERE owner_id=$1 AND status IN ('submitting','queued','running','submitted_unknown')",
+        "SELECT count(*)::int n FROM generation_tasks WHERE owner_id=$1 AND status IN ('preparing','submitting','queued','running','submitted_unknown')",
         [user.openId],
       )
     ).rows[0].n;
@@ -222,7 +227,7 @@ export async function createGeneration(
     if (assets.length !== input.assets.length) throw Error("INVALID_ASSETS");
     const id = randomUUID();
     await client.query(
-      "INSERT INTO generation_tasks(id,owner_id,owner_name,request_id,requirement,input,status,estimated_cost,pricing_version) VALUES($1,$2,$3,$4,$5,$6,'submitting',$7,$8)",
+      "INSERT INTO generation_tasks(id,owner_id,owner_name,request_id,requirement,input,status,estimated_cost,pricing_version) VALUES($1,$2,$3,$4,$5,$6,$9,$7,$8)",
       [
         id,
         user.openId,
@@ -240,16 +245,33 @@ export async function createGeneration(
         generationModel(input.model).provider === "ark"
           ? "not-estimated"
           : "cn-2026-09-16",
+        generationModel(input.model).provider === "minimax" &&
+        input.assets.length
+          ? "preparing"
+          : "submitting",
       ],
     );
     return { id, fresh: true };
   });
   if (!reserved.fresh) return reserved.id;
+  if (
+    generationModel(input.model).provider === "minimax" &&
+    input.assets.length
+  )
+    return reserved.id;
+  await submitReservedGeneration(reserved.id, input, imageUrl);
+  return reserved.id;
+}
+async function submitReservedGeneration(
+  id: string,
+  input: GenerationInput,
+  resolveImage: (id: string) => string,
+) {
   try {
-    const providerId = await submitGeneration(input, imageUrl);
+    const providerId = await submitGeneration(input, resolveImage);
     await query(
       "UPDATE generation_tasks SET provider_id=$2,status='queued',updated_at=now() WHERE id=$1",
-      [reserved.id, providerId],
+      [id, providerId],
     );
   } catch (e) {
     // A timeout or 5xx may have accepted the paid task: never automatically resubmit.
@@ -259,7 +281,7 @@ export async function createGeneration(
     await query(
       "UPDATE generation_tasks SET status=$2,error_code=$3,updated_at=now() WHERE id=$1",
       [
-        reserved.id,
+        id,
         definite ? "failed" : "submitted_unknown",
         e instanceof ProviderError
           ? e.status === 403
@@ -271,7 +293,66 @@ export async function createGeneration(
       ],
     );
   }
-  return reserved.id;
+}
+export async function prepareGeneration(
+  id: string,
+  deadline = Date.now() + 180000,
+) {
+  await generationSchema();
+  const client = await db().connect();
+  let locked = false;
+  try {
+    locked = (
+      await client.query(
+        "SELECT pg_try_advisory_lock(hashtextextended($1,6)) locked",
+        [id],
+      )
+    ).rows[0].locked;
+    if (!locked) return;
+    const task = (
+      await client.query(
+        "SELECT * FROM generation_tasks WHERE id=$1 AND status='preparing'",
+        [id],
+      )
+    ).rows[0];
+    if (!task) return;
+    await client.query(
+      "UPDATE generation_tasks SET last_checked_at=now() WHERE id=$1",
+      [id],
+    );
+    const refs = new Map<string, string>();
+    try {
+      for (const asset of task.input.assets)
+        refs.set(
+          asset.id,
+          await minimaxImageReference(asset.id, task.owner_id, deadline),
+        );
+    } catch (e) {
+      // Nothing has been submitted for generation yet. Busy uploads can safely resume next tick.
+      if (e instanceof Error && e.message === "INPUT_UPLOAD_BUSY") return;
+      await client.query(
+        "UPDATE generation_tasks SET status='failed',error_code='INPUT_UPLOAD_FAILED',updated_at=now() WHERE id=$1",
+        [id],
+      );
+      return;
+    }
+    // Persist the uncertainty boundary before making the paid request; never auto-resubmit beyond it.
+    await client.query(
+      "UPDATE generation_tasks SET status='submitting',updated_at=now() WHERE id=$1",
+      [id],
+    );
+    await submitReservedGeneration(id, task.input, (assetId) => {
+      const ref = refs.get(assetId);
+      if (!ref) throw Error("INVALID_ASSETS");
+      return ref;
+    });
+  } finally {
+    if (locked)
+      await client.query("SELECT pg_advisory_unlock(hashtextextended($1,6))", [
+        id,
+      ]);
+    client.release();
+  }
 }
 export function permittedOutput(value: string, model?: string) {
   const url = new URL(value);
@@ -414,7 +495,12 @@ export async function refreshGeneration(id: string, userId?: string) {
         id,
         result.status,
         JSON.stringify(usage),
-        result.status === "failed" ? "GENERATION_FAILED" : null,
+        result.status === "failed"
+          ? String(result.error?.code) === "2013" &&
+            /media url unreachable/i.test(String(result.error?.message))
+            ? "INPUT_MEDIA_UNREACHABLE"
+            : "GENERATION_FAILED"
+          : null,
       ],
     );
     if (
@@ -500,19 +586,33 @@ export async function cleanupGenerationOutputs() {
   }
 }
 export async function syncGenerationTasks() {
+  const deadline = Date.now() + 180000;
   await cleanupGenerationOutputs();
   if (!process.env.MINIMAX_API_KEY && !process.env.ARK_API_KEY) return;
   await query(
-    "UPDATE generation_tasks SET status='submitted_unknown',error_code='SUBMISSION_UNCERTAIN' WHERE status='submitting' AND created_at<now()-interval '5 minutes'",
+    "UPDATE generation_tasks SET status='submitted_unknown',error_code='SUBMISSION_UNCERTAIN' WHERE status='submitting' AND updated_at<now()-interval '5 minutes'",
   );
   const tasks = await query(
     "SELECT id FROM generation_tasks WHERE provider_id IS NOT NULL AND media_deleted_at IS NULL AND (media_expires_at IS NULL OR media_expires_at>now()) AND (status IN ('queued','running') OR (status='succeeded' AND media_path IS NULL)) AND created_at>now()-interval '7 days' ORDER BY last_checked_at NULLS FIRST LIMIT 5",
   );
   for (const t of tasks.rows) {
+    if (Date.now() >= deadline) break;
     try {
       await refreshGeneration(t.id);
     } catch {
       /* Keep durable task for the next sync; never log upstream bodies or credentials. */
+    }
+  }
+
+  const preparing = await query(
+    "SELECT id FROM generation_tasks WHERE status='preparing' ORDER BY last_checked_at NULLS FIRST,created_at LIMIT 2",
+  );
+  for (const task of preparing.rows) {
+    if (Date.now() >= deadline) break;
+    try {
+      await prepareGeneration(task.id, deadline);
+    } catch {
+      /* Durable preparation will resume next tick. */
     }
   }
 }

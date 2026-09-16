@@ -57,6 +57,7 @@ export default function GeneratePage() {
     polling = useRef(false);
   const status = (s: string) =>
     ({
+      preparing: text("正在准备参考图", "Preparing reference images"),
       submitting: text("正在提交", "Submitting"),
       queued: text("排队中", "Queued"),
       running: text("生成中", "Generating"),
@@ -120,7 +121,7 @@ export default function GeneratePage() {
       if (polling.current || document.hidden) return;
       const active = tasks.filter(
         (t) =>
-          ["queued", "running"].includes(t.status) ||
+          ["preparing", "queued", "running"].includes(t.status) ||
           (t.status === "succeeded" && !t.available && !t.expired),
       );
       if (!active.length) return;
@@ -587,30 +588,40 @@ export default function GeneratePage() {
                 )}
                 {current.error_code && (
                   <p className="data-message">
-                    {current.error_code === "PROVIDER_ACCESS_DENIED"
+                    {current.error_code === "INPUT_UPLOAD_FAILED"
                       ? text(
-                          "模型调用权限不足，请在对应平台确认模型已开通且密钥有权限。",
-                          "Model access denied. Check activation and key permissions with the provider.",
+                          "参考图上传至生成平台失败，尚未提交视频生成。请重新发起任务。",
+                          "Reference upload failed before video generation was submitted. Start a new task to retry.",
                         )
-                      : current.error_code === "PROVIDER_PAYMENT_REQUIRED"
+                      : current.error_code === "INPUT_MEDIA_UNREACHABLE"
                         ? text(
-                            "平台余额或额度不足，请联系管理员。",
-                            "Provider balance or quota is insufficient. Contact an administrator.",
+                            "生成平台无法读取参考图。请重新发起任务，系统会先缓存参考图。",
+                            "The provider could not read a reference image. Start a new task to use cached references.",
                           )
-                        : current.error_code === "OUTPUT_SAVE_PENDING"
+                        : current.error_code === "PROVIDER_ACCESS_DENIED"
                           ? text(
-                              "成片已生成，服务器保存待重试。请刷新。",
-                              "Video generated; saving needs another attempt. Refresh to retry.",
+                              "模型调用权限不足，请在对应平台确认模型已开通且密钥有权限。",
+                              "Model access denied. Check activation and key permissions with the provider.",
                             )
-                          : current.status === "submitted_unknown"
+                          : current.error_code === "PROVIDER_PAYMENT_REQUIRED"
                             ? text(
-                                "平台可能已接收任务，请联系管理员核对，避免重复扣费。",
-                                "The provider may have accepted this task. Ask an administrator to reconcile it before resubmitting.",
+                                "平台余额或额度不足，请联系管理员。",
+                                "Provider balance or quota is insufficient. Contact an administrator.",
                               )
-                            : text(
-                                `任务未完成（${current.error_code}）。`,
-                                `Task not completed (${current.error_code}).`,
-                              )}
+                            : current.error_code === "OUTPUT_SAVE_PENDING"
+                              ? text(
+                                  "成片已生成，服务器保存待重试。请刷新。",
+                                  "Video generated; saving needs another attempt. Refresh to retry.",
+                                )
+                              : current.status === "submitted_unknown"
+                                ? text(
+                                    "平台可能已接收任务，请联系管理员核对，避免重复扣费。",
+                                    "The provider may have accepted this task. Ask an administrator to reconcile it before resubmitting.",
+                                  )
+                                : text(
+                                    `任务未完成（${current.error_code}）。`,
+                                    `Task not completed (${current.error_code}).`,
+                                  )}
                   </p>
                 )}
                 <div className="generation-usage">
