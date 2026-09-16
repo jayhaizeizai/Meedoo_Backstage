@@ -8,6 +8,7 @@ require.extensions[".ts"] = (m, f) =>
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
         target: ts.ScriptTarget.ES2022,
+        esModuleInterop: true,
       },
     }).outputText,
     f,
