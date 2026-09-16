@@ -28,7 +28,7 @@ async function request(
   const response = await fetch(
     (ark
       ? "https://ark.cn-beijing.volces.com/api/v3"
-      : "https://api.minimax.cn") + endpoint,
+      : "https://api.minimaxi.com") + endpoint,
     {
       method: body ? "POST" : "GET",
       headers: {

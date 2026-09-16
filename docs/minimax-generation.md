@@ -1,6 +1,6 @@
 # Video generation: MiniMax and Seedance
 
-`/generate` is the bilingual model-selectable creation page within Video workflow. Shared credentials are server-only: `MINIMAX_API_KEY` in `/etc/meedoo/meedoo.env`, API origin fixed to `https://api.minimax.cn`. Never add a browser API-key field or expose this key in responses/logs.
+`/generate` is the bilingual model-selectable creation page within Video workflow. Shared credentials are server-only: `MINIMAX_API_KEY` in `/etc/meedoo/meedoo.env`, API origin fixed to `https://api.minimaxi.com`. Never add a browser API-key field or expose this key in responses/logs.
 
 The original reference page is https://minimax-video-studio.a1173657596.chatgpt.site/ . Integrated inputs: up to nine reference images, first frame with optional last frame, prompt, 4–15 seconds, aspect ratio, 768P/2K. In first/last-frame mode the provider determines aspect ratio from the image. Images are uploaded separately (30 MB each), validated with ffprobe, stored privately, and supplied to Seedance through 24-hour signed image URLs. MiniMax reference images are uploaded to its Files API first and referenced by mm_file IDs; see cache details below. The public image exception is scoped to generation assets, not arbitrary files or videos.
 
@@ -48,7 +48,7 @@ Sources: [official Ark SDK](https://github.com/volcengine/volcengine-python-sdk/
 
 ## MiniMax reference image cache (media URL reachability fix)
 
-Repeated production H3 tasks returned error 2013: `content[3/4].image_url: media url unreachable`. The images existed and the signed URL returned HTTP 200 from Backstage, which does not prove the provider can download them. The server now sends image bytes using `POST https://api.minimax.cn/v1/files/upload`, purpose `video_generation_input`, then puts `mm_file://{file_id}` into each generation image URL.
+Repeated production H3 tasks returned error 2013: `content[3/4].image_url: media url unreachable`. The images existed and the signed URL returned HTTP 200 from Backstage, which does not prove the provider can download them. The server now sends image bytes using `POST https://api.minimaxi.com/v1/files/upload`, purpose `video_generation_input`, then puts `mm_file://{file_id}` into each generation image URL.
 
 - Implementation: `lib/generation-minimax-files.ts`; additive table `generation_minimax_files`.
 - Cache key: owner + SHA-256 image contents + SHA-256 credential fingerprint. A new local asset with identical bytes can reuse a file within the same owner/key; another owner or rotated key cannot. No API keys, signed image URLs or provider messages are stored in cache entries.

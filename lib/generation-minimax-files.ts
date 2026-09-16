@@ -69,7 +69,7 @@ export async function minimaxImageReference(
       new Blob([new Uint8Array(bytes)], { type: asset.mime }),
       `${digest}.${ext[asset.mime]}`,
     );
-    const response = await fetch("https://api.minimax.cn/v1/files/upload", {
+    const response = await fetch("https://api.minimaxi.com/v1/files/upload", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}` },
       body: form,

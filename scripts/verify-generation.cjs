@@ -155,7 +155,7 @@ if (process.argv.includes("--db"))
         "INSERT INTO meedoo_users(open_id,name) VALUES('test-owner','Test Owner'),('test-other','Test Other')",
       );
       global.fetch = async (url, options) => {
-        assert.ok(String(url).startsWith("https://api.minimax.cn/"));
+        assert.ok(String(url).startsWith("https://api.minimaxi.com/"));
         if (options.method === "POST") {
           calls++;
           return new Response(JSON.stringify({ task_id: "test-provider-1" }), {
