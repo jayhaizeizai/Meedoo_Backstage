@@ -191,6 +191,12 @@ async function main() {
       ).rows[0].status,
       "queued",
     );
+    await sync.applyStatusPayload(current, {status:"failed",results:[{platform:"youtube",status:"processing",success:false}]});
+    const pendingRow=(await db.query("SELECT status,success,error_message FROM publications WHERE upload_id=$1 AND platform='youtube'",[id])).rows[0];
+    assert.deepEqual(pendingRow,{status:"processing",success:null,error_message:null});
+    assert.equal((await db.query("SELECT status FROM uploads WHERE id=$1",[id])).rows[0].status,"processing");
+    await sync.applyStatusPayload(current,{status:"failed",results:[{platform:"youtube",status:"failed",success:false,error_message:"real rejection"}]});
+    assert.equal((await db.query("SELECT error_message FROM publications WHERE upload_id=$1 AND platform='youtube'",[id])).rows[0].error_message,"real rejection");
     await sync.applyStatusPayload(current, {
       status: "completed",
       platforms: {
@@ -202,6 +208,10 @@ async function main() {
         .status,
       "completed",
     );
+    await sync.applyStatusPayload(current,{status:"processing",results:[{platform:"youtube",status:"processing",success:false}]});
+    await sync.applyStatusPayload(current,{status:"failed",results:[{platform:"youtube",status:"failed",success:false}]});
+    assert.equal((await db.query("SELECT status FROM publications WHERE upload_id=$1 AND platform='youtube'",[id])).rows[0].status,"completed");
+    console.log("PASS processing+false is pending; genuine rejection stays failed; completed result does not regress");
     await db.query(
       "UPDATE publications SET status='failed' WHERE upload_id=$1 AND platform='youtube'",
       [id],
