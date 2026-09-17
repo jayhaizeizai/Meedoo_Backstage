@@ -1,8 +1,11 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),ts=require('typescript'),{randomUUID}=require('node:crypto');
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
-const {validateSeedream,seedreamSizes}=require('../lib/seedream-model.ts');
+const {validateSeedream,seedreamSizes,seedreamSize}=require('../lib/seedream-model.ts');
 const input={requestId:randomUUID(),prompt:'a blue ceramic cup',ratio:'9:16',baseAssetId:null};
 assert.equal(validateSeedream(input).ratio,'9:16');
+assert.equal(validateSeedream(input).quality,'2K');
+for(const [quality,size] of [['1K','800x1424'],['1.5K','1152x2048'],['2K','1584x2816']]){assert.equal(validateSeedream({...input,quality}).quality,quality);assert.equal(seedreamSize('9:16',quality),size);}
+assert.throws(()=>validateSeedream({...input,quality:'4K'}));
 for(const patch of [{requestId:'bad'},{prompt:''},{prompt:'x'.repeat(4001)},{ratio:'8K'},{baseAssetId:'https://private'}])assert.throws(()=>validateSeedream({...input,...patch}));
 for(const size of Object.values(seedreamSizes)){const [w,h]=size.split('x').map(Number);assert.ok(w*h<=4624220&&w*h>=3686400);}
 console.log('PASS Seedream input, asset IDs and 2K sizes');

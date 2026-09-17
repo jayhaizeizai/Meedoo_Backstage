@@ -50,7 +50,7 @@ export default function GeneratePage() {
     [ratio, setRatio] = useState("9:16"),
     [resolution, setResolution] =
       useState<GenerationInput["resolution"]>("768P");
-  const [rightTab, setRightTab] = useState<"video" | "image">("video");
+  const [rightTab, setRightTab] = useState<"video" | "image">("image");
   const [ownTasks, setOwnTasks] = useState<Task[]>([]);
   const [failureTask, setFailureTask] = useState<Task | null>(null);
   const failureDialog = useRef<HTMLDialogElement>(null);
@@ -640,10 +640,10 @@ export default function GeneratePage() {
           </section>
           <div className="generation-right-column">
             <div className="generation-tabs" role="tablist" aria-label={text("创作预览", "Creative preview")}>
-              {(["video", "image"] as const).map((tab) => <button key={tab} type="button" role="tab" id={`generation-tab-${tab}`} aria-selected={rightTab === tab} aria-controls={`generation-panel-${tab}`} tabIndex={rightTab === tab ? 0 : -1} className={rightTab === tab ? "active" : ""} onClick={() => setRightTab(tab)} onKeyDown={(event) => {
+              {(["image", "video"] as const).map((tab) => <button key={tab} type="button" role="tab" id={`generation-tab-${tab}`} aria-selected={rightTab === tab} aria-controls={`generation-panel-${tab}`} tabIndex={rightTab === tab ? 0 : -1} className={rightTab === tab ? "active" : ""} onClick={() => setRightTab(tab)} onKeyDown={(event) => {
                 if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
                 event.preventDefault();
-                const next = event.key === "Home" ? "video" : event.key === "End" ? "image" : tab === "video" ? "image" : "video";
+                const next = event.key === "Home" ? "image" : event.key === "End" ? "video" : tab === "video" ? "image" : "video";
                 setRightTab(next); document.getElementById(`generation-tab-${next}`)?.focus();
               }}>{tab === "video" ? text("我的视频预览", "My video preview") : text("生成图片", "Generate images")}</button>)}
             </div>

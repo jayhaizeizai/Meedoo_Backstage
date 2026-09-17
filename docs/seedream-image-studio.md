@@ -8,7 +8,7 @@ Video generation's right column includes an independent image studio. Text-to-im
 - `GET/POST /api/generation/images`: owner-scoped history and task submission. Post-response worker starts immediately; `/api/generation/sync` and the existing timer recover queued tasks.
 - Existing `/api/generation/assets` handles uploads and private downloads. Generated assets expire after 14 days; uploaded reference files retain their existing policy.
 
-Each request generates one image with explicit 2K dimensions. Source files are sent as Base64; output uses `b64_json` and is saved locally, avoiding expiring external result URLs. Editing points to an owned `baseAssetId` and saves a new image without overwriting its source. History survives refresh. Selecting a version allows editing or reuse as first frame, last frame or reference; crossing video mode boundaries replaces incompatible input roles. Selecting a last frame alone still requires adding a first frame before video submission.
+Each request generates one image with explicit dimensions for the selected 1K, 1.5K or 2K quality (default 2K). Older records without quality retain 2K. Source files are sent as Base64; output uses `b64_json` and is saved locally, avoiding expiring external result URLs. Editing points to an owned `baseAssetId` and saves a new image without overwriting its source. History survives refresh. Selecting a version allows editing or reuse as first frame, last frame or reference; crossing video mode boundaries replaces incompatible input roles. Selecting a last frame alone still requires adding a first frame before video submission.
 
 Unique `(owner_id,request_id)` and a transactional owner lock protect submissions; a global advisory lock serializes worker calls. Maximum two active tasks per user. Timeout, process interruption and uncertain provider errors never automatically retry paid generation. Safe structured provider codes/request IDs are stored, not raw messages or Base64. Generation usage is recorded only when reported, and no estimated cost is displayed.
 
@@ -16,4 +16,4 @@ Checks: `node scripts/verify-seedream.cjs`; test environment only: `node scripts
 
 Official API reviewed 2026-09-17: https://www.volcengine.com/docs/82379/1541523?lang=zh . Image generation does not grant Seedance portrait permissions; the subsequent video request still undergoes its own checks.
 
-The right column switches between video preview (default) and image studio without unmounting either panel. Upload-history selection lists the current user's latest 100 uploaded reference images, including earlier sessions; generated versions remain in the separate version picker.
+The right column switches between image studio (default, first tab) and video preview without unmounting either panel. Upload-history selection lists the current user's latest 100 uploaded reference images, including earlier sessions; generated versions remain in the separate version picker.

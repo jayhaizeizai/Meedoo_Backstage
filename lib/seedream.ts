@@ -4,7 +4,7 @@ import path from "node:path";
 import { db, query, transaction } from "./db";
 import { generationSchema, storeGenerationImage } from "./generation";
 import { safeProviderDiagnostic, ProviderError } from "./generation-provider";
-import { seedreamModel, seedreamSizes, validateSeedream } from "./seedream-model";
+import { seedreamModel, seedreamSize, validateSeedream } from "./seedream-model";
 
 let schema: Promise<unknown> | undefined;
 export async function seedreamSchema() {
@@ -76,7 +76,7 @@ export async function runSeedreamQueue() {
       sent = true;
       const response = await fetch("https://ark.cn-beijing.volces.com/api/v3/images/generations", {
         method: "POST", headers: { Authorization: `Bearer ${process.env.ARK_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: task.model, prompt: task.input.prompt, size: seedreamSizes[task.input.ratio],
+        body: JSON.stringify({ model: task.model, prompt: task.input.prompt, size: seedreamSize(task.input.ratio, task.input.quality),
           response_format: "b64_json", output_format: "jpeg", watermark: false, ...(image ? { image } : {}) }),
         signal: AbortSignal.timeout(180000), redirect: "error", cache: "no-store",
       });
