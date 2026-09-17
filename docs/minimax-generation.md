@@ -98,7 +98,7 @@ Seedance error explanations are maintained in `lib/generation-error-reasons.ts`,
 
 Both submit rejection and asynchronous task failure retain only allowlisted structured diagnostics (`provider_error`), never raw error prose, signed media URLs or prompts. An HTTP 200 task-status response with `status=failed` is still a failure. No automatic paid retry is added.
 
-The generation list and usage summary are owner-scoped for everyone, including approvers. Existing dedicated resource authorization is unchanged. The UI creates a new request ID only on an explicit submit after a confirmed failed/cancelled previous task (or changed inputs). Active, unknown, missing-status and successful identical requests retain the existing ID to avoid duplicate billing. Old failures without captured structured codes cannot be reconstructed.
+The history list includes team tasks for approvers and only own tasks for ordinary users. A separate owner-scoped `ownTasks` list drives the right-hand preview, polling and retry state for everyone; it is fetched independently of the team history limit. Usage summary remains owner-scoped. Existing dedicated resource authorization is unchanged. The UI creates a new request ID only on an explicit submit after a confirmed failed/cancelled previous task (or changed inputs). Active, unknown, missing-status and successful identical requests retain the existing ID to avoid duplicate billing. Old failures without captured structured codes cannot be reconstructed.
 
 
 ### Fixed output duration

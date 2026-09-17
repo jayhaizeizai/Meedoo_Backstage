@@ -49,6 +49,8 @@ export default function GeneratePage() {
     [ratio, setRatio] = useState("9:16"),
     [resolution, setResolution] =
       useState<GenerationInput["resolution"]>("768P");
+  const [ownTasks, setOwnTasks] = useState<Task[]>([]);
+  const [approver, setApprover] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]),
     [configured, setConfigured] = useState(false),
     [loaded, setLoaded] = useState(false),
@@ -111,6 +113,8 @@ export default function GeneratePage() {
     const d = await r.json();
     if (!r.ok) throw Error(d.code);
     setTasks(d.tasks);
+    setOwnTasks(d.ownTasks ?? []);
+    setApprover(Boolean(d.approver));
     setConfigured(d.configured);
     setModels(d.models ?? ["minimax-h3"]);
     setLoaded(true);
@@ -128,7 +132,7 @@ export default function GeneratePage() {
   useEffect(() => {
     const timer = setInterval(() => {
       if (polling.current || document.hidden) return;
-      const active = tasks.filter(
+      const active = ownTasks.filter(
         (t) =>
           ["preparing", "queued", "running"].includes(t.status) ||
           (t.status === "succeeded" && !t.available && !t.expired),
@@ -147,7 +151,7 @@ export default function GeneratePage() {
       })();
     }, 15000);
     return () => clearInterval(timer);
-  }, [tasks, load]);
+  }, [ownTasks, load]);
   const syncImage = useCallback(async (id: string, retry = false, manual = false) => {
     try {
       if (retry) setImageSync((v) => ({ ...v, [id]: "pending" }));
@@ -239,7 +243,7 @@ export default function GeneratePage() {
       assets: assets.map(({ id, role }) => ({ id, role })),
     };
     const fingerprint = JSON.stringify(params);
-    const previousTask = tasks.find((task) => task.input.requestId === intent.current?.id);
+    const previousTask = ownTasks.find((task) => task.input.requestId === intent.current?.id);
     if (!intent.current || shouldRenewGenerationRequest(intent.current.fingerprint, fingerprint, previousTask?.status))
       intent.current = { fingerprint, id: crypto.randomUUID() };
     try {
@@ -259,7 +263,7 @@ export default function GeneratePage() {
       setBusy(false);
     }
   }
-  const current = tasks.find((t) => t.id === selected) || tasks[0];
+  const current = ownTasks.find((t) => t.id === selected) || ownTasks[0];
   const input = (role: Asset["role"], label: string, multiple = false) => (
     <label className="generation-drop">
       <span>{label}</span>
@@ -727,7 +731,7 @@ export default function GeneratePage() {
           </section>
         </div>
         <section className="card generation-history">
-          <h2>{text("我的生成记录", "My generation history")}</h2>
+          <h2>{approver ? text("团队生成记录", "Team generation history") : text("我的生成记录", "My generation history")}</h2>
           <p>
             {text(
               "成片保存 14 天后自动清理，请及时下载。生成记录保留；审批人可查看团队记录。",
@@ -755,9 +759,9 @@ export default function GeneratePage() {
                 {tasks.map((t) => (
                   <tr key={t.id}>
                     <td>
-                      <button onClick={() => setSelected(t.id)}>
-                        {t.requirement}
-                      </button>
+                      {ownTasks.some((own) => own.id === t.id) ? (
+                        <button onClick={() => setSelected(t.id)}>{t.requirement}</button>
+                      ) : t.requirement}
                     </td>
                     <td>{generationModel(t.input.model).label}</td>
                     <td>{t.owner_name}</td>
