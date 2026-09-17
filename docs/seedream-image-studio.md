@@ -17,3 +17,11 @@ Checks: `node scripts/verify-seedream.cjs`; test environment only: `node scripts
 Official API reviewed 2026-09-17: https://www.volcengine.com/docs/82379/1541523?lang=zh . Image generation does not grant Seedance portrait permissions; the subsequent video request still undergoes its own checks.
 
 The right column switches between image studio (default, first tab) and video preview without unmounting either panel. Upload-history selection lists the current user's latest 100 uploaded reference images, including earlier sessions; generated versions remain in the separate version picker.
+
+## 浏览器草稿与失败任务回填
+
+生成页面按登录账号在 localStorage 保存视频/图片提示词、模型参数、已上传图片 ID、当前页签和请求去重 ID。切换页面或刷新会恢复；不保存图片二进制或凭证。跨浏览器/设备不共享。过期图片会提示重新选择。
+
+右上角“重置”经确认后清空当前账号的两类草稿；保留服务器历史和已提交任务。上传/提交期间禁用重置。
+
+自己的失败视频记录支持“一键回填”，恢复原参数及仍有效的自有素材，不自动提交或扣费。管理员查看其他人的历史时不提供回填按钮。GET /api/generation/:id/restore 严格限制任务所有者及 failed 状态；POST /api/generation/assets/resolve 仅返回当前用户有效素材。

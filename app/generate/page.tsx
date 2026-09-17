@@ -1,6 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GenerationImageStudio } from "../../components/generation-image-studio";
+import { useAuth } from "../../components/auth-provider";
+import { useGenerationDraft, clearGenerationDraft } from "../../components/use-generation-draft";
+import { videoDraft } from "../../lib/generation-draft";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
 import { useReferenceCompression } from "../../components/generation-image-compression";
@@ -36,6 +39,10 @@ type Task = {
   created_at: string;
 };
 export default function GeneratePage() {
+  const {user,loading}=useAuth(); const {text}=useLanguage(); const [epoch,setEpoch]=useState(0);
+  return user ? <GenerationWorkspace key={`${user.openId}:${epoch}`} ownerId={user.openId} onReset={()=>{clearGenerationDraft(user.openId);setEpoch(v=>v+1);}}/> : <AppShell active="generate" status={{zh:"视频生成",en:"Video generation"}}><p>{loading?text("正在加载…","Loading…"):text("请先登录。","Please sign in.")}</p></AppShell>;
+}
+function GenerationWorkspace({ownerId,onReset}:{ownerId:string;onReset:()=>void}) {
   const { text, language } = useLanguage();
   const compression = useReferenceCompression();
   const [model, setModel] = useState<GenerationModel>("minimax-h3");
@@ -69,6 +76,21 @@ export default function GeneratePage() {
   const intent = useRef<{ fingerprint: string; id: string } | null>(null),
     pending = useRef(false),
     polling = useRef(false);
+  const [imageBusy,setImageBusy]=useState(false);
+  const snapshot={model,generateAudio,mode,assets,prompt,duration,ratio,resolution,rightTab,selected,intent:intent.current};
+  const draft=useGenerationDraft(ownerId,"video",snapshot,(raw)=>{
+    const d=videoDraft(raw);if(!d)return;
+    setModel(d.model);setGenerateAudio(d.generateAudio);setMode(d.mode);setAssets(d.assets);setPrompt(d.prompt);setDuration(d.duration);setRatio(d.ratio);setResolution(d.resolution);setRightTab(d.rightTab);setSelected(d.selected);intent.current=d.intent;
+    if(d.assets.length)void fetch("/api/generation/assets/resolve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:d.assets.map((a:Asset)=>a.id)})}).then(async r=>{if(!r.ok)return;const result=await r.json();const ids=new Set(result.assets.map((a:Asset)=>a.id));if(d.assets.some((a:Asset)=>!ids.has(a.id))){setAssets(current=>current.filter(a=>!d.assets.some((old:Asset)=>old.id===a.id)||ids.has(a.id)));setError(text("部分草稿图片已过期或不可用，请重新选择。","Some draft images expired or are unavailable. Select them again."));}}).catch(()=>{});
+  });
+  async function refill(task:Task){
+    if(busy||uploading)return;setBusy(true);setError("");
+    try{const r=await fetch(`/api/generation/${task.id}/restore`,{cache:"no-store"});if(!r.ok)throw Error("UNAVAILABLE");const d=await r.json(),v=d.input;
+      setModel(v.model??"minimax-h3");setGenerateAudio(v.generateAudio??true);setMode(v.mode);setAssets(d.assets);setPrompt(v.prompt);setDuration(v.duration);setRatio(v.ratio);setResolution(v.resolution);setSelected(task.id);setRightTab("video");intent.current=null;
+      setError(d.missing?text(`已回填，${d.missing} 张图片已过期或不可用，请重新选择。`,`Restored; ${d.missing} images are unavailable. Select replacements.`):text("已回填，可修改后重新生成。","Restored. Edit the settings, then generate when ready."));
+      window.scrollTo({top:0,behavior:"smooth"});
+    }catch{setError(text("无法回填该任务，请刷新后重试。","Unable to restore this task. Refresh and retry."));}finally{setBusy(false);}
+  }
   const status = (s: string) =>
     ({
       preparing: text("正在准备参考图", "Preparing reference images"),
@@ -253,6 +275,7 @@ export default function GeneratePage() {
     const previousTask = ownTasks.find((task) => task.input.requestId === intent.current?.id);
     if (!intent.current || shouldRenewGenerationRequest(intent.current.fingerprint, fingerprint, previousTask?.status))
       intent.current = { fingerprint, id: crypto.randomUUID() };
+    draft.save({...snapshot,intent:intent.current});
     try {
       const r = await fetch("/api/generation", {
         method: "POST",
@@ -360,10 +383,14 @@ export default function GeneratePage() {
               )}
             </p>
           </div>
+          <div className="generation-header-actions">
+          <button type="button" className="generation-reset" disabled={busy||uploading||imageBusy||!draft.ready} onClick={()=>{if(window.confirm(text("确定重置当前创作内容？将清空本浏览器保存的视频和图片草稿。历史记录及已提交任务会保留。","Reset current work? This clears saved video and image drafts in this browser. History and submitted tasks will remain.")))onReset();}}>{text("重置","Reset")}</button>
           <span className="generation-badge">
             {settings.label} · {text("国内站", "China")}
           </span>
+          </div>
         </header>
+        {draft.unavailable && <p className="data-message">{text("浏览器存储不可用，离开页面后草稿可能丢失。","Browser storage is unavailable; drafts may be lost when leaving.")}</p>}
         {error && (
           <p role="alert" className="data-message error">
             {error}
@@ -648,7 +675,7 @@ export default function GeneratePage() {
               }}>{tab === "video" ? text("我的视频预览", "My video preview") : text("生成图片", "Generate images")}</button>)}
             </div>
             <div role="tabpanel" id="generation-panel-image" aria-labelledby="generation-tab-image" hidden={rightTab !== "image"}>
-          <GenerationImageStudio disabled={busy || uploading} onUse={(asset, role) => {
+          <GenerationImageStudio ownerId={ownerId} onBusyChange={setImageBusy} disabled={busy || uploading} onUse={(asset, role) => {
             const nextMode = role === "reference_image" ? "reference" : "frames";
             const keep = mode === nextMode ? assets.filter(a => a.id !== asset.id && (role === "reference_image" || a.role !== role)) : [];
             if (role === "reference_image" && keep.length >= settings.maxImages) { setError(text(`最多 ${settings.maxImages} 张参考图。`, `Up to ${settings.maxImages} reference images.`)); return; }
@@ -803,6 +830,7 @@ export default function GeneratePage() {
                     </td>
                     <td>
                       {status(t.status)}
+                      {t.status === "failed" && ownTasks.some(own=>own.id===t.id) && <button type="button" className="generation-failure-link" disabled={busy||uploading} onClick={()=>void refill(t)}>{text("一键回填","Restore inputs")}</button>}
                       {(t.status === "failed" || t.status === "submitted_unknown") && (
                         <button type="button" className="generation-failure-link" onClick={() => setFailureTask(t)}>
                           {text("查看失败详情", "View failure details")}

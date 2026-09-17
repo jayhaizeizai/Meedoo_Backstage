@@ -1,12 +1,15 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useGenerationDraft } from "./use-generation-draft";
+import { imageDraft } from "../lib/generation-draft";
 import { useLanguage } from "./language-provider";
 import { generationRatios, type GenerationInput } from "../lib/generation-model";
 import { seedreamModel, seedreamQualities, type SeedreamQuality, type ImageDraft } from "../lib/seedream-model";
 import { seedanceErrorReason } from "../lib/generation-error-reasons";
 
 type Task = { id: string; input: { prompt: string; requestId: string; ratio: string; quality?: SeedreamQuality; baseAssetId: string | null }; status: string; asset: ImageDraft | null; expired: boolean; error_code?: string; provider_error?: {code?:string;request_id?:string}; };
-export function GenerationImageStudio({ disabled, onUse }: {
+export function GenerationImageStudio({ ownerId, onBusyChange, disabled, onUse }: {
+  ownerId:string; onBusyChange:(busy:boolean)=>void;
   disabled: boolean;
   onUse: (asset: ImageDraft, role: GenerationInput["assets"][number]["role"]) => void;
 }) {
@@ -18,6 +21,11 @@ export function GenerationImageStudio({ disabled, onUse }: {
   const [busy,setBusy]=useState(false), [uploading,setUploading]=useState(false), [configured,setConfigured]=useState(false);
   const [error,setError]=useState(""), [detail,setDetail]=useState<Task|null>(null);
   const pending=useRef(false), waiting=useRef<string|null>(null), intent=useRef<{id:string;fingerprint:string}|null>(null);
+  const snapshot={prompt,ratio,quality,base,waiting:waiting.current,intent:intent.current};
+  const draft=useGenerationDraft(ownerId,"image",snapshot,(raw)=>{const d=imageDraft(raw);if(!d)return;setPrompt(d.prompt);setRatio(d.ratio);setQuality(d.quality);setBase(d.base);waiting.current=d.waiting;intent.current=d.intent;
+    if(d.base)void fetch("/api/generation/assets/resolve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[d.base.id]})}).then(async r=>{if(!r.ok)return;const data=await r.json();if(!data.assets.length){setBase(current=>current?.id===d.base?.id?null:current);setError("INVALID_ASSETS");}}).catch(()=>{});
+  });
+  useEffect(()=>{onBusyChange(busy||uploading);return()=>onBusyChange(false);},[busy,uploading,onBusyChange]);
   const load=useCallback(async()=>{
     const r=await fetch("/api/generation/images",{cache:"no-store"});
     if(!r.ok) throw Error(r.status===401?"UNAUTHORIZED":"UNAVAILABLE");
@@ -46,7 +54,8 @@ export function GenerationImageStudio({ disabled, onUse }: {
     const params={prompt:prompt.trim(),ratio,quality,baseAssetId:base?.id??null}, fingerprint=JSON.stringify(params);
     const previous=tasks.find(t=>t.input.requestId===intent.current?.id);
     if(!intent.current||intent.current.fingerprint!==fingerprint||previous?.status==="failed")intent.current={id:crypto.randomUUID(),fingerprint};
-    try{const r=await fetch("/api/generation/images",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...params,requestId:intent.current.id})});const d=await r.json();if(!r.ok)throw Error(d.code);waiting.current=d.id;await load();}
+    draft.save({...snapshot,intent:intent.current});
+    try{const r=await fetch("/api/generation/images",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...params,requestId:intent.current.id})});const d=await r.json();if(!r.ok)throw Error(d.code);waiting.current=d.id;draft.save({...snapshot,waiting:d.id,intent:intent.current});await load();}
     catch(e){setError(e instanceof Error?e.message:"UNAVAILABLE");}finally{pending.current=false;setBusy(false);}
   }
   const active=tasks.some(t=>["queued","running"].includes(t.status));
@@ -62,6 +71,7 @@ export function GenerationImageStudio({ disabled, onUse }: {
     <label>{base?text("修改要求","Edit instructions"):text("图片描述","Image prompt")}<textarea rows={4} maxLength={4000} value={prompt} onChange={e=>setPrompt(e.target.value)} disabled={busy||active} placeholder={base?text("例如：保留人物和服装，把背景改为夜晚街道","Keep the character and clothing; change the background to a street at night"):text("描述人物、场景、构图和风格…","Describe the subject, scene, composition and style…")}/></label>
     <label>{text("图片比例","Aspect ratio")}<select value={ratio} disabled={busy||active} onChange={e=>setRatio(e.target.value)}>{generationRatios.map(r=><option key={r}>{r}</option>)}</select></label>
     <label>{text("图片质量", "Image quality")}<select value={quality} disabled={busy||active} onChange={e=>setQuality(e.target.value as SeedreamQuality)}>{seedreamQualities.map(q=><option key={q} value={q}>{q}{q==="2K"?text("（默认）"," (default)"):""}</option>)}</select></label>
+    {draft.unavailable&&<p className="data-message">{text("浏览器存储不可用，图片草稿可能无法保留。","Browser storage is unavailable; image drafts may not be saved.")}</p>}
     {error&&<p className="data-message" role="alert">{message(error)}</p>}
     <button type="button" className="primary generation-submit" disabled={!configured||busy||uploading||active||!prompt.trim()} onClick={()=>void submit()}>{busy?text("提交中…","Submitting…"):active?text("正在生成图片…","Generating image…"):base?text("生成修改版本","Generate edited version"):text("生成图片","Generate image")}</button>
     {active&&<small>{text("任务已保存，关闭页面后仍会继续处理。","Your task is saved and will continue if you close this page.")}</small>}

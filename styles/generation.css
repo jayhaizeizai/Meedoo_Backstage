@@ -388,3 +388,7 @@
 .image-studio-grid span { display: grid; align-items: center; aspect-ratio: 1; font-size: 12px; padding: 6px; }
 .image-studio-grid small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .image-studio button:disabled { opacity: .5; cursor: not-allowed; }
+
+.generation-header-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.generation-reset { padding:10px 16px; border:1px solid #ded8f5; border-radius:10px; background:#fff; color:#7054e8; cursor:pointer; }
+.generation-reset:disabled { opacity:.5; cursor:default; }
