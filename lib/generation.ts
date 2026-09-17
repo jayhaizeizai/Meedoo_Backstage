@@ -29,6 +29,7 @@ import { enqueueImageSync, imageSyncStatus, drainImageSyncQueue } from "./genera
 const run = promisify(execFile);
 import {
   ProviderError,
+  safeProviderDiagnostic,
   providerConfigured,
   submitGeneration,
   queryGeneration,
@@ -505,7 +506,7 @@ export async function refreshGeneration(id: string, userId?: string) {
       throw Error("INVALID_PROVIDER_RESULT");
     const usage = normalizeGenerationUsage(result.usage);
     await client.query(
-      "UPDATE generation_tasks SET status=$2,usage=CASE WHEN $2='succeeded' THEN $3::jsonb ELSE usage END,error_code=$4,updated_at=now() WHERE id=$1",
+      "UPDATE generation_tasks SET status=$2,usage=CASE WHEN $2='succeeded' THEN $3::jsonb ELSE usage END,error_code=$4,provider_error=$5,updated_at=now() WHERE id=$1",
       [
         id,
         result.status,
@@ -516,6 +517,8 @@ export async function refreshGeneration(id: string, userId?: string) {
             ? "INPUT_MEDIA_UNREACHABLE"
             : "GENERATION_FAILED"
           : null,
+        result.status === "failed" && generationModel(task.input.model).provider === "ark"
+          ? JSON.stringify(safeProviderDiagnostic(result)) : null,
       ],
     );
     if (
@@ -636,12 +639,12 @@ export async function generationList(userId: string) {
   await generationSchema();
   const approver = await generationApprover(userId);
   const tasks = await query(
-    "SELECT id,owner_name,requirement,input,status,usage,estimated_cost,error_code,provider_error,created_at,updated_at,media_expires_at,(media_deleted_at IS NOT NULL OR COALESCE(media_expires_at<=now(),false)) expired,(media_path IS NOT NULL AND media_deleted_at IS NULL AND media_expires_at>now()) available FROM generation_tasks WHERE ($2::boolean OR owner_id=$1) ORDER BY created_at DESC LIMIT 100",
-    [userId, approver],
+    "SELECT id,owner_name,requirement,input,status,usage,estimated_cost,error_code,provider_error,created_at,updated_at,media_expires_at,(media_deleted_at IS NOT NULL OR COALESCE(media_expires_at<=now(),false)) expired,(media_path IS NOT NULL AND media_deleted_at IS NULL AND media_expires_at>now()) available FROM generation_tasks WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100",
+    [userId],
   );
   const totals = await query(
-    "SELECT owner_name,requirement,count(*)::int tasks,count(*) FILTER (WHERE status='succeeded')::int succeeded,sum((usage->>'total_tokens')::numeric) tokens,count(*) FILTER (WHERE status='succeeded' AND NOT (COALESCE(usage,'{}') ? 'total_tokens'))::int missing_tokens,sum(estimated_cost) FILTER (WHERE status='succeeded') estimated_cost FROM generation_tasks WHERE ($2::boolean OR owner_id=$1) GROUP BY owner_id,owner_name,requirement ORDER BY owner_name,requirement",
-    [userId, approver],
+    "SELECT owner_name,requirement,count(*)::int tasks,count(*) FILTER (WHERE status='succeeded')::int succeeded,sum((usage->>'total_tokens')::numeric) tokens,count(*) FILTER (WHERE status='succeeded' AND NOT (COALESCE(usage,'{}') ? 'total_tokens'))::int missing_tokens,sum(estimated_cost) FILTER (WHERE status='succeeded') estimated_cost FROM generation_tasks WHERE owner_id=$1 GROUP BY owner_id,owner_name,requirement ORDER BY owner_name,requirement",
+    [userId],
   );
   return {
     configured: Boolean(process.env.MINIMAX_API_KEY || process.env.ARK_API_KEY),

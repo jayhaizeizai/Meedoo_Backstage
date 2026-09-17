@@ -5,12 +5,14 @@ import { useLanguage } from "../../components/language-provider";
 import { useReferenceCompression } from "../../components/generation-image-compression";
 import {
   generationRatios,
+  shouldRenewGenerationRequest,
   generationModels,
   generationModel,
   type GenerationModel,
   type GenerationInput,
 } from "../../lib/generation-model";
 import "../../styles/generation.css";
+import { seedanceErrorReason } from "../../lib/generation-error-reasons";
 
 type Asset = {
   id: string;
@@ -237,7 +239,8 @@ export default function GeneratePage() {
       assets: assets.map(({ id, role }) => ({ id, role })),
     };
     const fingerprint = JSON.stringify(params);
-    if (intent.current?.fingerprint !== fingerprint)
+    const previousTask = tasks.find((task) => task.input.requestId === intent.current?.id);
+    if (!intent.current || shouldRenewGenerationRequest(intent.current.fingerprint, fingerprint, previousTask?.status))
       intent.current = { fingerprint, id: crypto.randomUUID() };
     try {
       const r = await fetch("/api/generation", {
@@ -567,7 +570,7 @@ export default function GeneratePage() {
           </section>
           <section className="card generation-output">
             <div className="generation-output-heading">
-              <h2>{text("生成预览", "Generated preview")}</h2>
+              <h2>{text("我的视频预览", "My video preview")}</h2>
               <button
                 disabled={refreshing}
                 onClick={() => {
@@ -636,7 +639,7 @@ export default function GeneratePage() {
                     </p>
                   </div>
                 )}
-                {current.error_code && (
+                {current.error_code && (!current.provider_error || current.status === "submitted_unknown") && (
                   <p className="data-message">
                     {current.error_code === "INPUT_UPLOAD_FAILED"
                       ? text(
@@ -676,9 +679,9 @@ export default function GeneratePage() {
                 )}
                 {current.provider_error && (
                   <p className="data-message" role="status">
-                    {current.provider_error.code === "ModelNotOpen"
-                      ? text("模型尚未开通，请在火山方舟控制台开通。", "Activate this model in the Ark console.")
-                      : text("平台拒绝了本次请求，请根据以下错误信息检查模型权限、参数或素材。", "The provider rejected this request. Check access, parameters or media using the details below.")}
+                    {current.input.model?.startsWith("seedance-")
+                      ? text(...seedanceErrorReason(current.provider_error.code))
+                      : text("生成平台返回错误，请凭下方错误码联系管理员。", "The provider returned an error. Contact an administrator with the code below.")}
                     {current.provider_error.code && <><br />{text("错误码：", "Error: ")}{current.provider_error.code}</>}
                     {current.provider_error.parameter && <><br />{text("相关参数：", "Parameter: ")}{current.provider_error.parameter}</>}
                     {current.provider_error.request_id && <><br />{text("请求编号：", "Request ID: ")}{current.provider_error.request_id}</>}
@@ -715,7 +718,7 @@ export default function GeneratePage() {
           </section>
         </div>
         <section className="card generation-history">
-          <h2>{text("生成记录", "Generation history")}</h2>
+          <h2>{text("我的生成记录", "My generation history")}</h2>
           <p>
             {text(
               "成片保存 14 天后自动清理，请及时下载。生成记录保留；审批人可查看团队记录。",

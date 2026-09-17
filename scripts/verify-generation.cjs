@@ -22,6 +22,20 @@ const { safeProviderDiagnostic } = require("../lib/generation-provider.ts");
 assert.deepEqual(safeProviderDiagnostic({error:{code:"InvalidParameter",message:"The parameter `content[2].image_url` is invalid: https://private/image?token=secret Request id: test-123"}}), {code:"InvalidParameter",request_id:"test-123",parameter:"content[2].image_url"});
 assert.deepEqual(safeProviderDiagnostic({error:{code:"Bearer secret",message:"prompt contains private text"},request_id:"https://private"}), {code:undefined,request_id:undefined,parameter:undefined});
 assert.equal(safeProviderDiagnostic({error:{code:"ModelNotOpen"}},"trace-1").code,"ModelNotOpen");
+const { seedanceErrorReason } = require("../lib/generation-error-reasons.ts");
+const { shouldRenewGenerationRequest } = require("../lib/generation-model.ts");
+assert.match(seedanceErrorReason("InputImageSensitiveContentDetected.PrivacyInformation")[0], /真人/);
+assert.match(seedanceErrorReason("InputImageSensitiveContentDetected.PrivacyInformation")[1], /real person/);
+assert.match(seedanceErrorReason("OutputVideoSensitiveContentDetected.PolicyViolation")[0], /版权/);
+assert.match(seedanceErrorReason("OutputVideoSensitiveContentDetected")[0], /生成的视频/);
+assert.match(seedanceErrorReason("ModelNotOpen")[0], /尚未开通/);
+assert.match(seedanceErrorReason("InvalidParameter.TaskTypeMismatch")[0], /任务类型/);
+assert.match(seedanceErrorReason("NewUnknownError")[0], /尚未收录/);
+for (const status of [undefined, "queued", "running", "preparing", "submitting", "submitted_unknown", "succeeded"])
+  assert.equal(shouldRenewGenerationRequest("same", "same", status), false);
+for (const status of ["failed", "cancelled"])
+  assert.equal(shouldRenewGenerationRequest("same", "same", status), true);
+assert.equal(shouldRenewGenerationRequest("old", "new", "failed"), true);
 const base = {
   requestId: randomUUID(),
   requirement: "Episode 1",
@@ -208,6 +222,40 @@ if (process.argv.includes("--db"))
         own.tasks.find((x) => x.id === uncertainId).status,
         "submitted_unknown",
       );
+      await query("UPDATE meedoo_users SET role='approver' WHERE open_id='test-other'");
+      const otherApprover = await generationList("test-other");
+      assert.equal(otherApprover.approver, true);
+      assert.deepEqual(otherApprover.tasks, []);
+      assert.deepEqual(otherApprover.summary, []);
+      await query("UPDATE meedoo_users SET role='approver' WHERE open_id='test-owner'");
+      assert.ok((await generationList(user.openId)).tasks.some(t => t.id === id));
+      let rejectedPosts = 0;
+      global.fetch = async () => { rejectedPosts++; return Response.json({error:{code:"InputImageSensitiveContentDetected.PrivacyInformation", message:"private input https://private?token=secret Request id: review-123"}}, {status:400}); };
+      const failedInput = {...base,requestId:randomUUID(),model:"seedance-2.0-fast",resolution:"720p"};
+      const failedId = await createGeneration(user,failedInput);
+      assert.equal(await createGeneration(user,failedInput),failedId);
+      assert.equal(rejectedPosts,1);
+      const failedTask = (await generationList(user.openId)).tasks.find(t=>t.id===failedId);
+      assert.equal(failedTask.provider_error.code,"InputImageSensitiveContentDetected.PrivacyInformation");
+      assert.equal(failedTask.provider_error.request_id,"review-123");
+      assert.ok(!JSON.stringify(failedTask.provider_error).includes("secret"));
+      assert.equal(shouldRenewGenerationRequest("same","same",failedTask.status),true);
+      const retryInput={...failedInput,requestId:randomUUID()};
+      const retryId=await createGeneration(user,retryInput);
+      assert.notEqual(retryId,failedId);
+      assert.equal(await createGeneration(user,retryInput),retryId);
+      assert.equal(rejectedPosts,2);
+      global.fetch=async (_url,options)=>options.method === "POST"
+        ? Response.json({id:"async-rejection"})
+        : Response.json({id:"async-rejection",status:"failed",error:{code:"OutputVideoSensitiveContentDetected.PolicyViolation",message:"private output text"}},{headers:{"x-request-id":"async-review-123"}});
+      const asyncId=await createGeneration(user,{...failedInput,requestId:randomUUID()});
+      await refreshGeneration(asyncId,user.openId);
+      const asyncTask=(await generationList(user.openId)).tasks.find(t=>t.id===asyncId);
+      assert.equal(asyncTask.status,"failed");
+      assert.equal(asyncTask.provider_error.code,"OutputVideoSensitiveContentDetected.PolicyViolation");
+      assert.equal(asyncTask.provider_error.request_id,"async-review-123");
+      assert.ok(!JSON.stringify(asyncTask.provider_error).includes("private output"));
+      console.log("PASS own-only approver history/totals; safe submit and asynchronous errors; explicit failed retry with deduplication");
       const path = require("node:path"),
         os = require("node:os");
       const temp = fs.mkdtempSync(path.join(os.tmpdir(), "generation-expiry-"));

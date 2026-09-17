@@ -163,3 +163,9 @@ export function normalizeGenerationUsage(value: unknown) {
   }
   return result;
 }
+
+// A repeated click reuses the request unless the server confirmed a terminal failure.
+// Missing/unknown/active status must retain idempotency to avoid duplicate billing.
+export function shouldRenewGenerationRequest(previousFingerprint: string | undefined, fingerprint: string, status?: string) {
+  return previousFingerprint !== fingerprint || status === "failed" || status === "cancelled";
+}

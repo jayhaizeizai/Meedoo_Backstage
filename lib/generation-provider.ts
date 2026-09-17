@@ -60,7 +60,10 @@ async function request(
     const diagnostic = safeProviderDiagnostic(data, response.headers.get("x-request-id"));
     throw new ProviderError(response.status, diagnostic.code, diagnostic);
   }
-  return response.json();
+  const data = await response.json();
+  if (ark && data && typeof data === "object" && !data.request_id)
+    data.request_id = safeProviderDiagnostic(data, response.headers.get("x-request-id")).request_id;
+  return data;
 }
 export async function submitGeneration(
   input: GenerationInput,
