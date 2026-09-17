@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { GenerationPagination, type HistoryPagination } from "../../components/generation-pagination";
 import { GenerationImageStudio } from "../../components/generation-image-studio";
 import { useAuth } from "../../components/auth-provider";
 import { useGenerationDraft, clearGenerationDraft } from "../../components/use-generation-draft";
@@ -64,7 +65,10 @@ function GenerationWorkspace({ownerId,onReset}:{ownerId:string;onReset:()=>void}
   useEffect(() => {
     if (failureTask && !failureDialog.current?.open) failureDialog.current?.showModal();
   }, [failureTask]);
-  const [approver, setApprover] = useState(false);
+  const [historyPage,setHistoryPage]=useState(1);
+  const [historyLoading,setHistoryLoading]=useState(false);
+  const historyRequest=useRef(0);
+  const [paging,setPaging]=useState<HistoryPagination>({page:1,pageSize:20,total:0,totalPages:1});
   const [tasks, setTasks] = useState<Task[]>([]),
     [configured, setConfigured] = useState(false),
     [loaded, setLoaded] = useState(false),
@@ -139,16 +143,22 @@ function GenerationWorkspace({ownerId,onReset}:{ownerId:string;onReset:()=>void}
       "This operation is unavailable. Please refresh later.",
     );
   const load = useCallback(async () => {
-    const r = await fetch("/api/generation", { cache: "no-store" });
+    const requestId=++historyRequest.current;
+    setHistoryLoading(true);
+    try {
+    const r = await fetch(`/api/generation?page=${historyPage}${selected?`&selected=${selected}`:""}`, { cache: "no-store" });
     const d = await r.json();
     if (!r.ok) throw Error(d.code);
+    if(requestId!==historyRequest.current)return;
     setTasks(d.tasks);
+    setPaging(d.pagination);
     setOwnTasks(d.ownTasks ?? []);
-    setApprover(Boolean(d.approver));
+
     setConfigured(d.configured);
     setModels(d.models ?? ["minimax-h3"]);
     setLoaded(true);
-  }, []);
+    } finally {if(requestId===historyRequest.current)setHistoryLoading(false);}
+  }, [historyPage,selected]);
   useEffect(() => {
     void load().catch(() => {
       setLoaded(true);
@@ -789,11 +799,11 @@ function GenerationWorkspace({ownerId,onReset}:{ownerId:string;onReset:()=>void}
         </div>
         </div>
         <section className="card generation-history">
-          <h2>{approver ? text("团队生成记录", "Team generation history") : text("我的生成记录", "My generation history")}</h2>
+          <h2>{text("我的生成记录", "My generation history")}</h2>
           <p>
             {text(
-              "成片保存 14 天后自动清理，请及时下载。生成记录保留；审批人可查看团队记录。",
-              "Generated files are automatically deleted after 14 days. Download them in time. Records remain; approvers can view the team.",
+              "成片保存 14 天后自动清理，请及时下载。生成记录保留。",
+              "Generated files are automatically deleted after 14 days. Download them in time. Records remain.",
             )}
           </p>
           <div className="generation-table-scroll">
@@ -860,6 +870,7 @@ function GenerationWorkspace({ownerId,onReset}:{ownerId:string;onReset:()=>void}
               </tbody>
             </table>
           </div>
+          <GenerationPagination value={paging} disabled={historyLoading} onChange={setHistoryPage}/>
           {!tasks.length && (
             <p>{text("暂无生成记录。", "No generation history yet.")}</p>
           )}

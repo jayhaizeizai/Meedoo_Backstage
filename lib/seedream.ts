@@ -1,3 +1,5 @@
+import { historyPage, pagination } from "./generation-pagination";
+import { uuidPattern } from "./generation-model";
 import { randomUUID } from "node:crypto";
 import { readFile, unlink, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -33,15 +35,20 @@ export async function createSeedream(owner: string, value: unknown) {
     return id;
   });
 }
-export async function listSeedream(owner: string) {
+export async function listSeedream(owner: string, requestedPage: unknown = 1, tracked?: string | null) {
+  const page=historyPage(requestedPage);
   await seedreamSchema();
-  const result = await query(`SELECT t.id,t.input,t.model,t.status,t.error_code,t.provider_error,t.created_at,t.usage,
-    t.asset_id, a.filename, (a.expires_at IS NOT NULL AND a.expires_at<=now()) expired
-    FROM seedream_tasks t LEFT JOIN generation_assets a ON a.id=t.asset_id WHERE t.owner_id=$1 ORDER BY t.created_at DESC LIMIT 60`, [owner]);
+  const paging=pagination(Number((await query("SELECT count(*) n FROM seedream_tasks WHERE owner_id=$1",[owner])).rows[0].n),page,12);
+  const fields=`SELECT t.id,t.input,t.model,t.status,t.error_code,t.provider_error,t.created_at,t.usage,
+    t.asset_id, a.filename, (a.file_deleted OR (a.expires_at IS NOT NULL AND a.expires_at<=now())) expired
+    FROM seedream_tasks t LEFT JOIN generation_assets a ON a.id=t.asset_id`;
+  const result=await query(fields+" WHERE t.owner_id=$1 ORDER BY t.created_at DESC,t.id DESC LIMIT $2 OFFSET $3",[owner,paging.pageSize,(paging.page-1)*paging.pageSize]);
+  const recent=await query(fields+" WHERE t.owner_id=$1 ORDER BY t.created_at DESC,t.id DESC LIMIT 60",[owner]);
+  const watched=tracked&&uuidPattern.test(tracked)?await query(fields+" WHERE t.owner_id=$1 AND t.id=$2",[owner,tracked]):{rows:[]};
   const uploads = (await query("SELECT id,filename FROM generation_assets WHERE owner_id=$1 AND expires_at IS NULL AND NOT file_deleted ORDER BY created_at DESC LIMIT 100", [owner])).rows.map(a => ({id:a.id,name:a.filename,url:`/api/generation/assets/${a.id}`}));
-  return { configured: Boolean(process.env.ARK_API_KEY), model: seedreamModel.label, uploads, tasks: result.rows.map(t => ({ ...t,
-    asset: t.asset_id && !t.expired ? { id: t.asset_id, name: t.filename, url: `/api/generation/assets/${t.asset_id}` } : null,
-  })) };
+  const present=(t:typeof result.rows[number])=>({...t,asset:t.asset_id&&!t.expired?{id:t.asset_id,name:t.filename,url:`/api/generation/assets/${t.asset_id}`} : null});
+  return {configured:Boolean(process.env.ARK_API_KEY),model:seedreamModel.label,uploads,pagination:paging,
+    tasks:result.rows.map(present),recentTasks:[...new Map([...recent.rows,...watched.rows].map(t=>[t.id,t])).values()].map(present)};
 }
 async function boundedJSON(response: Response) {
   const reader = response.body?.getReader();

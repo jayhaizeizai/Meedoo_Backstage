@@ -25,3 +25,13 @@ The right column switches between image studio (default, first tab) and video pr
 右上角“重置”经确认后清空当前账号的两类草稿；保留服务器历史和已提交任务。上传/提交期间禁用重置。
 
 自己的失败视频记录支持“一键回填”，恢复原参数及仍有效的自有素材，不自动提交或扣费。管理员查看其他人的历史时不提供回填按钮。GET /api/generation/:id/restore 严格限制任务所有者及 failed 状态；POST /api/generation/assets/resolve 仅返回当前用户有效素材。
+
+## 生成记录入口与分页
+
+视频流程 / 生成视频：所有角色只返回自己的记录。视频历史每页 20 条，图片版本每页 12 条，由数据库分页，旧记录不会因为原先 100/60 条限制而不可见。预览、请求去重及任务轮询独立于当前历史页；历史翻页不清空创作草稿。
+
+数据看板 / 团队生成记录（/generation-history）：仅审批人可访问，视频和图片按创建时间合并倒序，每页 20 条，可筛选全部/视频/图片。详情显示提示词、模型、创建人、状态、参数与失败原因；有效文件支持预览和下载。
+
+API：GET /api/generation/team-history?page=1&kind=all，GET /api/generation/team-history/:id/image。团队图片资源必须通过审批人校验且关联生成结果；原上传素材权限不扩大。个人 API 追加 page 参数，视频 selected / 图片 tracked 仅解析当前用户任务。
+
+验证：node scripts/verify-generation-history.cjs --db（仅测试环境，隔离 schema，无付费调用）。

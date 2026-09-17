@@ -231,7 +231,7 @@ if (process.argv.includes("--db"))
       await query("UPDATE meedoo_users SET role='approver' WHERE open_id='test-other'");
       const otherApprover = await generationList("test-other");
       assert.equal(otherApprover.approver, true);
-      assert.ok(otherApprover.tasks.some(t => t.id === id));
+      assert.deepEqual(otherApprover.tasks, []);
       assert.deepEqual(otherApprover.ownTasks, []);
       assert.deepEqual(otherApprover.summary, []);
       await query("UPDATE meedoo_users SET role='approver' WHERE open_id='test-owner'");
@@ -262,7 +262,7 @@ if (process.argv.includes("--db"))
       assert.equal(asyncTask.provider_error.code,"OutputVideoSensitiveContentDetected.PolicyViolation");
       assert.equal(asyncTask.provider_error.request_id,"async-review-123");
       assert.ok(!JSON.stringify(asyncTask.provider_error).includes("private output"));
-      console.log("PASS team approver history with independent personal preview/totals; safe submit and asynchronous errors; explicit failed retry with deduplication");
+      console.log("PASS personal history for approvers and members with independent preview/totals; safe submit and asynchronous errors; explicit failed retry with deduplication");
       const path = require("node:path"),
         os = require("node:os");
       const temp = fs.mkdtempSync(path.join(os.tmpdir(), "generation-expiry-"));

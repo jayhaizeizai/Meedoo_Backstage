@@ -10,6 +10,7 @@ type AppShellProps = {
     | "generate"
     | "upload"
     | "dashboard"
+    | "generation-history"
     | "weekly-report"
     | "records"
     | "approvals";
@@ -125,6 +126,7 @@ export function AppShell({ active, status, children }: AppShellProps) {
                 <span aria-hidden="true">⌁</span>
                 <i>{text("视频数据看报", "Video analytics report")}</i>
               </Link>
+              {role === "approver" && <Link className={active === "generation-history" ? "active" : ""} href="/generation-history" title={text("团队生成记录","Team generation history")}><span aria-hidden="true">▤</span><i>{text("团队生成记录","Team generation history")}</i></Link>}
               <Link
                 className={active === "weekly-report" ? "active" : ""}
                 href="/weekly-report"

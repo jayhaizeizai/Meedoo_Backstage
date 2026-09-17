@@ -232,3 +232,5 @@ MiniMax 参考图在选图后同步到平台，默认保留原图；超过 5 MB 
 ## 视频素材生图
 
 视频生成页右侧的 Seedream 图片工作台支持 2K 文生图、上传图编辑和连续修改；操作、后台队列和接手说明见 [Seedream image studio](docs/seedream-image-studio.md)。
+
+生成记录：视频流程只显示个人视频/图片历史（含审批人），支持分页；数据看板下的 `/generation-history` 提供审批人可见的团队视频和图片记录、类型筛选、预览及下载。详见 [生成记录说明](docs/seedream-image-studio.md#生成记录入口与分页)。

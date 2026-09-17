@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 240;
 export async function GET(request: NextRequest) {
-  try { const user = await generationUser(request); return NextResponse.json(await listSeedream(user.openId), {headers:{"Cache-Control":"no-store"}}); }
+  try { const user = await generationUser(request); return NextResponse.json(await listSeedream(user.openId,request.nextUrl.searchParams.get("page")??1,request.nextUrl.searchParams.get("tracked")), {headers:{"Cache-Control":"no-store"}}); }
   catch(e) { return generationError(e); }
 }
 export async function POST(request: NextRequest) {

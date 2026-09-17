@@ -1,3 +1,5 @@
+import { uuidPattern } from "./generation-model";
+import { historyPage, pagination } from "./generation-pagination";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   mkdir,
@@ -637,18 +639,17 @@ export async function syncGenerationTasks() {
   }
   await drainImageSyncQueue(deadline);
 }
-export async function generationList(userId: string) {
+export async function generationList(userId: string, requestedPage: unknown = 1, selected?: string | null) {
   await generationSchema();
   const approver = await generationApprover(userId);
   const taskFields = "SELECT id,owner_name,requirement,input,status,usage,estimated_cost,error_code,provider_error,created_at,updated_at,media_expires_at,(media_deleted_at IS NOT NULL OR COALESCE(media_expires_at<=now(),false)) expired,(media_path IS NOT NULL AND media_deleted_at IS NULL AND media_expires_at>now()) available FROM generation_tasks";
-  const tasks = await query(
-    taskFields + " WHERE ($2::boolean OR owner_id=$1) ORDER BY created_at DESC LIMIT 100",
-    [userId, approver],
-  );
-  // Fetch independently: a busy team must not push the owner's preview out of the history limit.
-  const ownTasks = approver ? await query(
-    taskFields + " WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100", [userId],
-  ) : tasks;
+  const page = historyPage(requestedPage);
+  const total = Number((await query("SELECT count(*) n FROM generation_tasks WHERE owner_id=$1", [userId])).rows[0].n);
+  const paging = pagination(total, page, 20);
+  const tasks = await query(taskFields + " WHERE owner_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3", [userId,paging.pageSize,(paging.page-1)*paging.pageSize]);
+  const recent = await query(taskFields + " WHERE owner_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100", [userId]);
+  const selectedTask = selected && uuidPattern.test(selected) ? await query(taskFields + " WHERE owner_id=$1 AND id=$2",[userId,selected]) : {rows:[]};
+  const ownTasks = [...new Map([...recent.rows,...tasks.rows,...selectedTask.rows].map(t=>[t.id,t])).values()];
   const totals = await query(
     "SELECT owner_name,requirement,count(*)::int tasks,count(*) FILTER (WHERE status='succeeded')::int succeeded,sum((usage->>'total_tokens')::numeric) tokens,count(*) FILTER (WHERE status='succeeded' AND NOT (COALESCE(usage,'{}') ? 'total_tokens'))::int missing_tokens,sum(estimated_cost) FILTER (WHERE status='succeeded') estimated_cost FROM generation_tasks WHERE owner_id=$1 GROUP BY owner_id,owner_name,requirement ORDER BY owner_name,requirement",
     [userId],
@@ -658,7 +659,8 @@ export async function generationList(userId: string) {
     models: Object.keys(generationModels).filter(providerConfigured),
     approver,
     tasks: tasks.rows,
-    ownTasks: ownTasks.rows,
+    ownTasks,
+    pagination: paging,
     summary: totals.rows,
   };
 }

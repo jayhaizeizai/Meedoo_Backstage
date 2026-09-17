@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { GenerationPagination, type HistoryPagination } from "./generation-pagination";
 import { useGenerationDraft } from "./use-generation-draft";
 import { imageDraft } from "../lib/generation-draft";
 import { useLanguage } from "./language-provider";
@@ -16,6 +17,10 @@ export function GenerationImageStudio({ ownerId, onBusyChange, disabled, onUse }
   const {text} = useLanguage();
   const [prompt,setPrompt]=useState(""), [ratio,setRatio]=useState("9:16");
   const [quality,setQuality]=useState<SeedreamQuality>("2K");
+  const [historyPage,setHistoryPage]=useState(1), [historyLoading,setHistoryLoading]=useState(false);
+  const [paging,setPaging]=useState<HistoryPagination>({page:1,pageSize:12,total:0,totalPages:1});
+  const [recentTasks,setRecentTasks]=useState<Task[]>([]);
+  const historyRequest=useRef(0);
   const [uploads,setUploads]=useState<ImageDraft[]>([]);
   const [base,setBase]=useState<ImageDraft|null>(null), [tasks,setTasks]=useState<Task[]>([]);
   const [busy,setBusy]=useState(false), [uploading,setUploading]=useState(false), [configured,setConfigured]=useState(false);
@@ -27,13 +32,16 @@ export function GenerationImageStudio({ ownerId, onBusyChange, disabled, onUse }
   });
   useEffect(()=>{onBusyChange(busy||uploading);return()=>onBusyChange(false);},[busy,uploading,onBusyChange]);
   const load=useCallback(async()=>{
-    const r=await fetch("/api/generation/images",{cache:"no-store"});
+    const requestId=++historyRequest.current;setHistoryLoading(true);
+    try {
+    const r=await fetch(`/api/generation/images?page=${historyPage}${waiting.current?`&tracked=${waiting.current}`:""}`,{cache:"no-store"});
     if(!r.ok) throw Error(r.status===401?"UNAUTHORIZED":"UNAVAILABLE");
-    const d=await r.json(); setTasks(d.tasks); setUploads(d.uploads ?? []); setConfigured(d.configured);
-    const finished=(d.tasks as Task[]).find(t=>t.id===waiting.current);
+    const d=await r.json(); if(requestId!==historyRequest.current)return;setPaging(d.pagination);setRecentTasks(d.recentTasks);setTasks(d.tasks); setUploads(d.uploads ?? []); setConfigured(d.configured);
+    const finished=(d.recentTasks as Task[]).find(t=>t.id===waiting.current);
     if(finished?.status==="succeeded" && finished.asset){setBase(finished.asset);setPrompt("");waiting.current=null;intent.current=null;}
     else if(finished && ["failed","submitted_unknown"].includes(finished.status)){setDetail(finished);waiting.current=null;}
-  },[]);
+    } finally {if(requestId===historyRequest.current)setHistoryLoading(false);}
+  },[historyPage]);
   const message=(code:string)=>code==="UNAUTHORIZED"?text("登录已过期，请重新登录。","Session expired. Sign in again."):
     code==="TOO_MANY_TASKS"?text("已有图片任务处理中，请等待完成。","Image tasks are already processing. Please wait."):
     code==="INVALID_IMAGE"?text("请选择有效图片，大小不超过 30 MB。","Choose a valid image up to 30 MB."):
@@ -52,13 +60,13 @@ export function GenerationImageStudio({ ownerId, onBusyChange, disabled, onUse }
   async function submit(){
     if(pending.current||uploading||!prompt.trim())return;pending.current=true;setBusy(true);setError("");setDetail(null);
     const params={prompt:prompt.trim(),ratio,quality,baseAssetId:base?.id??null}, fingerprint=JSON.stringify(params);
-    const previous=tasks.find(t=>t.input.requestId===intent.current?.id);
+    const previous=recentTasks.find(t=>t.input.requestId===intent.current?.id);
     if(!intent.current||intent.current.fingerprint!==fingerprint||previous?.status==="failed")intent.current={id:crypto.randomUUID(),fingerprint};
     draft.save({...snapshot,intent:intent.current});
     try{const r=await fetch("/api/generation/images",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...params,requestId:intent.current.id})});const d=await r.json();if(!r.ok)throw Error(d.code);waiting.current=d.id;draft.save({...snapshot,waiting:d.id,intent:intent.current});await load();}
     catch(e){setError(e instanceof Error?e.message:"UNAVAILABLE");}finally{pending.current=false;setBusy(false);}
   }
-  const active=tasks.some(t=>["queued","running"].includes(t.status));
+  const active=recentTasks.some(t=>["queued","running"].includes(t.status));
   return <section className="card generation-form image-studio" aria-label={text("图片工作台","Image studio")}>
     <div className="image-studio-heading"><div><small>IMAGE STUDIO</small><h2>{text("生成参考图","Create an image")}</h2></div><span className="generation-badge">{seedreamModel.label} · {quality}</span></div>
     <p className="generation-help">{text("先生成图片，再逐步修改；满意后用作视频素材。每次修改保留为新版本。","Generate, refine, then use the image in your video. Each edit saves a new version.")}</p>
@@ -81,6 +89,6 @@ export function GenerationImageStudio({ ownerId, onBusyChange, disabled, onUse }
     {detail&&<div className="data-message" role="status"><strong>{text("图片生成未完成","Image generation incomplete")}</strong><p>{detail.status==="submitted_unknown"?text("平台结果不确定，请联系管理员核对后再生成，避免重复计费。","Provider outcome is uncertain. Ask an administrator to check before generating again."):detail.error_code==="IMAGE_SAVE_FAILED"?text("图片结果保存失败，请联系管理员。","Saving the image failed. Contact an administrator."):text(...seedanceErrorReason(detail.provider_error?.code))}</p><small>{detail.provider_error?.code||detail.error_code}</small>{detail.provider_error?.request_id&&<p>{text("请求编号：","Request ID: ")}{detail.provider_error.request_id}</p>}</div>}
     {!!tasks.length&&<div className="image-studio-history"><h3>{text("我的图片版本","My image versions")}</h3><p className="generation-help">{text("图片保存 14 天，请及时下载。","Images are saved for 14 days. Download them in time.")}</p><div className="image-studio-grid">{tasks.map(t=><button type="button" key={t.id} className={t.asset && base?.id===t.asset.id?"selected":""} onClick={()=>{if(t.asset){selectImage(t.asset);setRatio(t.input.ratio);setQuality(t.input.quality ?? "2K");}else if(["failed","submitted_unknown"].includes(t.status)) setDetail(t);}}>
       {t.asset?<img loading="lazy" src={t.asset.url} alt={t.input.prompt}/>:<span>{t.expired?text("已过期","Expired"):t.status==="failed"?text("失败 · 查看原因","Failed · details"):t.status==="submitted_unknown"?text("结果待核对","Needs review"):text("生成中…","Generating…")}</span>}<small>{t.input.prompt}</small>
-    </button>)}</div></div>}
+    </button>)}</div><GenerationPagination value={paging} disabled={historyLoading} onChange={setHistoryPage}/></div>}
   </section>;
 }
