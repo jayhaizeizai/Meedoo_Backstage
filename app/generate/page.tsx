@@ -50,6 +50,7 @@ export default function GeneratePage() {
     [ratio, setRatio] = useState("9:16"),
     [resolution, setResolution] =
       useState<GenerationInput["resolution"]>("768P");
+  const [rightTab, setRightTab] = useState<"video" | "image">("video");
   const [ownTasks, setOwnTasks] = useState<Task[]>([]);
   const [failureTask, setFailureTask] = useState<Task | null>(null);
   const failureDialog = useRef<HTMLDialogElement>(null);
@@ -638,12 +639,23 @@ export default function GeneratePage() {
             )}
           </section>
           <div className="generation-right-column">
+            <div className="generation-tabs" role="tablist" aria-label={text("创作预览", "Creative preview")}>
+              {(["video", "image"] as const).map((tab) => <button key={tab} type="button" role="tab" id={`generation-tab-${tab}`} aria-selected={rightTab === tab} aria-controls={`generation-panel-${tab}`} tabIndex={rightTab === tab ? 0 : -1} className={rightTab === tab ? "active" : ""} onClick={() => setRightTab(tab)} onKeyDown={(event) => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === "Home" ? "video" : event.key === "End" ? "image" : tab === "video" ? "image" : "video";
+                setRightTab(next); document.getElementById(`generation-tab-${next}`)?.focus();
+              }}>{tab === "video" ? text("我的视频预览", "My video preview") : text("生成图片", "Generate images")}</button>)}
+            </div>
+            <div role="tabpanel" id="generation-panel-image" aria-labelledby="generation-tab-image" hidden={rightTab !== "image"}>
           <GenerationImageStudio videoAssets={assets} disabled={busy || uploading} onUse={(asset, role) => {
             const nextMode = role === "reference_image" ? "reference" : "frames";
             const keep = mode === nextMode ? assets.filter(a => a.id !== asset.id && (role === "reference_image" || a.role !== role)) : [];
             if (role === "reference_image" && keep.length >= settings.maxImages) { setError(text(`最多 ${settings.maxImages} 张参考图。`, `Up to ${settings.maxImages} reference images.`)); return; }
             setMode(nextMode); setAssets([...keep, {...asset, role}]); setError("");
           }}/>
+            </div>
+            <div role="tabpanel" id="generation-panel-video" aria-labelledby="generation-tab-video" hidden={rightTab !== "video"}>
           <section className="card generation-output">
             <div className="generation-output-heading">
               <h2>{text("我的视频预览", "My video preview")}</h2>
@@ -747,6 +759,7 @@ export default function GeneratePage() {
           </section>
         </div>
         </div>
+        </div>
         <section className="card generation-history">
           <h2>{approver ? text("团队生成记录", "Team generation history") : text("我的生成记录", "My generation history")}</h2>
           <p>
@@ -777,7 +790,7 @@ export default function GeneratePage() {
                   <tr key={t.id}>
                     <td>
                       {ownTasks.some((own) => own.id === t.id) ? (
-                        <button onClick={() => setSelected(t.id)}>{t.requirement}</button>
+                        <button onClick={() => { setSelected(t.id); setRightTab("video"); }}>{t.requirement}</button>
                       ) : t.requirement}
                     </td>
                     <td>{generationModel(t.input.model).label}</td>
