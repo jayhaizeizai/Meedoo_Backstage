@@ -329,7 +329,7 @@ export default function GeneratePage() {
                   const options = generationModel(next);
                   setModel(next);
                   setResolution(options.provider === "ark" ? "720p" : "768P");
-                  setDuration((d) => Math.min(d, options.maxDuration));
+                  setDuration((d) => Math.max(options.minDuration, Math.min(d, options.maxDuration)));
                   intent.current = null;
                 }}
               >
@@ -490,12 +490,20 @@ export default function GeneratePage() {
                 {text("时长（秒）", "Duration (seconds)")}
                 <input
                   type="number"
-                  min={4}
+                  min={settings.minDuration}
                   max={settings.maxDuration}
                   step={1}
                   value={duration}
                   onChange={(e) => setDuration(Number(e.target.value))}
+                  aria-describedby="generation-duration-help"
+                  aria-invalid={!Number.isInteger(duration) || duration < settings.minDuration || duration > settings.maxDuration}
                 />
+                <small id="generation-duration-help">
+                  {text(`最短 ${settings.minDuration} 秒，最长 ${settings.maxDuration} 秒（整数秒）`, `Minimum ${settings.minDuration}s, maximum ${settings.maxDuration}s (whole seconds)`)}
+                </small>
+                {(!Number.isInteger(duration) || duration < settings.minDuration || duration > settings.maxDuration) && (
+                  <small role="alert">{text(`请输入 ${settings.minDuration}–${settings.maxDuration} 之间的整数秒。`, `Enter a whole number from ${settings.minDuration} to ${settings.maxDuration} seconds.`)}</small>
+                )}
               </label>
               <label>
                 {text("画面比例", "Aspect ratio")}
@@ -540,7 +548,8 @@ export default function GeneratePage() {
                 busy ||
                 uploading ||
                 !prompt.trim() ||
-                duration < 4 ||
+                !Number.isInteger(duration) ||
+                duration < settings.minDuration ||
                 duration > settings.maxDuration ||
                 !models.includes(model) ||
                 assets.length > settings.maxImages ||

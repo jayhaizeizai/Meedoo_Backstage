@@ -3,6 +3,7 @@ export const generationModels = {
     label: "MiniMax H3",
     provider: "minimax",
     apiModel: "MiniMax-H3",
+    minDuration: 4,
     maxDuration: 15,
     maxImages: 9,
     resolutions: ["768P", "2K"],
@@ -11,6 +12,7 @@ export const generationModels = {
     label: "Seedance 2.0",
     provider: "ark",
     apiModel: "doubao-seedance-2-0-260128",
+    minDuration: 4,
     maxDuration: 15,
     maxImages: 9,
     resolutions: ["480p", "720p"],
@@ -19,6 +21,7 @@ export const generationModels = {
     label: "Seedance 2.0 Fast",
     provider: "ark",
     apiModel: "doubao-seedance-2-0-fast-260128",
+    minDuration: 4,
     maxDuration: 15,
     maxImages: 9,
     resolutions: ["480p", "720p"],
@@ -27,6 +30,7 @@ export const generationModels = {
     label: "Seedance 2.0 Mini",
     provider: "ark",
     apiModel: "doubao-seedance-2-0-mini-260615",
+    minDuration: 4,
     maxDuration: 15,
     maxImages: 9,
     resolutions: ["480p", "720p"],
@@ -35,6 +39,7 @@ export const generationModels = {
     label: "Seedance 2.5",
     provider: "ark",
     apiModel: "doubao-seedance-2-5-260628",
+    minDuration: 4,
     maxDuration: 30,
     maxImages: 30,
     resolutions: ["480p", "720p"],
@@ -85,7 +90,7 @@ export function validateGeneration(value: unknown): GenerationInput {
     [...v.prompt].length > 7000 ||
     !["reference", "frames"].includes(v.mode) ||
     !Number.isInteger(v.duration) ||
-    v.duration < 4 ||
+    v.duration < model.minDuration ||
     v.duration > model.maxDuration ||
     !(model.resolutions as readonly string[]).includes(v.resolution) ||
     !generationRatios.includes(v.ratio as (typeof generationRatios)[number]) ||

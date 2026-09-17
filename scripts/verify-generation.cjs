@@ -47,6 +47,12 @@ const base = {
   assets: [],
 };
 assert.equal(validateGeneration(base).duration, 6);
+for (const model of ["seedance-2.0", "seedance-2.0-fast", "seedance-2.0-mini", "seedance-2.5"]) {
+  const max = model === "seedance-2.5" ? 30 : 15;
+  for (const duration of [4,max]) assert.equal(validateGeneration({...base,model,duration,resolution:"720p"}).duration,duration);
+  for (const duration of [3,4.5,max+1]) assert.throws(()=>validateGeneration({...base,model,duration,resolution:"720p"}),/INVALID_INPUT/);
+}
+
 assert.equal(validateGeneration({ ...base, requirement: undefined }).requirement, base.prompt);
 assert.equal(validateGeneration({ ...base, requirement: " " }).requirement, base.prompt);
 assert.equal(validateGeneration({ ...base, requirement: undefined, prompt: "🐶".repeat(50) }).requirement, "🐶".repeat(40) + "…");

@@ -99,3 +99,8 @@ Seedance error explanations are maintained in `lib/generation-error-reasons.ts`,
 Both submit rejection and asynchronous task failure retain only allowlisted structured diagnostics (`provider_error`), never raw error prose, signed media URLs or prompts. An HTTP 200 task-status response with `status=failed` is still a failure. No automatic paid retry is added.
 
 The generation list and usage summary are owner-scoped for everyone, including approvers. Existing dedicated resource authorization is unchanged. The UI creates a new request ID only on an explicit submit after a confirmed failed/cancelled previous task (or changed inputs). Active, unknown, missing-status and successful identical requests retain the existing ID to avoid duplicate billing. Old failures without captured structured codes cannot be reconstructed.
+
+
+### Fixed output duration
+
+Per the official [create-video API](https://docs.volcengine.com/docs/82379/1520757?lang=zh), checked 2026-09-17: Seedance 2.0 series (including Fast/Mini) accepts integer durations 4–15 seconds; Seedance 2.5 accepts 4–30 seconds for the currently supported creation modes. This UI uses explicit duration, not the provider's `-1` automatic-duration option or video-editing mode. Model metadata supplies frontend helper text and backend bounds. Invalid and fractional durations show a field-level error and disable submission.
