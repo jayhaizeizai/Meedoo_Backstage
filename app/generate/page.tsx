@@ -77,6 +77,7 @@ function GenerationWorkspace({ownerId,onReset}:{ownerId:string;onReset:()=>void}
     pending = useRef(false),
     polling = useRef(false);
   const [imageBusy,setImageBusy]=useState(false);
+  const resetDialog=useRef<HTMLDialogElement>(null);
   const snapshot={model,generateAudio,mode,assets,prompt,duration,ratio,resolution,rightTab,selected,intent:intent.current};
   const draft=useGenerationDraft(ownerId,"video",snapshot,(raw)=>{
     const d=videoDraft(raw);if(!d)return;
@@ -384,7 +385,7 @@ function GenerationWorkspace({ownerId,onReset}:{ownerId:string;onReset:()=>void}
             </p>
           </div>
           <div className="generation-header-actions">
-          <button type="button" className="generation-reset" disabled={busy||uploading||imageBusy||!draft.ready} onClick={()=>{if(window.confirm(text("确定重置当前创作内容？将清空本浏览器保存的视频和图片草稿。历史记录及已提交任务会保留。","Reset current work? This clears saved video and image drafts in this browser. History and submitted tasks will remain.")))onReset();}}>{text("重置","Reset")}</button>
+          <button type="button" className="generation-reset" disabled={busy||uploading||imageBusy||!draft.ready} onClick={()=>resetDialog.current?.showModal()}}>{text("重置","Reset")}</button>
           <span className="generation-badge">
             {settings.label} · {text("国内站", "China")}
           </span>
@@ -863,6 +864,14 @@ function GenerationWorkspace({ownerId,onReset}:{ownerId:string;onReset:()=>void}
             <p>{text("暂无生成记录。", "No generation history yet.")}</p>
           )}
         </section>
+        <dialog ref={resetDialog} className="generation-failure-dialog" aria-labelledby="generation-reset-title">
+          <h2 id="generation-reset-title">{text("重置当前创作？","Reset current work?")}</h2>
+          <p>{text("将清空本浏览器保存的视频和图片草稿。历史记录及已提交任务会保留。","This clears saved video and image drafts in this browser. History and submitted tasks will remain.")}</p>
+          <div className="image-studio-actions">
+            <button type="button" autoFocus onClick={()=>resetDialog.current?.close()}>{text("取消","Cancel")}</button>
+            <button type="button" onClick={()=>{resetDialog.current?.close();onReset();}}>{text("确认重置","Confirm reset")}</button>
+          </div>
+        </dialog>
         <dialog ref={failureDialog} className="generation-failure-dialog" aria-labelledby="generation-failure-title" onClose={() => setFailureTask(null)}>
           {failureTask && <>
             <h2 id="generation-failure-title">{text("生成失败详情", "Generation failure details")}</h2>
