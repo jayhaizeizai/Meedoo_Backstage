@@ -3,7 +3,7 @@ import { generationError, generationUser } from "../../../../lib/generation-http
 import { createSeedream, listSeedream, runSeedreamQueue } from "../../../../lib/seedream";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 240;
+export const maxDuration = 600;
 export async function GET(request: NextRequest) {
   try { const user = await generationUser(request); return NextResponse.json(await listSeedream(user.openId,request.nextUrl.searchParams.get("page")??1,request.nextUrl.searchParams.get("tracked")), {headers:{"Cache-Control":"no-store"}}); }
   catch(e) { return generationError(e); }

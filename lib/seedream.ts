@@ -66,7 +66,7 @@ export async function runSeedreamQueue() {
   try {
     locked = (await c.query("SELECT pg_try_advisory_lock(741902,41) locked")).rows[0].locked;
     if (!locked) return;
-    await c.query("UPDATE seedream_tasks SET status='submitted_unknown',error_code='SUBMISSION_UNCERTAIN',updated_at=now() WHERE status='running' AND updated_at<now()-interval '5 minutes'");
+    await c.query("UPDATE seedream_tasks SET status='submitted_unknown',error_code='SUBMISSION_UNCERTAIN',updated_at=now() WHERE status='running' AND updated_at<now()-interval '7 minutes'");
     const task = (await c.query("UPDATE seedream_tasks SET status='running',updated_at=now() WHERE id=(SELECT id FROM seedream_tasks WHERE status='queued' ORDER BY created_at LIMIT 1) RETURNING *")).rows[0];
     if (!task) return;
     let sent = false, received = false;
@@ -85,7 +85,7 @@ export async function runSeedreamQueue() {
         method: "POST", headers: { Authorization: `Bearer ${process.env.ARK_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model: task.model, prompt: task.input.prompt, size: seedreamSize(task.input.ratio, task.input.quality),
           response_format: "b64_json", output_format: "jpeg", watermark: false, ...(image ? { image } : {}) }),
-        signal: AbortSignal.timeout(180000), redirect: "error", cache: "no-store",
+        signal: AbortSignal.timeout(300000), redirect: "error", cache: "no-store",
       });
       const data = await boundedJSON(response);
       const diagnostic = safeProviderDiagnostic(data, response.headers.get("x-request-id"));

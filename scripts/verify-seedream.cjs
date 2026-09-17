@@ -61,6 +61,11 @@ if(process.argv.includes('--db'))void(async()=>{
   await assert.rejects(()=>createGeneration({openId:'image-owner',name:'Owner'},{requestId:randomUUID(),prompt:'animate cup',mode:'frames',duration:4,resolution:'720p',ratio:'9:16',model:'seedance-2.0-fast',assets:[{id:first.asset.id,role:'first_frame'}]}),/INVALID_ASSETS/);
   await cleanupSeedreamImages();assert.equal(fs.existsSync(path.join(root,'generation',first.asset.id+'.image')),false);assert.ok(fs.existsSync(path.join(root,'generation',edited.asset.id+'.image')));
   assert.equal((await listSeedream('image-owner')).tasks.find(t=>t.id===first.id).asset,null);
+  const stale=await createSeedream('image-owner',{...input,requestId:randomUUID()});
+  await query("UPDATE seedream_tasks SET status='running',updated_at=now()-interval '6 minutes' WHERE id=$1",[stale]);
+  await runSeedreamQueue();assert.equal((await query("SELECT status FROM seedream_tasks WHERE id=$1",[stale])).rows[0].status,'running');
+  await query("UPDATE seedream_tasks SET updated_at=now()-interval '8 minutes' WHERE id=$1",[stale]);
+  const oldCalls=calls;await runSeedreamQueue();assert.equal(calls,oldCalls);assert.equal((await query("SELECT status FROM seedream_tasks WHERE id=$1",[stale])).rows[0].status,'submitted_unknown');
   await createSeedream('image-owner',{...input,requestId:randomUUID()});await createSeedream('image-owner',{...input,requestId:randomUUID()});await assert.rejects(()=>createSeedream('image-owner',{...input,requestId:randomUUID()}),/TOO_MANY_TASKS/);
   console.log('PASS isolated DB: ownership, deduplication/concurrent workers, saved versions, edit input, safe failures, no uncertain retries, expiry, queue cap');
  }finally{global.fetch=oldFetch;process.env.ARK_API_KEY=oldKey;if(oldRoot===undefined)delete process.env.MEEDOO_MEDIA_DIR;else process.env.MEEDOO_MEDIA_DIR=oldRoot;await isolated.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();fs.rmSync(root,{recursive:true,force:true});}

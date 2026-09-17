@@ -35,3 +35,5 @@ The right column switches between image studio (default, first tab) and video pr
 API：GET /api/generation/team-history?page=1&kind=all，GET /api/generation/team-history/:id/image。团队图片资源必须通过审批人校验且关联生成结果；原上传素材权限不扩大。个人 API 追加 page 参数，视频 selected / 图片 tracked 仅解析当前用户任务。
 
 验证：node scripts/verify-generation-history.cjs --db（仅测试环境，隔离 schema，无付费调用）。
+
+Seedream 请求最长等待 300 秒（5 分钟）；图片提交路由允许 600 秒执行时间，后台中断任务在 7 分钟后标记结果待核对，给结果解析及文件保存留出时间。超时旧任务不会自动重发或恢复。
