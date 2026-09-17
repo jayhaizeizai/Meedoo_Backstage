@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { GenerationImageStudio } from "../../components/generation-image-studio";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
 import { useReferenceCompression } from "../../components/generation-image-compression";
@@ -636,6 +637,13 @@ export default function GeneratePage() {
               </button>
             )}
           </section>
+          <div className="generation-right-column">
+          <GenerationImageStudio videoAssets={assets} disabled={busy || uploading} onUse={(asset, role) => {
+            const nextMode = role === "reference_image" ? "reference" : "frames";
+            const keep = mode === nextMode ? assets.filter(a => a.id !== asset.id && (role === "reference_image" || a.role !== role)) : [];
+            if (role === "reference_image" && keep.length >= settings.maxImages) { setError(text(`最多 ${settings.maxImages} 张参考图。`, `Up to ${settings.maxImages} reference images.`)); return; }
+            setMode(nextMode); setAssets([...keep, {...asset, role}]); setError("");
+          }}/>
           <section className="card generation-output">
             <div className="generation-output-heading">
               <h2>{text("我的视频预览", "My video preview")}</h2>
@@ -737,6 +745,7 @@ export default function GeneratePage() {
               </div>
             )}
           </section>
+        </div>
         </div>
         <section className="card generation-history">
           <h2>{approver ? text("团队生成记录", "Team generation history") : text("我的生成记录", "My generation history")}</h2>

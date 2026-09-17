@@ -20,7 +20,7 @@ export async function GET(
     const row = (
       await query("SELECT * FROM generation_assets WHERE id=$1", [id])
     ).rows[0];
-    if (!row) throw Error("NOT_FOUND");
+    if (!row || row.file_deleted || (row.expires_at && new Date(row.expires_at).getTime() <= Date.now())) throw Error("NOT_FOUND");
     const signed = verifyGenerationImage(
       id,
       request.nextUrl.searchParams.get("expires"),
@@ -33,6 +33,7 @@ export async function GET(
         "Content-Type": row.mime,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
+        ...(request.nextUrl.searchParams.get("download") === "1" ? { "Content-Disposition": `attachment; filename="image-${id}.${row.mime === "image/png" ? "png" : row.mime === "image/webp" ? "webp" : row.mime === "image/heic" ? "heic" : "jpg"}"` } : {}),
       },
     });
   } catch (e) {

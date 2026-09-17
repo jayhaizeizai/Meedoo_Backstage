@@ -57,6 +57,8 @@ export async function generationSchema() {
       status text NOT NULL DEFAULT 'pending', attempts integer NOT NULL DEFAULT 0,
       error_code text, next_attempt_at timestamptz NOT NULL DEFAULT now(),
       expires_at timestamptz, credential_sha256 text NOT NULL);
+    ALTER TABLE generation_assets ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+    ALTER TABLE generation_assets ADD COLUMN IF NOT EXISTS file_deleted boolean NOT NULL DEFAULT false;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS provider_error jsonb;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_expires_at timestamptz;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS media_deleted_at timestamptz;
@@ -228,7 +230,7 @@ export async function createGeneration(
     if (count >= 3) throw Error("TOO_MANY_TASKS");
     const assets = (
       await client.query(
-        "SELECT id FROM generation_assets WHERE owner_id=$1 AND id=ANY($2::uuid[])",
+        "SELECT id FROM generation_assets WHERE owner_id=$1 AND id=ANY($2::uuid[]) AND (expires_at IS NULL OR expires_at>now()) AND NOT file_deleted",
         [user.openId, input.assets.map((a) => a.id)],
       )
     ).rows;

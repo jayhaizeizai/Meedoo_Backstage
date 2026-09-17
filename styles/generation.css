@@ -368,3 +368,23 @@
 .generation-failure-dialog dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; margin: 20px 0; }
 .generation-failure-dialog dd { margin: 0; min-width: 0; }
 .generation-failure-dialog form { display: flex; justify-content: flex-end; }
+
+.generation-right-column { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.image-studio-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.image-studio-heading .generation-badge { padding: 7px 10px; }
+.image-studio-heading small { letter-spacing: .16em; color: #7054e8; }
+.image-studio p { margin: 0; overflow-wrap: anywhere; }
+.image-studio-preview { background: #f5f3fc; border: 1px solid #e5dff6; border-radius: 14px; overflow: hidden; }
+.image-studio-preview > img { display: block; width: 100%; max-height: 380px; object-fit: contain; }
+.image-studio-empty { border: 1px dashed #c9bdf6; padding: 32px 20px; border-radius: 14px; text-align: center; color: #7d88a1; background: #faf9ff; }
+.image-studio-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; }
+.image-studio-actions button, .image-studio-actions a { border: 1px solid #ded8f5; border-radius: 8px; background: #faf9ff; color: #6148c9; padding: 8px 10px; font: inherit; font-size: 12px; text-decoration: none; cursor: pointer; }
+.image-studio label.image-studio-upload { position: relative; border: 1px dashed #c9bdf6; border-radius: 10px; padding: 12px; text-align: center; color: #7054e8; cursor: pointer; }
+.image-studio-upload input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.image-studio-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin-top: 12px; max-height: 340px; overflow-y: auto; }
+.image-studio-grid button { min-width: 0; padding: 5px; background: #faf9ff; border: 1px solid #e5dff6; border-radius: 10px; cursor: pointer; text-align: left; }
+.image-studio-grid button.selected { border: 2px solid #7054e8; }
+.image-studio-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
+.image-studio-grid span { display: grid; align-items: center; aspect-ratio: 1; font-size: 12px; padding: 6px; }
+.image-studio-grid small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.image-studio button:disabled { opacity: .5; cursor: not-allowed; }
