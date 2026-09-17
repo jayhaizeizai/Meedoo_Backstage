@@ -50,6 +50,11 @@ export default function GeneratePage() {
     [resolution, setResolution] =
       useState<GenerationInput["resolution"]>("768P");
   const [ownTasks, setOwnTasks] = useState<Task[]>([]);
+  const [failureTask, setFailureTask] = useState<Task | null>(null);
+  const failureDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (failureTask && !failureDialog.current?.open) failureDialog.current?.showModal();
+  }, [failureTask]);
   const [approver, setApprover] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]),
     [configured, setConfigured] = useState(false),
@@ -264,6 +269,56 @@ export default function GeneratePage() {
     }
   }
   const current = ownTasks.find((t) => t.id === selected) || ownTasks[0];
+  const taskError = (task: Task) => (<>
+                {task.error_code && (!task.provider_error || task.status === "submitted_unknown") && (
+                  <p className="data-message">
+                    {task.error_code === "INPUT_UPLOAD_FAILED"
+                      ? text(
+                          "参考图上传至生成平台失败，尚未提交视频生成。请重新发起任务。",
+                          "Reference upload failed before video generation was submitted. Start a new task to retry.",
+                        )
+                      : task.error_code === "INPUT_MEDIA_UNREACHABLE"
+                        ? text(
+                            "生成平台无法读取参考图。请重新发起任务，系统会先缓存参考图。",
+                            "The provider could not read a reference image. Start a new task to use cached references.",
+                          )
+                        : task.error_code === "PROVIDER_ACCESS_DENIED"
+                          ? text(
+                              "模型调用权限不足，请在对应平台确认模型已开通且密钥有权限。",
+                              "Model access denied. Check activation and key permissions with the provider.",
+                            )
+                          : task.error_code === "PROVIDER_PAYMENT_REQUIRED"
+                            ? text(
+                                "平台余额或额度不足，请联系管理员。",
+                                "Provider balance or quota is insufficient. Contact an administrator.",
+                              )
+                            : task.error_code === "OUTPUT_SAVE_PENDING"
+                              ? text(
+                                  "成片已生成，服务器保存待重试。请刷新。",
+                                  "Video generated; saving needs another attempt. Refresh to retry.",
+                                )
+                              : task.status === "submitted_unknown"
+                                ? text(
+                                    "平台可能已接收任务，请联系管理员核对，避免重复扣费。",
+                                    "The provider may have accepted this task. Ask an administrator to reconcile it before resubmitting.",
+                                  )
+                                : text(
+                                    `任务未完成（${task.error_code}）。`,
+                                    `Task not completed (${task.error_code}).`,
+                                  )}
+                  </p>
+                )}
+                {task.provider_error && (
+                  <p className="data-message" role="status">
+                    {task.input.model?.startsWith("seedance-")
+                      ? text(...seedanceErrorReason(task.provider_error.code))
+                      : text("生成平台返回错误，请凭下方错误码联系管理员。", "The provider returned an error. Contact an administrator with the code below.")}
+                    {task.provider_error.code && <><br />{text("错误码：", "Error: ")}{task.provider_error.code}</>}
+                    {task.provider_error.parameter && <><br />{text("相关参数：", "Parameter: ")}{task.provider_error.parameter}</>}
+                    {task.provider_error.request_id && <><br />{text("请求编号：", "Request ID: ")}{task.provider_error.request_id}</>}
+                  </p>
+                )}
+  </>);
   const input = (role: Asset["role"], label: string, multiple = false) => (
     <label className="generation-drop">
       <span>{label}</span>
@@ -652,54 +707,7 @@ export default function GeneratePage() {
                     </p>
                   </div>
                 )}
-                {current.error_code && (!current.provider_error || current.status === "submitted_unknown") && (
-                  <p className="data-message">
-                    {current.error_code === "INPUT_UPLOAD_FAILED"
-                      ? text(
-                          "参考图上传至生成平台失败，尚未提交视频生成。请重新发起任务。",
-                          "Reference upload failed before video generation was submitted. Start a new task to retry.",
-                        )
-                      : current.error_code === "INPUT_MEDIA_UNREACHABLE"
-                        ? text(
-                            "生成平台无法读取参考图。请重新发起任务，系统会先缓存参考图。",
-                            "The provider could not read a reference image. Start a new task to use cached references.",
-                          )
-                        : current.error_code === "PROVIDER_ACCESS_DENIED"
-                          ? text(
-                              "模型调用权限不足，请在对应平台确认模型已开通且密钥有权限。",
-                              "Model access denied. Check activation and key permissions with the provider.",
-                            )
-                          : current.error_code === "PROVIDER_PAYMENT_REQUIRED"
-                            ? text(
-                                "平台余额或额度不足，请联系管理员。",
-                                "Provider balance or quota is insufficient. Contact an administrator.",
-                              )
-                            : current.error_code === "OUTPUT_SAVE_PENDING"
-                              ? text(
-                                  "成片已生成，服务器保存待重试。请刷新。",
-                                  "Video generated; saving needs another attempt. Refresh to retry.",
-                                )
-                              : current.status === "submitted_unknown"
-                                ? text(
-                                    "平台可能已接收任务，请联系管理员核对，避免重复扣费。",
-                                    "The provider may have accepted this task. Ask an administrator to reconcile it before resubmitting.",
-                                  )
-                                : text(
-                                    `任务未完成（${current.error_code}）。`,
-                                    `Task not completed (${current.error_code}).`,
-                                  )}
-                  </p>
-                )}
-                {current.provider_error && (
-                  <p className="data-message" role="status">
-                    {current.input.model?.startsWith("seedance-")
-                      ? text(...seedanceErrorReason(current.provider_error.code))
-                      : text("生成平台返回错误，请凭下方错误码联系管理员。", "The provider returned an error. Contact an administrator with the code below.")}
-                    {current.provider_error.code && <><br />{text("错误码：", "Error: ")}{current.provider_error.code}</>}
-                    {current.provider_error.parameter && <><br />{text("相关参数：", "Parameter: ")}{current.provider_error.parameter}</>}
-                    {current.provider_error.request_id && <><br />{text("请求编号：", "Request ID: ")}{current.provider_error.request_id}</>}
-                  </p>
-                )}
+                {taskError(current)}
                 <div className="generation-usage">
                   <div>
                     <small>{text("总 Token", "Total tokens")}</small>
@@ -771,7 +779,14 @@ export default function GeneratePage() {
                         { timeZone: "Asia/Singapore" },
                       )}
                     </td>
-                    <td>{status(t.status)}</td>
+                    <td>
+                      {status(t.status)}
+                      {(t.status === "failed" || t.status === "submitted_unknown") && (
+                        <button type="button" className="generation-failure-link" onClick={() => setFailureTask(t)}>
+                          {text("查看失败详情", "View failure details")}
+                        </button>
+                      )}
+                    </td>
                     <td>{t.usage?.total_tokens?.toLocaleString() ?? "—"}</td>
                     <td>
                       {t.available ? (
@@ -798,6 +813,21 @@ export default function GeneratePage() {
             <p>{text("暂无生成记录。", "No generation history yet.")}</p>
           )}
         </section>
+        <dialog ref={failureDialog} className="generation-failure-dialog" aria-labelledby="generation-failure-title" onClose={() => setFailureTask(null)}>
+          {failureTask && <>
+            <h2 id="generation-failure-title">{text("生成失败详情", "Generation failure details")}</h2>
+            <p>{failureTask.requirement} · {generationModel(failureTask.input.model).label}</p>
+            {taskError(failureTask)}
+            {!failureTask.error_code && !failureTask.provider_error && <p>{text("这条历史记录未保存具体错误原因。", "No detailed error was saved for this record.")}</p>}
+            <dl>
+              <dt>{text("创建人", "Creator")}</dt><dd>{failureTask.owner_name}</dd>
+              <dt>{text("任务编号", "Task ID")}</dt><dd>{failureTask.id}</dd>
+              {failureTask.error_code && <><dt>{text("系统错误码", "System error code")}</dt><dd>{failureTask.error_code}</dd></>}
+              {failureTask.provider_error?.http_status && <><dt>HTTP</dt><dd>{failureTask.provider_error.http_status}</dd></>}
+            </dl>
+            <form method="dialog"><button className="button" autoFocus>{text("关闭", "Close")}</button></form>
+          </>}
+        </dialog>
       </section>
     </AppShell>
   );

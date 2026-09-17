@@ -359,3 +359,12 @@
 .generation-compression-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 22px; }
 .generation-compression-actions button { border: 1px solid #ded7ef; border-radius: 9px; padding: 10px 14px; cursor: pointer; background: #faf9ff; color: #6046a2; }
 .generation-compression-actions button.primary { background: #7957ed; color: white; border-color: #7957ed; }
+
+.generation-failure-link { display: block; margin-top: 6px; color: #6854e8; text-decoration: underline; white-space: nowrap; }
+.generation-failure-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; border: 1px solid #e3dff5; border-radius: 20px; padding: 24px; color: #182038; background: #fff; box-shadow: 0 24px 80px #17213b33; }
+.generation-failure-dialog::backdrop { background: #17213b80; }
+.generation-failure-dialog h2 { margin: 0 0 12px; }
+.generation-failure-dialog p, .generation-failure-dialog dd { overflow-wrap: anywhere; }
+.generation-failure-dialog dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; margin: 20px 0; }
+.generation-failure-dialog dd { margin: 0; min-width: 0; }
+.generation-failure-dialog form { display: flex; justify-content: flex-end; }
