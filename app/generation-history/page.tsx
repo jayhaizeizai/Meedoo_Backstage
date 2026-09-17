@@ -20,7 +20,7 @@ export default function TeamGenerationHistory(){
  const status=(value:string)=>({succeeded:text("已生成","Generated"),failed:text("失败","Failed"),queued:text("排队中","Queued"),running:text("生成中","Generating"),preparing:text("准备中","Preparing"),submitting:text("提交中","Submitting"),submitted_unknown:text("结果待核对","Needs review"),cancelled:text("已取消","Cancelled")})[value]??value;
  const modelLabel=(t:RecordItem)=>t.kind==="image"?"Seedream 5.0 Pro":generationModel(t.model??undefined).label;
  return <AppShell active="generation-history" status={{zh:"团队生成记录",en:"Team generation history"}}>
- <section className="generation-page">
+ <section className="page generation-page">
  <header className="generation-header"><div><span className="eyebrow">TEAM · GENERATION HISTORY</span><h1>{text("团队生成记录","Team generation history")}</h1><p>{text("集中查看团队生成的视频与图片。文件保存 14 天，生成记录保留。","Browse team videos and images. Files are saved for 14 days; records remain.")}</p></div></header>
  {authLoading?<p>{text("正在加载…","Loading…")}</p>:role!=="approver"?<p>{text("仅审批人可查看团队生成记录。","Only approvers can view team generation history.")}</p>:<section className="card generation-history">
  <div className="team-generation-filters"><label>{text("内容类型","Content type")} <select aria-label={text("内容类型","Content type")} value={kind} onChange={e=>{setKind(e.target.value);setPage(1);}}><option value="all">{text("全部","All")}</option><option value="video">{text("视频","Video")}</option><option value="image">{text("图片","Image")}</option></select></label><button type="button" disabled={loading} onClick={()=>setRevision(v=>v+1)}>{text("刷新","Refresh")}</button></div>
