@@ -385,7 +385,7 @@ function GenerationWorkspace({ownerId,onReset}:{ownerId:string;onReset:()=>void}
             </p>
           </div>
           <div className="generation-header-actions">
-          <button type="button" className="generation-reset" disabled={busy||uploading||imageBusy||!draft.ready} onClick={()=>resetDialog.current?.showModal()}}>{text("重置","Reset")}</button>
+          <button type="button" className="generation-reset" disabled={busy||uploading||imageBusy||!draft.ready} onClick={()=>resetDialog.current?.showModal()}>{text("重置","Reset")}</button>
           <span className="generation-badge">
             {settings.label} · {text("国内站", "China")}
           </span>
