@@ -648,7 +648,7 @@ export default function GeneratePage() {
               }}>{tab === "video" ? text("我的视频预览", "My video preview") : text("生成图片", "Generate images")}</button>)}
             </div>
             <div role="tabpanel" id="generation-panel-image" aria-labelledby="generation-tab-image" hidden={rightTab !== "image"}>
-          <GenerationImageStudio videoAssets={assets} disabled={busy || uploading} onUse={(asset, role) => {
+          <GenerationImageStudio disabled={busy || uploading} onUse={(asset, role) => {
             const nextMode = role === "reference_image" ? "reference" : "frames";
             const keep = mode === nextMode ? assets.filter(a => a.id !== asset.id && (role === "reference_image" || a.role !== role)) : [];
             if (role === "reference_image" && keep.length >= settings.maxImages) { setError(text(`最多 ${settings.maxImages} 张参考图。`, `Up to ${settings.maxImages} reference images.`)); return; }

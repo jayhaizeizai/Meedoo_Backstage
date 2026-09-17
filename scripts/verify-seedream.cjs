@@ -19,6 +19,9 @@ if(process.argv.includes('--db'))void(async()=>{
   await query("INSERT INTO meedoo_users(open_id,name) VALUES('image-owner','Image owner'),('other','Other')");
   require('node:child_process').execFileSync('ffmpeg',['-v','error','-f','lavfi','-i','color=c=blue:s=256x256','-frames:v','1',path.join(root,'fixture.png')]);
   const png=fs.readFileSync(path.join(root,'fixture.png'));
+  const uploaded=await storeGenerationImage('image-owner',new File([png],'uploaded.png',{type:'image/png'}));
+  assert.ok((await listSeedream('image-owner')).uploads.some(a=>a.id===uploaded.id));
+  assert.equal((await listSeedream('other')).uploads.length,0);
   let calls=0,mode='success';
   global.fetch=async(url,opt)=>{calls++;assert.equal(url,'https://ark.cn-beijing.volces.com/api/v3/images/generations');const b=JSON.parse(opt.body);assert.equal(b.size,'1584x2816');assert.equal(b.response_format,'b64_json');assert.ok(!('sequential_image_generation'in b));
    if(mode==='edit')assert.ok(b.image.startsWith('data:image/png;base64,'));
@@ -29,7 +32,7 @@ if(process.argv.includes('--db'))void(async()=>{
   const [id,id2]=await Promise.all([createSeedream('image-owner',input),createSeedream('image-owner',input)]);assert.equal(id,id2);
   await assert.rejects(()=>createSeedream('image-owner',{...input,prompt:'different'}),/REQUEST_CONFLICT/);
   await Promise.all([runSeedreamQueue(),runSeedreamQueue()]);assert.equal(calls,1);
-  const first=(await listSeedream('image-owner')).tasks[0];assert.equal(first.status,'succeeded');assert.ok(first.asset);assert.equal(first.usage.secret,undefined);
+  const first=(await listSeedream('image-owner')).tasks[0];assert.ok(!(await listSeedream('image-owner')).uploads.some(a=>a.id===first.asset.id));assert.equal(first.status,'succeeded');assert.ok(first.asset);assert.equal(first.usage.secret,undefined);
   assert.equal((await listSeedream('other')).tasks.length,0);
   await assert.rejects(()=>createSeedream('other',{...input,requestId:randomUUID(),baseAssetId:first.asset.id}),/INVALID_ASSETS/);
   mode='edit';const edit=await createSeedream('image-owner',{...input,requestId:randomUUID(),baseAssetId:first.asset.id});await runSeedreamQueue();assert.equal(calls,2);

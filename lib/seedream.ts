@@ -38,7 +38,8 @@ export async function listSeedream(owner: string) {
   const result = await query(`SELECT t.id,t.input,t.model,t.status,t.error_code,t.provider_error,t.created_at,t.usage,
     t.asset_id, a.filename, (a.expires_at IS NOT NULL AND a.expires_at<=now()) expired
     FROM seedream_tasks t LEFT JOIN generation_assets a ON a.id=t.asset_id WHERE t.owner_id=$1 ORDER BY t.created_at DESC LIMIT 60`, [owner]);
-  return { configured: Boolean(process.env.ARK_API_KEY), model: seedreamModel.label, tasks: result.rows.map(t => ({ ...t,
+  const uploads = (await query("SELECT id,filename FROM generation_assets WHERE owner_id=$1 AND expires_at IS NULL AND NOT file_deleted ORDER BY created_at DESC LIMIT 100", [owner])).rows.map(a => ({id:a.id,name:a.filename,url:`/api/generation/assets/${a.id}`}));
+  return { configured: Boolean(process.env.ARK_API_KEY), model: seedreamModel.label, uploads, tasks: result.rows.map(t => ({ ...t,
     asset: t.asset_id && !t.expired ? { id: t.asset_id, name: t.filename, url: `/api/generation/assets/${t.asset_id}` } : null,
   })) };
 }

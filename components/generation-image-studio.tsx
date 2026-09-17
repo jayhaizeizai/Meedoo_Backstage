@@ -6,12 +6,13 @@ import { seedreamModel, type ImageDraft } from "../lib/seedream-model";
 import { seedanceErrorReason } from "../lib/generation-error-reasons";
 
 type Task = { id: string; input: { prompt: string; requestId: string; ratio: string; baseAssetId: string | null }; status: string; asset: ImageDraft | null; expired: boolean; error_code?: string; provider_error?: {code?:string;request_id?:string}; };
-export function GenerationImageStudio({ videoAssets, disabled, onUse }: {
-  videoAssets: ImageDraft[]; disabled: boolean;
+export function GenerationImageStudio({ disabled, onUse }: {
+  disabled: boolean;
   onUse: (asset: ImageDraft, role: GenerationInput["assets"][number]["role"]) => void;
 }) {
   const {text} = useLanguage();
   const [prompt,setPrompt]=useState(""), [ratio,setRatio]=useState("9:16");
+  const [uploads,setUploads]=useState<ImageDraft[]>([]);
   const [base,setBase]=useState<ImageDraft|null>(null), [tasks,setTasks]=useState<Task[]>([]);
   const [busy,setBusy]=useState(false), [uploading,setUploading]=useState(false), [configured,setConfigured]=useState(false);
   const [error,setError]=useState(""), [detail,setDetail]=useState<Task|null>(null);
@@ -19,7 +20,7 @@ export function GenerationImageStudio({ videoAssets, disabled, onUse }: {
   const load=useCallback(async()=>{
     const r=await fetch("/api/generation/images",{cache:"no-store"});
     if(!r.ok) throw Error(r.status===401?"UNAUTHORIZED":"UNAVAILABLE");
-    const d=await r.json(); setTasks(d.tasks); setConfigured(d.configured);
+    const d=await r.json(); setTasks(d.tasks); setUploads(d.uploads ?? []); setConfigured(d.configured);
     const finished=(d.tasks as Task[]).find(t=>t.id===waiting.current);
     if(finished?.status==="succeeded" && finished.asset){setBase(finished.asset);setPrompt("");waiting.current=null;intent.current=null;}
     else if(finished && ["failed","submitted_unknown"].includes(finished.status)){setDetail(finished);waiting.current=null;}
@@ -36,7 +37,7 @@ export function GenerationImageStudio({ videoAssets, disabled, onUse }: {
   async function upload(file?:File){
     if(!file||pending.current)return;setUploading(true);setError("");
     try{if(file.size>30*1024*1024)throw Error("INVALID_IMAGE");const form=new FormData();form.set("file",file);
-      const r=await fetch("/api/generation/assets",{method:"POST",body:form});const d=await r.json();if(!r.ok)throw Error(d.code);selectImage(d.asset);
+      const r=await fetch("/api/generation/assets",{method:"POST",body:form});const d=await r.json();if(!r.ok)throw Error(d.code);selectImage(d.asset);await load();
     }catch(e){setError(e instanceof Error?e.message:"UNAVAILABLE");}finally{setUploading(false);}
   }
   async function submit(){
@@ -56,7 +57,7 @@ export function GenerationImageStudio({ videoAssets, disabled, onUse }: {
       <button type="button" onClick={()=>{waiting.current=null;setBase(null);setPrompt("");}}>{text("重新文生图","Start from text")}</button>
     </div></div> : <div className="image-studio-empty">{text("描述一张新图，或上传图片开始修改","Describe a new image, or upload one to edit")}</div>}
     <label className="image-studio-upload">{uploading?text("上传中…","Uploading…"):text("上传图片进行修改","Upload an image to edit")}<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={uploading||busy} onChange={e=>{const file=e.target.files?.[0];e.target.value="";void upload(file);}}/></label>
-    {!!videoAssets.length&&<label>{text("从视频素材选择原图","Use an existing video image")}<select value="" disabled={busy} onChange={e=>{const asset=videoAssets.find(a=>a.id===e.target.value);if(asset)selectImage(asset);}}><option value="">{text("选择图片…","Select image…")}</option>{videoAssets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+    {!!uploads.length&&<label>{text("从历史上传选择原图","Choose from upload history")}<select value="" disabled={busy} onChange={e=>{const asset=uploads.find(a=>a.id===e.target.value);if(asset)selectImage(asset);}}><option value="">{text("选择图片…","Select image…")}</option>{uploads.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
     <label>{base?text("修改要求","Edit instructions"):text("图片描述","Image prompt")}<textarea rows={4} maxLength={4000} value={prompt} onChange={e=>setPrompt(e.target.value)} disabled={busy||active} placeholder={base?text("例如：保留人物和服装，把背景改为夜晚街道","Keep the character and clothing; change the background to a street at night"):text("描述人物、场景、构图和风格…","Describe the subject, scene, composition and style…")}/></label>
     <label>{text("图片比例 · 2K","Aspect ratio · 2K")}<select value={ratio} disabled={busy||active} onChange={e=>setRatio(e.target.value)}>{generationRatios.map(r=><option key={r}>{r}</option>)}</select></label>
     {error&&<p className="data-message" role="alert">{message(error)}</p>}
