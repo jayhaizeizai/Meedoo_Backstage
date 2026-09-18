@@ -472,6 +472,7 @@ export async function getDashboardData(days = 30) {
           postId: row.platform_post_id,
           status: row.publication_status,
           error: row.error_message,
+          metrics: normalize(row),
         })),
         metrics: aggregate(videoRows).metrics,
       };

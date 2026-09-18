@@ -267,6 +267,16 @@ async function main() {
     assert.equal(dashboard.team.byPlatform.x.metrics.followers, null);
     assert.equal(dashboard.team.byPlatform.facebook.metrics.retention, null);
     assert.equal(dashboard.team.mix.length, 5);
+    const video = dashboard.videos.find((v) => v.id === id);
+    assert.ok(video, "Dashboard includes fixture video");
+    const facebook = video.platforms.find((p) => p.platform === "facebook");
+    const x = video.platforms.find((p) => p.platform === "x");
+    assert.equal(facebook.metrics.views, 500);
+    assert.equal(x.metrics.views, 800);
+    assert.equal(x.metrics.shares, 8);
+    assert.equal(x.metrics.followers, null);
+    assert.equal(facebook.metrics.retention, null);
+    assert.ok(video.metrics.views > facebook.metrics.views, "Platform values must not use combined totals");
     const detail =
       await require("../lib/video-detail-data.ts").getVideoDetailData(id);
     assert.equal(detail.video.metrics.facebook.views, 500);

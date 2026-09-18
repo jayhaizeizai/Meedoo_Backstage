@@ -42,6 +42,7 @@ type Person = {
   engagementRate: number | null;
 };
 type VideoPlatform = {
+  metrics: Metrics;
   platform: Platform;
   url: string | null;
   postId: string | null;
@@ -1066,6 +1067,9 @@ function VideoData({
   onSynced: () => Promise<void>;
 }) {
   const t = (zh: string, en: string) => (language === "zh" ? zh : en);
+  const { enabledPlatforms } = useAuth();
+  const [platform, setPlatform] = useState<Platform | "all">("all");
+  const selectedPlatform = platform !== "all" && enabledPlatforms.includes(platform) ? platform : "all";
   const [owner, setOwner] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -1086,6 +1090,11 @@ function VideoData({
   const filtered = useMemo(
     () =>
       data.videos
+        .flatMap((video) => {
+          if (selectedPlatform === "all") return [video];
+          const publication = video.platforms.find((item) => item.platform === selectedPlatform);
+          return publication ? [{ ...video, platforms: [publication], metrics: publication.metrics }] : [];
+        })
         .filter((video) => {
           const ownerKey = video.ownerId ?? `name:${video.owner}`;
           const timestamp = Date.parse(video.createdAt);
@@ -1109,7 +1118,7 @@ function VideoData({
           if (b === null) return -1;
           return direction === "desc" ? b - a : a - b;
         }),
-    [data.videos, direction, from, owner, sortKey, to],
+    [data.videos, direction, from, owner, sortKey, to, selectedPlatform],
   );
   async function retry(uploadId: string, platform: string) {
     const key = `${uploadId}:${platform}`;
@@ -1162,6 +1171,13 @@ function VideoData({
       </div>
       <div className="video-filters">
         <label>
+          {t("平台", "Platform")}
+          <select value={selectedPlatform} onChange={(event) => setPlatform(event.target.value as Platform | "all")}>
+            <option value="all">{t("全部平台", "All platforms")}</option>
+            {enabledPlatforms.map((item) => <option key={item} value={item}>{platformMeta[item].name}</option>)}
+          </select>
+        </label>
+        <label>
           {t("开始时间", "From")}
           <input
             type="date"
@@ -1203,11 +1219,12 @@ function VideoData({
             ? t("倒序", "Descending")
             : t("正序", "Ascending")}
         </button>
-        {(owner !== "all" || from || to || sortKey !== "createdAt") && (
+        {(owner !== "all" || selectedPlatform !== "all" || from || to || sortKey !== "createdAt") && (
           <button
             className="clear-filter"
             onClick={() => {
               setOwner("all");
+              setPlatform("all");
               setFrom("");
               setTo("");
               setSortKey("createdAt");
@@ -1218,6 +1235,11 @@ function VideoData({
           </button>
         )}
       </div>
+      <p className="conversion-source-note">
+        {selectedPlatform === "all"
+          ? t("当前显示全部平台的合计指标。", "Showing combined metrics across all platforms.")
+          : t(`当前仅显示 ${platformMeta[selectedPlatform].name} 的指标，排序也按该平台计算。`, `Showing and sorting by ${platformMeta[selectedPlatform].name} metrics only.`)}
+      </p>
       {filtered.length ? (
         <div className="video-table-wrap">
           <div className="video-table">
