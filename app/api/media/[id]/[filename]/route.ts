@@ -4,6 +4,7 @@ import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyMediaUrl } from "../../../../../lib/media-url";
 import { getReadyUploadSession } from "../../../../../lib/upload-staging";
+import { query } from "../../../../../lib/db";
 
 export const runtime = "nodejs";
 type Context = { params: Promise<{ id: string; filename: string }> };
@@ -22,9 +23,24 @@ async function serve(request: NextRequest, { params }: Context, head = false) {
       { status: 403 },
     );
   const session = await getReadyUploadSession(id);
+  const result = await query<{
+    id: string;
+    review_status: string;
+    removed_at: string | null;
+    file_deleted_at: string | null;
+  }>(
+    "SELECT id,review_status,removed_at,file_deleted_at FROM uploads WHERE id=$1",
+    [id],
+  );
+  const upload = result.rows[0];
+  // Provider downloads may outlive the publish call, and retries can start
+  // from a submitted session. Approval/removal determines access, not job state.
+  const available = upload
+    ? upload.review_status === "approved" && !upload.removed_at && !upload.file_deleted_at
+    : session?.status === "ready";
   if (
     !session?.media_path ||
-    !["ready", "publishing", "consumed"].includes(session.status)
+    !available
   )
     return NextResponse.json(
       { success: false, message: "Media unavailable." },
