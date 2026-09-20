@@ -3064,7 +3064,11 @@
 .follower-legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; }
 .follower-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .follower-legend i { width: 10px; height: 10px; border-radius: 3px; }
-.follower-readout { display: flex; flex-wrap: wrap; gap: 8px 16px; min-height: 60px; align-content: center; padding: 12px; background: #f7f7fc; border-radius: 8px; }
 .video-type-field { display: grid; gap: 10px; margin: 16px 0; }
 .video-type-field select { width: 100%; min-width: 0; padding: 12px; border: 1px solid #ddddec; border-radius: 8px; background: white; color: inherit; }
 .video-type-field small { color: #73798d; line-height: 1.5; }
+
+.follower-tooltip { position: fixed; z-index: 100; width: 260px; max-width: calc(100vw - 16px); padding: 14px; display: grid; gap: 10px; border: 1px solid #e4e6ef; border-radius: 10px; background: #fff; color: #252936; box-shadow: 0 8px 28px #25293626; pointer-events: none; font-size: 13px; }
+.follower-tooltip > span { display: flex; align-items: center; gap: 8px; }
+.follower-tooltip > span strong { margin-left: auto; }
+.follower-tooltip i { width: 9px; height: 9px; border-radius: 2px; }

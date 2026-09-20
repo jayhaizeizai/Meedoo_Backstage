@@ -373,6 +373,11 @@ function Overview({
 function AccountFollowers({ data, language }: { data: DashboardData; language: "zh" | "en" }) {
   const { enabledPlatforms } = useAuth();
   const [hovered, setHovered] = useState<string | null>(null);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+  function showTooltip(day: string, x: number, y: number) {
+    setHovered(day);
+    setPosition({ left: Math.max(8, Math.min(x + 14, window.innerWidth - 276)), top: Math.max(8, Math.min(y + 14, window.innerHeight - 260)) });
+  }
   const t = (zh: string, en: string) => language === "zh" ? zh : en;
   const rows = (data.team.accountFollowerHistory ?? []).map((row) => {
     const platforms = row.platforms.filter((item) => enabledPlatforms.includes(item.platform));
@@ -387,21 +392,23 @@ function AccountFollowers({ data, language }: { data: DashboardData; language: "
       <h2>{t("各平台总粉丝 / 订阅数", "Followers / subscribers by platform")}</h2>
       <p>{t("按所选天数显示每日最后一次同步的账号总量（新加坡时间）。", "Daily account totals from the last sync of each day, for the selected range (Singapore time).")}</p>
       <div className="follower-legend">{enabledPlatforms.map((platform) => <span key={platform}><i style={{ background: platformMeta[platform].color }} />{platformMeta[platform].name}</span>)}</div>
-      <div className="follower-readout" aria-live="polite">
-        {active ? <><b>{active.day} · {t("合计", "Total")}: {active.total === null ? "—" : count.format(active.total)}{active.partial && active.total !== null ? " *" : ""}</b>{active.platforms.map((item) => <span key={item.platform}>{platformMeta[item.platform].name}: {item.followers === null ? t("暂无数据", "No data") : count.format(item.followers)}</span>)}</> : t("悬停或点击柱子，查看各平台人数。", "Hover or tap a bar to see each platform's count.")}
-      </div>
-      <div className="account-followers-chart">
+      {active && <div className="follower-tooltip" role="tooltip" id="account-followers-tooltip" style={position}>
+        <b>{active.day}</b>
+        {active.platforms.map((item) => <span key={item.platform}><i style={{ background: platformMeta[item.platform].color }} />{platformMeta[item.platform].name}<strong>{item.followers === null ? t("暂无数据", "No data") : count.format(item.followers)}</strong></span>)}
+        <b>{active.partial ? t("已知合计", "Available total") : t("合计", "Total")}: {active.total === null ? "—" : count.format(active.total)}</b>
+      </div>}
+      <div className="account-followers-chart" onMouseLeave={() => setHovered(null)} onScroll={() => setHovered(null)}>
         {rows.map((row) => (
-          <button type="button" className="account-followers-column" key={row.day} onMouseEnter={() => setHovered(row.day)} onFocus={() => setHovered(row.day)} onClick={() => setHovered(row.day)} aria-label={`${row.day}: ${row.platforms.map((item) => `${platformMeta[item.platform].name} ${item.followers === null ? t("暂无数据", "No data") : count.format(item.followers)}`).join(", ")}`}>
+          <button type="button" className="account-followers-column" key={row.day} onMouseMove={(event) => showTooltip(row.day, event.clientX, event.clientY)} onFocus={(event) => { const rect = event.currentTarget.getBoundingClientRect(); showTooltip(row.day, rect.left, rect.top); }} onBlur={() => setHovered(null)} onKeyDown={(event) => { if (event.key === "Escape") setHovered(null); }} aria-describedby={hovered === row.day ? "account-followers-tooltip" : undefined} aria-label={`${row.day}: ${row.platforms.map((item) => `${platformMeta[item.platform].name} ${item.followers === null ? t("暂无数据", "No data") : count.format(item.followers)}`).join(", ")}`}>
             <div className="account-followers-track" aria-hidden="true">
               {row.platforms.map((item) => <div key={item.platform} style={{ height: `${(item.followers ?? 0) / maximum * 100}%`, background: platformMeta[item.platform].color }} />)}
             </div>
             <span>{row.day.slice(5)}</span>
-            <strong>{row.total === null ? "—" : count.format(row.total)}{row.partial && row.total !== null ? " *" : ""}</strong>
+            <strong>{row.total === null ? "—" : count.format(row.total)}</strong>
           </button>
         ))}
       </div>
-      <small>{t("* 仅合计有数据的平台；— 表示当日无数据。各平台相加，未跨平台去重；今日数据随同步更新。", "* Total of available platforms only; — means no data. Counts are not deduplicated across platforms; today's values update with syncs.")}</small>
+
     </article>
   );
 }
