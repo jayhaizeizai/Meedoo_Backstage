@@ -73,6 +73,7 @@ type DashboardData = {
     weight: number;
   }[];
   team: {
+    accountFollowers: { platform: Platform; followers: number | null; capturedAt: string | null }[];
     metrics: Metrics;
     videoCount: number;
     newFollowers: number | null;
@@ -354,6 +355,7 @@ function Overview({
   ];
   return (
     <section className="trend-grid">
+      <AccountFollowers data={data} language={language} />
       {cards.map((card) => (
         <TrendCard
           key={card.key}
@@ -365,6 +367,33 @@ function Overview({
         />
       ))}
     </section>
+  );
+}
+
+function AccountFollowers({ data, language }: { data: DashboardData; language: "zh" | "en" }) {
+  const { enabledPlatforms } = useAuth();
+  const t = (zh: string, en: string) => language === "zh" ? zh : en;
+  const rows = (data.team.accountFollowers ?? []).filter((row) => enabledPlatforms.includes(row.platform));
+  const maximum = Math.max(1, ...rows.map((row) => row.followers ?? 0));
+  const count = new Intl.NumberFormat(language === "zh" ? "zh-CN" : "en-US");
+  return (
+    <article className="card account-followers-card">
+      <h2>{t("各平台总粉丝 / 订阅数", "Followers / subscribers by platform")}</h2>
+      <p>{t("平台最近同步的账号总量，不受上方日期范围影响。", "Latest synced account totals, independent of the date range above.")}</p>
+      <div className="account-followers-chart">
+        {rows.map((row) => (
+          <div className="account-followers-column" key={row.platform}>
+            <strong>{row.followers === null ? t("暂无数据", "No data") : count.format(row.followers)}</strong>
+            <div className="account-followers-track" aria-hidden="true">
+              <div style={{ height: `${(row.followers ?? 0) / maximum * 100}%`, background: platformMeta[row.platform].color }} />
+            </div>
+            <b>{platformMeta[row.platform].name}</b>
+            <small>{row.capturedAt ? new Date(row.capturedAt).toLocaleString(language === "zh" ? "zh-CN" : "en-SG", { timeZone: "Asia/Singapore", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }) + " SGT" : "—"}</small>
+          </div>
+        ))}
+      </div>
+      <small>{t("每个平台下方为最近同步时间；接口数据可能存在延迟。", "Last synced time is shown below each platform; provider data may be delayed.")}</small>
+    </article>
   );
 }
 

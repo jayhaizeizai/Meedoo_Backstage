@@ -3052,3 +3052,11 @@
     max-height: 360px;
   }
 }
+
+.account-followers-card { grid-column: 1 / -1; padding: 24px; }
+.account-followers-card h2 { margin: 0 0 8px; font-size: 18px; }
+.account-followers-card p, .account-followers-card small { color: #73798d; }
+.account-followers-chart { display: flex; gap: 20px; padding: 24px 0; overflow-x: auto; }
+.account-followers-column { flex: 1; min-width: 110px; text-align: center; display: flex; flex-direction: column; gap: 10px; }
+.account-followers-track { height: 160px; display: flex; align-items: flex-end; justify-content: center; border-bottom: 1px solid #e4e6ef; }
+.account-followers-track > div { width: min(64px, 70%); border-radius: 8px 8px 0 0; }

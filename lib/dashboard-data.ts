@@ -322,6 +322,14 @@ function buildDailyViewsTrend(
 }
 
 export async function getDashboardData(days = 30) {
+  const profileFollowers = await query<{ platform: string; followers: string | null; captured_at: string }>(
+    `SELECT DISTINCT ON (platform) platform,followers::text,captured_at
+     FROM profile_metric_snapshots ORDER BY platform,captured_at DESC`,
+  );
+  const accountFollowers = platforms.map((platform) => {
+    const row = profileFollowers.rows.find((item) => item.platform === platform);
+    return { platform, followers: row?.followers == null ? null : Number(row.followers), capturedAt: row?.captured_at ?? null };
+  });
   const updatedAt = new Date().toISOString();
   const safeDays = Math.min(
     365,
@@ -487,6 +495,7 @@ export async function getDashboardData(days = 30) {
     metricDefinitions,
     team: {
       ...teamAggregate,
+      accountFollowers,
       videoCount: new Set(rows.map((row) => row.upload_id)).size,
       newFollowers: teamAggregate.metrics.followers,
       byPlatform: byPlatform(rows),
