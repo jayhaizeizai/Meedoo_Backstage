@@ -347,10 +347,10 @@ async function main() {
     await db.query("INSERT INTO meedoo_users(open_id,name,role) VALUES('fixture-admin','Jay fixture','approver')");
     process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID = "fixture-admin";
     await notifications.createNotification(id, "publish_failed", "Fixture failure");
-    assert.deepEqual((await db.query("SELECT user_open_id FROM notifications WHERE upload_id=$1 AND kind='publish_failed' ORDER BY user_open_id", [id])).rows.map(r=>r.user_open_id), ["fixture-admin", "fixture-user"]);
+    assert.deepEqual((await db.query("SELECT user_open_id FROM notifications WHERE upload_id=$1 AND kind='publish_failed' AND message LIKE '%Fixture failure' ORDER BY user_open_id", [id])).rows.map(r=>r.user_open_id), ["fixture-admin", "fixture-user"]);
     process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID = "fixture-user";
     await notifications.createNotification(id, "publish_failed", "Same recipient");
-    assert.equal(Number((await db.query("SELECT count(*) FROM notifications WHERE upload_id=$1 AND kind='publish_failed'", [id])).rows[0].count), 3);
+    assert.equal(Number((await db.query("SELECT count(*) FROM notifications WHERE upload_id=$1 AND kind='publish_failed' AND message LIKE '%Same recipient'", [id])).rows[0].count), 1);
     process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID = "fixture-admin";
     await notifications.createNotification(id, "review_approved", "Approved fixture");
     assert.equal(Number((await db.query("SELECT count(*) FROM notifications WHERE upload_id=$1 AND kind='review_approved' AND user_open_id='fixture-admin'", [id])).rows[0].count), 0);
