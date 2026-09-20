@@ -471,6 +471,31 @@ async function main() {
       "1",
     );
     console.log("PASS expired session cannot delete a submitted video");
+    // The schema is isolated; hide earlier fixtures for deterministic digest counts.
+    await db.query("UPDATE uploads SET removed_at=now()");
+    const end = new Date("2026-09-20T14:00:00Z");
+    for (let n=0;n<23;n++) {
+      const status=n===0?'pending':n===1?'rejected':'approved';
+      await db.query(`INSERT INTO uploads(id,title,profile_username,status,review_status,uploader_name,submitted_at,reviewed_at,review_comment)
+        VALUES($1,$2,'fixture','pending_review',$3,'Fixture', $4,$5,$6)`,
+        [randomUUID(),`Digest video ${n}`,status,'2026-09-01T00:00:00Z',status==='pending'?null:'2026-09-20T13:00:00Z',status==='rejected'?'Please revise caption':null]);
+    }
+    const {queueApprovalDigest}=require('../lib/approval-digest.ts');
+    const queued=await Promise.all([queueApprovalDigest('2026-09-20',end),queueApprovalDigest('2026-09-20',end)]);
+    assert.equal(queued.filter(Boolean).length,1);
+    const messages=(await db.query("SELECT message FROM notifications WHERE kind='approval_digest'")).rows;
+    assert.equal(messages.length,Number((await db.query("SELECT count(*) FROM meedoo_users WHERE role='approver'")).rows[0].count));
+    assert.ok(messages[0].message.includes('Pending / 待审批 (1)'));
+    assert.ok(messages[0].message.includes('Approved / 已批准 (21)'));
+    assert.ok(messages[0].message.includes('Rejected / 已拒绝 (1)'));
+    assert.ok(messages[0].message.includes('Please revise caption'));
+    assert.ok(messages[0].message.includes('1 more'));
+    assert.equal(await queueApprovalDigest('2026-09-21',new Date('2026-09-21T14:00:00Z')),true);
+    const next=(await db.query("SELECT message FROM notifications WHERE kind='approval_digest' ORDER BY created_at DESC LIMIT 1")).rows[0].message;
+    assert.ok(next.includes('Approved / 已批准 (0)'));
+    assert.ok(next.includes('Rejected / 已拒绝 (0)'));
+    assert.ok(next.includes('Pending / 待审批 (1)'));
+    console.log('PASS three-section digest, exact counts, truncation, rejection reasons, concurrent deduplication and reporting boundary');
     console.log("ALL RELIABILITY TESTS PASSED; no external calls made");
   } finally {
     await global.meedooPool.end();

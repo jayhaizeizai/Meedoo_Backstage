@@ -1,8 +1,8 @@
-import { uploadTitle } from "./upload-title";
+import { queueApprovalDigest } from "./approval-digest";
 import { statfs } from "node:fs/promises";
 import path from "node:path";
 import { query } from "./db";
-import { notifyUser } from "./notifications";
+import { notifyUser, flushNotifications } from "./notifications";
 function puertoRicoNow() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Puerto_Rico",
@@ -52,37 +52,8 @@ export async function runMaintenance() {
       );
   const now = puertoRicoNow();
   let digestSent = false;
-  if (now.hour === 10) {
-    const digestState = await state("approval_digest");
-    if (digestState.date !== now.date) {
-      const weekend = ["Sat", "Sun"].includes(now.weekday);
-      const pending = await query<{
-        id: string;
-        title: string;
-        original_filename: string | null;
-        platform_content: unknown;
-        uploader_name: string | null;
-        submitted_at: string;
-      }>(
-        `SELECT id::text,title,original_filename,platform_content,uploader_name,submitted_at FROM uploads WHERE removed_at IS NULL AND review_status='pending' ${weekend ? "AND submitted_at>=now()-interval '24 hours'" : ""} ORDER BY submitted_at LIMIT 20`,
-      );
-      if (pending.rowCount) {
-        const lines = pending.rows.map(
-          (item, index) =>
-            `${index + 1}. ${uploadTitle(item)} — ${item.uploader_name ?? "Lark user"}`,
-        );
-        for (const approver of approvers.rows)
-          await notifyUser(
-            approver.open_id,
-            null,
-            "approval_digest",
-            `MeeDoo daily approval summary (${pending.rowCount}):\n${lines.join("\n")}\n${process.env.APP_URL}/approvals`,
-          );
-        digestSent = true;
-      }
-      await setState("approval_digest", { date: now.date, sent: digestSent });
-    }
-  }
+  if (now.hour === 10) digestSent = await queueApprovalDigest(now.date);
+  if (digestSent) await flushNotifications();
   let diskPercent: number | null = null;
   const root = process.env.MEEDOO_MEDIA_DIR;
   if (root) {
