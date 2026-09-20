@@ -163,8 +163,21 @@ export async function createNotification(
   message = await withUploadTitle(uploadId, message);
   await query(
     `INSERT INTO notifications(user_open_id,upload_id,kind,message,lark_queued)
-    SELECT uploader_open_id,id,$2,$3,true FROM uploads WHERE id=$1`,
-    [uploadId, kind, message],
+    SELECT recipients.open_id,$1,$2,$3,true FROM (
+      SELECT uploader_open_id AS open_id FROM uploads WHERE id=$1
+      UNION
+      SELECT admin.open_id FROM meedoo_users admin
+      WHERE admin.open_id=$4 AND admin.role='approver'
+        AND EXISTS(SELECT 1 FROM uploads WHERE id=$1)
+    ) recipients WHERE recipients.open_id IS NOT NULL`,
+    [
+      uploadId,
+      kind,
+      message,
+      kind === "publish_failed"
+        ? process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID?.trim() || null
+        : null,
+    ],
   );
   scheduleDelivery();
 }

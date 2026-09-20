@@ -344,6 +344,18 @@ async function main() {
       "PASS 1001 CSV rows batched into 3 inserts; duplicates and overlap preserved",
     );
     const notifications = require("../lib/notifications.ts");
+    await db.query("INSERT INTO meedoo_users(open_id,name,role) VALUES('fixture-admin','Jay fixture','approver')");
+    process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID = "fixture-admin";
+    await notifications.createNotification(id, "publish_failed", "Fixture failure");
+    assert.deepEqual((await db.query("SELECT user_open_id FROM notifications WHERE upload_id=$1 AND kind='publish_failed' ORDER BY user_open_id", [id])).rows.map(r=>r.user_open_id), ["fixture-admin", "fixture-user"]);
+    process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID = "fixture-user";
+    await notifications.createNotification(id, "publish_failed", "Same recipient");
+    assert.equal(Number((await db.query("SELECT count(*) FROM notifications WHERE upload_id=$1 AND kind='publish_failed'", [id])).rows[0].count), 3);
+    process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID = "fixture-admin";
+    await notifications.createNotification(id, "review_approved", "Approved fixture");
+    assert.equal(Number((await db.query("SELECT count(*) FROM notifications WHERE upload_id=$1 AND kind='review_approved' AND user_open_id='fixture-admin'", [id])).rows[0].count), 0);
+    delete process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID;
+    console.log("PASS publish-failure admin copy, recipient deduplication, other events unchanged");
     await notifications.notifyUser(
       "fixture-user",
       null,
