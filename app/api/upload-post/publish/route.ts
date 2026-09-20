@@ -1,3 +1,4 @@
+import { isVideoType } from "../../../../lib/video-type";
 import { platformSelectionEnabled } from "../../../../lib/platform-settings";
 import { uploadTitle } from "../../../../lib/upload-title";
 import { NextRequest, NextResponse } from "next/server";
@@ -25,10 +26,13 @@ export async function POST(request: NextRequest) {
   if (!user)
     return error("Sign in with Lark before submitting.", 401, "AUTH_REQUIRED");
   const body = (await request.json().catch(() => ({}))) as {
+    videoType?: unknown;
     uploadSessionId?: string;
     platformContent?: unknown;
     platforms?: string[];
   };
+  if (!isVideoType(body.videoType))
+    return error("请选择视频类型 / Choose a video type.", 400, "VIDEO_TYPE_REQUIRED");
   const id = String(body.uploadSessionId ?? "");
   const platformContent = parsePlatformContent(body.platformContent);
   const platforms = [
@@ -71,6 +75,7 @@ export async function POST(request: NextRequest) {
   try {
     const uploadId = await submitForReview({
       session: staged,
+      videoType: body.videoType,
       user,
       platformContent,
       platforms,

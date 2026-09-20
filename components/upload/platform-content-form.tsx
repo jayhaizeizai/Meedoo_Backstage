@@ -1,10 +1,13 @@
 "use client";
+import { videoTypes, type VideoType } from "../../lib/video-type";
 import { useLanguage } from "../language-provider";
 import { socialTextLength, socialTextLimit } from "../../lib/social-platforms";
 import { platformOptions } from "./upload-model";
 import type { useUploadWorkflow } from "./use-upload-workflow";
 type Props = Pick<
   ReturnType<typeof useUploadWorkflow>,
+  | "videoType"
+  | "setVideoType"
   | "file"
   | "platformContent"
   | "syncPlatformContent"
@@ -16,6 +19,8 @@ type Props = Pick<
   | "toggleContentSync"
 >;
 export function PlatformContentForm({
+  videoType,
+  setVideoType,
   file,
   platformContent,
   syncPlatformContent,
@@ -103,6 +108,14 @@ export function PlatformContentForm({
           )}
         </p>
       )}
+      <label className="video-type-field">
+        <span>{text("视频类型（必选）", "Video type (required)")}</span>
+        <select value={videoType} onChange={(event) => setVideoType(event.target.value as VideoType | "")} required>
+          <option value="">{text("请选择一个主要创作目标", "Select one primary content goal")}</option>
+          {videoTypes.map((item) => <option key={item.value} value={item.value}>{text(item.zh, item.en)}</option>)}
+        </select>
+        <small>{text("转发：表达认同；收藏：留待使用；访问网站：进一步了解。选择本条视频最主要的目标。", "Repost: express shared values. Saves: keep useful content. Website Visit: learn more. Choose the video's primary goal.")}</small>
+      </label>
       <button
         className={`content-sync-toggle${syncPlatformContent ? " active" : ""}`}
         type="button"
@@ -169,7 +182,7 @@ export function PlatformContentForm({
                 }
               />
               <label className="label field-label" htmlFor="shared-caption">
-                <span>{text("文案（必填）", "Caption (required)")}</span>
+                <span>{text("文案（含话题标签，必填）", "Caption(hashtag) (required)")}</span>
                 <small>
                   {platforms.includes("x") && (
                     <>
@@ -250,7 +263,7 @@ export function PlatformContentForm({
                     className="label field-label"
                     htmlFor={`${platform.id}-caption`}
                   >
-                    <span>{text("文案（必填）", "Caption (required)")}</span>
+                    <span>{text("文案（含话题标签，必填）", "Caption(hashtag) (required)")}</span>
                     <small>
                       {socialTextLength(
                         platform.id,

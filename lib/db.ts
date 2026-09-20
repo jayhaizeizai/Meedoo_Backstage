@@ -143,6 +143,7 @@ export async function ensureSchema() {
       read_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_type text CHECK (video_type IN ('repost','saves','website_visit'));
     ALTER TABLE uploads ADD COLUMN IF NOT EXISTS review_status text NOT NULL DEFAULT 'approved';
     ALTER TABLE uploads ADD COLUMN IF NOT EXISTS submitted_at timestamptz;
     ALTER TABLE uploads ADD COLUMN IF NOT EXISTS reviewed_at timestamptz;

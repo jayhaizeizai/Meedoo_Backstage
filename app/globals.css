@@ -3053,10 +3053,18 @@
   }
 }
 
-.account-followers-card { grid-column: 1 / -1; padding: 24px; }
+.account-followers-card { grid-column: 1 / -1; padding: 24px; min-width: 0; }
 .account-followers-card h2 { margin: 0 0 8px; font-size: 18px; }
 .account-followers-card p, .account-followers-card small { color: #73798d; }
-.account-followers-chart { display: flex; gap: 20px; padding: 24px 0; overflow-x: auto; }
-.account-followers-column { flex: 1; min-width: 110px; text-align: center; display: flex; flex-direction: column; gap: 10px; }
-.account-followers-track { height: 160px; display: flex; align-items: flex-end; justify-content: center; border-bottom: 1px solid #e4e6ef; }
-.account-followers-track > div { width: min(64px, 70%); border-radius: 8px 8px 0 0; }
+.account-followers-chart { display: flex; gap: 12px; padding: 16px 0; overflow-x: auto; }
+.account-followers-column { flex: 1; min-width: 68px; text-align: center; display: flex; flex-direction: column; gap: 8px; padding: 4px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.account-followers-column:focus-visible { outline: 2px solid #6757e8; outline-offset: -2px; }
+.account-followers-track { height: 180px; display: flex; flex-direction: column-reverse; align-items: center; border-bottom: 1px solid #e4e6ef; width: 100%; }
+.account-followers-track > div { width: min(44px, 80%); flex-shrink: 0; }
+.follower-legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; }
+.follower-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.follower-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.follower-readout { display: flex; flex-wrap: wrap; gap: 8px 16px; min-height: 60px; align-content: center; padding: 12px; background: #f7f7fc; border-radius: 8px; }
+.video-type-field { display: grid; gap: 10px; margin: 16px 0; }
+.video-type-field select { width: 100%; min-width: 0; padding: 12px; border: 1px solid #ddddec; border-radius: 8px; background: white; color: inherit; }
+.video-type-field small { color: #73798d; line-height: 1.5; }

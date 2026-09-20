@@ -1,3 +1,4 @@
+import { isVideoType, type VideoType } from "./video-type";
 import { assertFacebookDestination } from "./facebook-destination";
 import { invalidateDashboardCache } from "./dashboard-cache";
 import { stat } from "node:fs/promises";
@@ -27,11 +28,13 @@ export async function isApprover(openId: string) {
 }
 
 export async function submitForReview(input: {
+  videoType: VideoType;
   session: UploadSession;
   user: MeeDooUser;
   platformContent: PlatformContent;
   platforms: UploadPostPlatform[];
 }) {
+  if (!isVideoType(input.videoType)) throw new Error("VIDEO_TYPE_REQUIRED");
   const { profile, facebookPageId } = getUploadPostConfig();
   if (input.platforms.includes("facebook") && !facebookPageId)
     throw new Error("FACEBOOK_PAGE_REQUIRED");
@@ -67,8 +70,8 @@ export async function submitForReview(input: {
     );
     if (!transitioned.rowCount) throw new Error("UPLOAD_SESSION_NOT_READY");
     await client.query(
-      `INSERT INTO uploads(id,profile_username,title,caption,platform_content,original_filename,media_size_bytes,media_path,uploader_open_id,uploader_name,status,target_platforms,review_status,submitted_at,video_width,video_height,video_duration_seconds,video_codec)
-      VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,'pending_review',$11,'pending',now(),$12,$13,$14,$15)`,
+      `INSERT INTO uploads(id,profile_username,title,caption,platform_content,original_filename,media_size_bytes,media_path,uploader_open_id,uploader_name,status,target_platforms,review_status,submitted_at,video_width,video_height,video_duration_seconds,video_codec,video_type)
+      VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,'pending_review',$11,'pending',now(),$12,$13,$14,$15,$16)`,
       [
         input.session.id,
         profile || "pending",
@@ -88,6 +91,7 @@ export async function submitForReview(input: {
         probe.height,
         probe.duration,
         probe.codec,
+        input.videoType,
       ],
     );
     if (input.platforms.includes("facebook"))
@@ -100,6 +104,7 @@ export async function submitForReview(input: {
 }
 
 export type ReviewRecord = {
+  video_type: VideoType | null;
   facebook_page_id: string | null;
   id: string;
   title: string;
@@ -136,7 +141,7 @@ export async function listReviewRecords(user: MeeDooUser, pendingOnly = false) {
     pendingOnly ? "u.review_status='pending'" : "true",
   ];
   const result = await query<ReviewRecord>(
-    `SELECT u.id::text,u.title,u.caption,u.uploader_open_id,COALESCE(NULLIF(u.uploader_name,''),owner.name) uploader_name,u.status,u.review_status,u.review_comment,
+    `SELECT u.id::text,u.title,u.caption,u.video_type,u.uploader_open_id,COALESCE(NULLIF(u.uploader_name,''),owner.name) uploader_name,u.status,u.review_status,u.review_comment,
       u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.file_deleted_at,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,u.platform_content,r.name reviewer_name,
       ARRAY(SELECT p.platform FROM publications p WHERE p.upload_id=u.id AND p.status='completed' AND p.removed_at IS NULL ORDER BY p.platform) published_platforms
     FROM uploads u LEFT JOIN meedoo_users owner ON owner.open_id=u.uploader_open_id LEFT JOIN meedoo_users r ON r.open_id=u.reviewed_by WHERE ${conditions.join(" AND ")} ORDER BY COALESCE(u.submitted_at,u.created_at) DESC LIMIT 200`,
@@ -161,7 +166,7 @@ export async function listReviewRecords(user: MeeDooUser, pendingOnly = false) {
 export async function getReviewRecord(id: string, user: MeeDooUser) {
   const approver = await isApprover(user.openId);
   const result = await query<ReviewRecord>(
-    `SELECT u.id::text,u.title,u.caption,u.uploader_open_id,COALESCE(NULLIF(u.uploader_name,''),owner.name) uploader_name,u.status,u.review_status,u.review_comment,
+    `SELECT u.id::text,u.title,u.caption,u.video_type,u.uploader_open_id,COALESCE(NULLIF(u.uploader_name,''),owner.name) uploader_name,u.status,u.review_status,u.review_comment,
       u.submitted_at,u.reviewed_at,u.created_at,u.target_platforms,u.file_deleted_at,u.original_filename,u.media_size_bytes,u.media_path,u.version,u.video_width,u.video_height,u.video_duration_seconds,u.video_codec,u.platform_content,r.name reviewer_name,
       ARRAY(SELECT p.platform FROM publications p WHERE p.upload_id=u.id AND p.status='completed' AND p.removed_at IS NULL ORDER BY p.platform) published_platforms
     FROM uploads u LEFT JOIN meedoo_users owner ON owner.open_id=u.uploader_open_id LEFT JOIN meedoo_users r ON r.open_id=u.reviewed_by WHERE u.id=$1 AND u.removed_at IS NULL AND ($2::boolean OR u.uploader_open_id=$3)`,

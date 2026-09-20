@@ -1,4 +1,5 @@
 "use client";
+import { type VideoType } from "../../lib/video-type";
 import { prepareVideoUpload } from "./upload-transport";
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 import { socialTextLength, socialTextLimit } from "../../lib/social-platforms";
@@ -26,6 +27,7 @@ export function useUploadWorkflow() {
   const { user, enabledPlatforms } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [videoType, setVideoType] = useState<VideoType | "">("");
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [platformContent, setPlatformContent] =
@@ -222,6 +224,7 @@ export function useUploadWorkflow() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           uploadSessionId: stage.id,
+          videoType,
           platformContent,
           platforms,
         }),
@@ -244,6 +247,7 @@ export function useUploadWorkflow() {
       });
       setStagedUpload(null);
       setFile(null);
+      setVideoType("");
       if (fileInputRef.current) fileInputRef.current.value = "";
       window.localStorage.removeItem("meedoo_staged_upload");
       dialogRef.current?.showModal();
@@ -283,7 +287,9 @@ export function useUploadWorkflow() {
           MAX_YOUTUBE_DESCRIPTION_BYTES
       );
     });
-  const validationError = invalidPlatform
+  const validationError = !videoType
+    ? text("请选择视频类型（创作目标）。", "Choose a video type (content goal).")
+    : invalidPlatform
     ? text(
         `${invalidPlatform.name} 的标题和文案均为必填，并且必须符合长度与字符规则。`,
         `${invalidPlatform.name} requires both a valid title and caption.`,
@@ -317,6 +323,8 @@ export function useUploadWorkflow() {
         : { zh: "等待 Upload-Post 配置", en: "Awaiting Upload-Post setup" };
 
   return {
+    videoType,
+    setVideoType,
     fileInputRef,
     dialogRef,
     file,

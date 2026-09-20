@@ -322,19 +322,28 @@ function buildDailyViewsTrend(
 }
 
 export async function getDashboardData(days = 30) {
-  const profileFollowers = await query<{ platform: string; followers: string | null; captured_at: string }>(
-    `SELECT DISTINCT ON (platform) platform,followers::text,captured_at
-     FROM profile_metric_snapshots ORDER BY platform,captured_at DESC`,
-  );
-  const accountFollowers = platforms.map((platform) => {
-    const row = profileFollowers.rows.find((item) => item.platform === platform);
-    return { platform, followers: row?.followers == null ? null : Number(row.followers), capturedAt: row?.captured_at ?? null };
-  });
   const updatedAt = new Date().toISOString();
   const safeDays = Math.min(
     365,
     Math.max(1, Math.round(Number.isFinite(days) ? days : 30)),
   );
+  const profileFollowers = await query<{ day: string; platform: string; followers: string | null; captured_at: string }>(
+    `SELECT DISTINCT ON ((captured_at AT TIME ZONE 'Asia/Singapore')::date,platform)
+       (captured_at AT TIME ZONE 'Asia/Singapore')::date::text day,platform,followers::text,captured_at
+     FROM profile_metric_snapshots
+     WHERE captured_at >= (((($2::timestamptz AT TIME ZONE 'Asia/Singapore')::date - ($1::int - 1))::timestamp) AT TIME ZONE 'Asia/Singapore')
+       AND captured_at <= $2::timestamptz
+     ORDER BY (captured_at AT TIME ZONE 'Asia/Singapore')::date,platform,captured_at DESC`,
+    [safeDays, updatedAt],
+  );
+  const today = singaporeDay(updatedAt);
+  const accountFollowerHistory = Array.from({ length: safeDays }, (_, index) => {
+    const day = new Date(Date.parse(today + "T00:00:00Z") - (safeDays - 1 - index) * 86400000).toISOString().slice(0, 10);
+    return { day, platforms: platforms.map((platform) => {
+      const row = profileFollowers.rows.find((item) => item.day === day && item.platform === platform);
+      return { platform, followers: row?.followers == null ? null : Number(row.followers), capturedAt: row?.captured_at ?? null };
+    }) };
+  });
   const current =
     await query<Row>(`SELECT p.id::text publication_id,u.id upload_id,u.title,u.uploader_open_id,u.uploader_name,u.created_at,u.status,
     p.platform,p.post_url,p.platform_post_id,p.status publication_status,p.error_message,latest.metrics,u.video_duration_seconds,
@@ -495,7 +504,7 @@ export async function getDashboardData(days = 30) {
     metricDefinitions,
     team: {
       ...teamAggregate,
-      accountFollowers,
+      accountFollowerHistory,
       videoCount: new Set(rows.map((row) => row.upload_id)).size,
       newFollowers: teamAggregate.metrics.followers,
       byPlatform: byPlatform(rows),
