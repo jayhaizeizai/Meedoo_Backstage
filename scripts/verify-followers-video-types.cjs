@@ -30,7 +30,7 @@ mock('lib/notifications.ts',{notifyApprovers:async()=>{throw new Error('UNEXPECT
       await submitForReview({videoType,session,user:{openId:'fixture',name:'Fixture'},platforms:['youtube'],platformContent:{youtube:{title:'Fixture',caption:'Fixture'}}});
       assert.equal((await db.query('SELECT video_type FROM uploads WHERE id=$1',[id])).rows[0].video_type,videoType);
     }
-    const day=(await db.query("SELECT ((now() AT TIME ZONE 'Asia/Singapore')::date-1)::text day")).rows[0].day;
+    const day=(await db.query("SELECT ((now() AT TIME ZONE 'Asia/Singapore')::date-1)::text AS \"day\"")).rows[0].day;
     for(const [platform,time,followers] of [['tiktok','01:00:00',10],['tiktok','23:00:00',12],['youtube','22:00:00',0]])
       await db.query('INSERT INTO profile_metric_snapshots(platform,captured_at,followers) VALUES($1,$2,$3)',[platform,`${day}T${time}+08:00`,followers]);
     const {getDashboardData}=require('../lib/dashboard-data.ts');

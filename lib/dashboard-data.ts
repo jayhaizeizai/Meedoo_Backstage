@@ -329,7 +329,7 @@ export async function getDashboardData(days = 30) {
   );
   const profileFollowers = await query<{ day: string; platform: string; followers: string | null; captured_at: string }>(
     `SELECT DISTINCT ON ((captured_at AT TIME ZONE 'Asia/Singapore')::date,platform)
-       (captured_at AT TIME ZONE 'Asia/Singapore')::date::text day,platform,followers::text,captured_at
+       (captured_at AT TIME ZONE 'Asia/Singapore')::date::text "day",platform,followers::text,captured_at
      FROM profile_metric_snapshots
      WHERE captured_at >= (((($2::timestamptz AT TIME ZONE 'Asia/Singapore')::date - ($1::int - 1))::timestamp) AT TIME ZONE 'Asia/Singapore')
        AND captured_at <= $2::timestamptz
