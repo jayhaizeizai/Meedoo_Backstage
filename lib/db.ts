@@ -143,7 +143,13 @@ export async function ensureSchema() {
       read_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
-    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_type text CHECK (video_type IN ('repost','saves','website_visit'));
+    ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_type text CHECK (video_type IN ('repost','saves','website_visit','likes'));
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='uploads'::regclass AND conname='uploads_video_type_check' AND position('likes' in pg_get_constraintdef(oid))=0) THEN
+        ALTER TABLE uploads DROP CONSTRAINT uploads_video_type_check;
+        ALTER TABLE uploads ADD CONSTRAINT uploads_video_type_check CHECK (video_type IN ('repost','saves','website_visit','likes'));
+      END IF;
+    END $$;
     ALTER TABLE uploads ADD COLUMN IF NOT EXISTS review_status text NOT NULL DEFAULT 'approved';
     ALTER TABLE uploads ADD COLUMN IF NOT EXISTS submitted_at timestamptz;
     ALTER TABLE uploads ADD COLUMN IF NOT EXISTS reviewed_at timestamptz;

@@ -23,7 +23,7 @@ mock('lib/notifications.ts',{notifyApprovers:async()=>{throw new Error('UNEXPECT
       assert.equal(response.status,400);assert.equal((await response.json()).code,'VIDEO_TYPE_REQUIRED');
     }
     const {submitForReview}=require('../lib/approvals.ts');
-    for(const videoType of ['repost','saves','website_visit']) {
+    for(const videoType of ['repost','saves','website_visit','likes']) {
       const id=randomUUID();
       await db.query("INSERT INTO upload_sessions(id,uploader_open_id,uploader_name,original_filename,content_type,expected_size,chunk_size,total_chunks,media_path,status,expires_at) VALUES($1,'fixture','Fixture','video.mp4','video/mp4',100,100,1,'/fixture','ready',now()+interval '1 day')",[id]);
       const session=(await db.query('SELECT * FROM upload_sessions WHERE id=$1',[id])).rows[0];
@@ -45,6 +45,6 @@ mock('lib/notifications.ts',{notifyApprovers:async()=>{throw new Error('UNEXPECT
         assert.equal(yesterday.platforms.find(row=>row.platform==='x').followers,null);
       }
     }
-    console.log('PASS: required video type validation, all three types persist; daily history range, Singapore day, latest snapshot, zero and missing values');
+    console.log('PASS: required video type validation, all four types persist; daily history range, Singapore day, latest snapshot, zero and missing values');
   } finally { await global.meedooPool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end(); }
 })().catch(e=>{console.error(e.name,e.code||e.message);process.exitCode=1;});

@@ -114,7 +114,7 @@ export function PlatformContentForm({
           <option value="">{text("请选择一个主要创作目标", "Select one primary content goal")}</option>
           {videoTypes.map((item) => <option key={item.value} value={item.value}>{text(item.zh, item.en)}</option>)}
         </select>
-        <small>{text("转发：表达认同；收藏：留待使用；访问网站：进一步了解。选择本条视频最主要的目标。", "Repost: express shared values. Saves: keep useful content. Website Visit: learn more. Choose the video's primary goal.")}</small>
+        <small>{text("转发：表达认同；收藏：留待使用；访问网站：进一步了解；点赞：让人有同感。选择本条视频最主要的目标。", "Repost: express shared values. Saves: keep useful content. Website Visit: learn more. Likes: relatable moments. Choose the video's primary goal.")}</small>
       </label>
       <button
         className={`content-sync-toggle${syncPlatformContent ? " active" : ""}`}
