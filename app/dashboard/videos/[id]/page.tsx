@@ -2,6 +2,7 @@
 import { useAuth } from "../../../../components/auth-provider";
 
 import Link from "next/link";
+import { PlatformDailyChart } from "../../../../components/platform-daily-chart";
 import {
   platformMeta,
   type SocialPlatform,
@@ -9,7 +10,7 @@ import {
 import { TikTokRetentionChart } from "../../../../components/tiktok-retention-chart";
 import type { TikTokRetention } from "../../../../lib/tiktok-retention";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../../../../components/app-shell";
 import { useLanguage } from "../../../../components/language-provider";
 
@@ -26,6 +27,7 @@ type PlatformKey = "all" | Platform;
 type Metrics = Record<MetricKey, number | null>;
 type Point = { minute: number; metrics: Record<PlatformKey, Metrics> };
 type DetailData = {
+  dailyHistory: {day:string;platforms:{platform:Platform;metrics:Metrics}[]}[];
   updatedAt: string;
   metricDefinitions: { key: MetricKey; zh: string; en: string }[];
   video: {
@@ -88,6 +90,9 @@ function selectedMetric(point: Point, selected: Platform[], key: MetricKey) {
 
 export default function VideoDetailPage() {
   const { language, text } = useLanguage();
+  const [detailMetric,setDetailMetric]=useState<MetricKey|null>(null);
+  const metricDialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{if(detailMetric&&!metricDialog.current?.open)metricDialog.current?.showModal();},[detailMetric]);
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<DetailData | null>(null);
   const [error, setError] = useState("");
@@ -259,14 +264,21 @@ export default function VideoDetailPage() {
             )}
             <section className="detail-kpis">
               {data.metricDefinitions.map(({ key, zh, en }) => (
-                <article className="card" key={key}>
+                <button type="button" className="card detail-metric-button" key={key} aria-haspopup="dialog" onClick={()=>setDetailMetric(key)}>
                   <small>{language === "zh" ? zh : en}</small>
                   <strong>
                     {format(current?.[key] ?? null, key, language)}
                   </strong>
-                </article>
+                  <span className="detail-metric-action">{text("查看详情","View details")} →</span>
+                </button>
               ))}
             </section>
+            <dialog ref={metricDialog} className="metric-detail-dialog" aria-labelledby="metric-detail-title" onClose={()=>setDetailMetric(null)} onClick={e=>{if(e.target===e.currentTarget)metricDialog.current?.close();}}>
+              {detailMetric&&<div className="metric-detail-content">
+                <header><div><h2 id="metric-detail-title">{data.metricDefinitions.find(d=>d.key===detailMetric)?.[language]}</h2>{detailMetric!=="retention"&&<p>{text("最近 30 天 · 每日最后一次同步的累计值（新加坡时间）","Last 30 days · Cumulative totals at each day's last sync (Singapore time)")}</p>}</div><button type="button" autoFocus aria-label={text("关闭详情","Close details")} onClick={()=>metricDialog.current?.close()}>×</button></header>
+                {detailMetric==="retention" ? (selected.includes("tiktok")&&data.video.tiktokRetention.length ? data.video.tiktokRetention.map(item=><TikTokRetentionChart key={item.publicationId} videoId={data.video.id} {...item} language={language}/>) : <p>{text("当前所选平台没有可显示的 TikTok 留存曲线。","No TikTok retention curve is available for the selected platforms.")}</p>) : <PlatformDailyChart key={detailMetric} rows={(data.dailyHistory??[]).map(row=>({day:row.day,platforms:row.platforms.map(p=>({platform:p.platform,value:p.metrics[detailMetric]}))}))} platforms={selected} language={language}/>}
+              </div>}
+            </dialog>
             <section className="comparison-copy">
               <div>
                 <p className="eyebrow">24-HOUR BENCHMARK</p>
