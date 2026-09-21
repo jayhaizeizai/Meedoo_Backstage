@@ -34,7 +34,7 @@ export async function ownedAsset(id: unknown, owner: string, c: PoolClient, assi
   if (!(await c.query(`SELECT a.id FROM generation_assets a WHERE a.id=$1 AND (a.owner_id=$2 OR ${assetAttachment}) AND NOT a.file_deleted AND (a.expires_at IS NULL OR a.expires_at>now())`, [id, owner, assignment])).rowCount) throw Error("INVALID_ASSETS");
   return id as string;
 }
-async function assetForGeneration(id: string, owner: string, c: PoolClient, assignment: string) {
+export async function assetForGeneration(id: string, owner: string, c: PoolClient, assignment: string) {
   await ownedAsset(id, owner, c, assignment);
   const source = (await c.query("SELECT * FROM generation_assets WHERE id=$1", [id])).rows[0];
   if (source.owner_id === owner) return id;
@@ -132,7 +132,7 @@ export async function editAssignment(owner: string, id: string, body: Record<str
         await c.query("UPDATE assignments SET summary=$2,storyboard_prompt=$3,version=version+1,updated_at=now() WHERE id=$1", [id, output.summary, output.storyboardPrompt]);
       } else {
         // Never delete a shot with a paid generation attached.
-        if ((await c.query("SELECT id FROM assignment_runs WHERE assignment_id=$1 AND kind='video' LIMIT 1", [id])).rowCount) throw Error("SHOTS_HAVE_GENERATIONS");
+        if ((await c.query("SELECT id FROM assignment_runs WHERE assignment_id=$1 AND shot_id IS NOT NULL LIMIT 1", [id])).rowCount) throw Error("SHOTS_HAVE_GENERATIONS");
         await c.query("DELETE FROM assignment_shots WHERE assignment_id=$1", [id]);
         for (const [index, shot] of output.shots.entries()) await c.query("INSERT INTO assignment_shots(id,assignment_id,position,title,prompt,duration) VALUES($1,$2,$3,$4,$5,$6)", [randomUUID(), id, index + 1, shot.title, shot.prompt, shot.duration]);
         await c.query("UPDATE assignments SET version=version+1,updated_at=now() WHERE id=$1", [id]);
@@ -149,7 +149,7 @@ export async function generateForAssignment(user: { openId: string; name: string
   const runId = assignmentId(body.requestId), kind = body.action === "storyboard" ? "storyboard" : "video";
   const input = kind === "storyboard" ? validateSeedream(body.input) : validateGeneration(body.input);
   if (input.requestId !== runId) throw Error("INVALID_INPUT");
-  const shotId = kind === "video" ? assignmentId(body.shotId) : null;
+  const shotId = kind === "video" || body.shotId ? assignmentId(body.shotId) : null;
   await transaction(async c => {
     requireAssignmentEditor(await ownedAssignment(id, user.openId, c, true));
     if ("assets" in input) {

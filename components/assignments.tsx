@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "./app-shell";
 import { useLanguage } from "./language-provider";
-import { generationModels, generationRatios, type GenerationModel } from "../lib/generation-model";
+import { GenerationWorkspace } from "./generation-workspace";
+import { clearGenerationDraft } from "./use-generation-draft";
 import { seedanceErrorReason } from "../lib/generation-error-reasons";
 import type { PlanOutput } from "../lib/assignments/model";
 import "../styles/assignments.css";
@@ -90,6 +91,8 @@ export function AssignmentsPage() {
 function AssignmentWorkspace({ id, onClose }: { id: string; onClose: () => void }) {
   const { text } = useLanguage();
   const [data, setData] = useState<Detail | null>(null), [error, setError] = useState("");
+  const [activeShotId,setActiveShotId]=useState<string|null>(null);
+  const [shotBusy,setShotBusy]=useState(false);
   const [busy, setBusy] = useState(false), [confirm, setConfirm] = useState<Plan | null>(null);
   const downloadRef = useRef<HTMLAnchorElement>(null);
   const refresh = useCallback(async () => { const result = await api<Detail>(`/api/assignments/${id}`); setData(result); return result; }, [id]);
@@ -106,6 +109,8 @@ function AssignmentWorkspace({ id, onClose }: { id: string; onClose: () => void 
     try { await api(`/api/assignments/${id}/download?check=1`); downloadRef.current?.click(); } catch (e) { setError((e as Error).message); }
   }
   if (!data) return <p role="status">{error ? reason(error, text) : text("读取任务…", "Loading assignment…")}</p>;
+  const activeShot=data.shots.find(s=>s.id===activeShotId)??data.shots[0];
+  const activeIndex=activeShot?data.shots.findIndex(s=>s.id===activeShot.id):0;
   const downloadable = data.runs.filter(r => r.kind === "video" && r.status === "succeeded" && r.downloadable).length;
   return <>
     {error && <p className="assignment-error" role="alert">{reason(error, text)}</p>}
@@ -119,7 +124,14 @@ function AssignmentWorkspace({ id, onClose }: { id: string; onClose: () => void 
     </section>)}
     <section className="assignment-shots"><div className="assignment-actions"><h2>{text("03 · 分镜与视频", "03 · Shots & videos")}</h2><button disabled={busy || !data.assignment.can_edit || data.shots.length >= 24} onClick={() => void act({ action: "add_shot", title: text("新分镜", "New shot"), prompt: text("描述这个镜头的主体、动作和镜头运动。", "Describe the subject, action and camera movement."), duration: 6, referenceAssetId: null }).catch(() => {})}>{text("新增分镜", "Add shot")}</button></div>
       {!data.shots.length && <p>{text("先生成并采用分镜草稿，也可以手动新增。", "Generate and apply a shot draft, or add shots manually.")}</p>}
-      {data.shots.map(shot => <ShotEditor assignmentId={id} currentUser={data.currentUserId} key={shot.id} shot={shot} runs={data.runs.filter(r => r.shot_id === shot.id)} available={data.availableAssets} busy={busy || !data.assignment.can_edit} act={act} onError={setError} />)}
+      {activeShot && <>
+        <div className="assignment-shot-nav" aria-label={text("分镜切换", "Shot navigation")}>
+          <button disabled={shotBusy||activeIndex===0} onClick={()=>setActiveShotId(data.shots[activeIndex-1].id)}>← {text("上一分镜", "Previous shot")}</button>
+          <label>{text("当前分镜", "Current shot")}<select value={activeShot.id} disabled={shotBusy} onChange={e=>setActiveShotId(e.target.value)}>{data.shots.map((s,i)=><option key={s.id} value={s.id}>{i+1} / {data.shots.length} · {s.title}</option>)}</select></label>
+          <button disabled={shotBusy||activeIndex===data.shots.length-1} onClick={()=>setActiveShotId(data.shots[activeIndex+1].id)}>{text("下一分镜", "Next shot")} →</button>
+        </div>
+        <ShotEditor assignmentId={id} currentUser={data.currentUserId} key={activeShot.id} shot={activeShot} busy={busy||!data.assignment.can_edit} act={act} onBusyChange={setShotBusy} onSubmitted={()=>void refresh().catch(e=>setError(e.message))}/>
+      </>}
     </section>
     {confirm && <div className="assignment-modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="assignment-confirm" className="card assignment-modal"><h2 id="assignment-confirm">{text("采用 AI 草稿？", "Apply AI draft?")}</h2><p>{confirm.kind === "shots" ? text("这将替换当前未生成视频的分镜列表。", "This replaces the current shot list, provided it has no video generations.") : text("这将替换当前摘要和故事板提示词。", "This replaces the current summary and storyboard prompt.")}</p><div className="assignment-actions"><button onClick={() => setConfirm(null)}>{text("取消", "Cancel")}</button><button disabled={busy} onClick={() => void act({ action: "apply_plan", planId: confirm.id }).then(() => setConfirm(null)).catch(() => {})}>{text("确认采用", "Apply")}</button></div></section></div>}
   </>;
@@ -175,36 +187,14 @@ function RunError({ run }: { run: Run }) {
   const providerCode = run.provider_error?.code;
   return <details className="assignment-error"><summary>{text("查看失败／待核对原因", "Failure / uncertainty details")}</summary><p>{providerCode ? text(...seedanceErrorReason(providerCode)) : reason(run.error_code, text)}</p><code>{providerCode || run.error_code}</code></details>;
 }
-function ShotEditor({ assignmentId, currentUser, shot, runs, available, busy, act, onError }: { assignmentId: string; currentUser: string; shot: Shot; runs: Run[]; available: string[]; busy: boolean; act: Act; onError: (error: string) => void }) {
-  const { text } = useLanguage();
-  const [title, setTitle] = useState(shot.title), [prompt, setPrompt] = useState(shot.prompt), [duration, setDuration] = useState(shot.duration);
-  const [model, setModel] = useState<GenerationModel>("seedance-2.0-fast"), [resolution, setResolution] = useState("720p"), [ratio, setRatio] = useState("9:16"), [audio, setAudio] = useState(true);
-  const [mode, setMode] = useState("reference"), [asset, setAsset] = useState<string | null>(shot.reference_asset_id), [lastAsset, setLastAsset] = useState<string | null>(null), [uploading, setUploading] = useState(false);
-  const request = useRef<string | null>(null), settings = generationModels[model];
-  const dirty = title !== shot.title || prompt !== shot.prompt || duration !== shot.duration || asset !== shot.reference_asset_id;
-  const disabled = busy || uploading;
-  const save = () => act({ action: "save_shot", shotId: shot.id, title, prompt, duration, referenceAssetId: asset });
-  async function upload(file: File | undefined, last = false) { if (!file) return; setUploading(true); request.current = null; try { const image = await uploadImage(file); if (last) setLastAsset(image.id); else setAsset(image.id); } catch (e) { onError((e as Error).message); } finally { setUploading(false); } }
-  async function generate() {
-    request.current ??= crypto.randomUUID();
-    const assets = [...(asset ? [{ id: asset, role: mode === "frames" ? "first_frame" : "reference_image" }] : []), ...(mode === "frames" && lastAsset ? [{ id: lastAsset, role: "last_frame" }] : [])];
-    try { await act({ action: "video", shotId: shot.id, requestId: request.current, input: { requestId: request.current, requirement: title, prompt, model, mode, duration, resolution, ratio, generateAudio: audio, assets } }, "POST"); request.current = null; } catch {}
-  }
-  return <article className="card assignment-card assignment-shot"><div className="assignment-actions"><span className="assignment-shot-number">{String(shot.position).padStart(2, "0")}</span><h3>{shot.title}</h3></div>
-    <div className="assignment-top-grid"><div>
-      <label>{text("分镜标题", "Shot title")}<input value={title} maxLength={160} onChange={e => { setTitle(e.target.value); request.current = null; }} /></label>
-      <label>{text("视频提示词", "Video prompt")}<textarea rows={6} value={prompt} maxLength={6500} onChange={e => { setPrompt(e.target.value); request.current = null; }} /></label>
-      <div className="assignment-settings"><label>{text("视频模型", "Video model")}<select value={model} onChange={e => { const m = e.target.value as GenerationModel; setModel(m); setResolution(generationModels[m].resolutions[0]); setDuration(d => Math.min(d, generationModels[m].maxDuration)); request.current = null; }}>{Object.entries(generationModels).map(([id, item]) => <option value={id} key={id}>{item.label}</option>)}</select></label><label>{text("分辨率", "Resolution")}<select value={resolution} onChange={e => { setResolution(e.target.value); request.current = null; }}>{settings.resolutions.map(v => <option key={v}>{v}</option>)}</select></label><label>{text("时长（秒）", "Duration (seconds)")}<input type="number" min={settings.minDuration} max={settings.maxDuration} value={duration} onChange={e => { setDuration(Number(e.target.value)); request.current = null; }} /><small>{settings.minDuration}–{settings.maxDuration}s</small></label><label>{text("比例", "Ratio")}<select value={ratio} onChange={e => { setRatio(e.target.value); request.current = null; }}>{generationRatios.map(v => <option key={v}>{v}</option>)}</select></label></div>
-      <div className="assignment-actions"><label>{text("图片用法", "Image mode")}<select value={mode} onChange={e => { setMode(e.target.value); request.current = null; }}><option value="reference">{text("参考图／纯文字", "Reference / text only")}</option><option value="frames">{text("首帧／首尾帧", "First / first & last frames")}</option></select></label>{settings.provider === "ark" && <label><input type="checkbox" checked={audio} onChange={e => { setAudio(e.target.checked); request.current = null; }} />{text("生成音频", "Generate audio")}</label>}</div>
-      <div className="assignment-actions"><button disabled={disabled || !dirty} onClick={() => void save().catch(() => {})}>{text("保存分镜", "Save shot")}</button><button className="primary" disabled={disabled || dirty || !prompt.trim() || duration < settings.minDuration || duration > settings.maxDuration || (mode === "frames" && !asset) || runs.some(r => pending(r.status))} onClick={() => void generate()}>{text("生成此分镜视频", "Generate shot video")}</button></div>{dirty && <small>{text("先保存分镜修改，再生成视频。", "Save shot changes before generating.")}</small>}
-    </div><div>
-      <p>{text("单独上传该镜头参考图；不要把整张多格故事板当首帧。", "Upload a reference for this shot; use a single panel rather than the whole storyboard as a first frame.")}</p>
-      {asset && <img className="assignment-reference" src={asset === shot.reference_asset_id ? `/api/assignments/${assignmentId}/media/${asset}` : `/api/generation/assets/${asset}`} alt={text("分镜参考图", "Shot reference")} />}
-      {asset && !available.includes(asset) && asset === shot.reference_asset_id && <p>{text("参考图可能已过期，请重新上传。", "Reference may have expired. Upload it again.")}</p>}
-      <label className="assignment-file">{uploading ? text("上传中…", "Uploading…") : text("上传参考图／首帧", "Upload reference / first frame")}<input disabled={disabled} type="file" accept="image/jpeg,image/png,image/webp" onChange={e => { void upload(e.target.files?.[0]); e.target.value = ""; }} /></label>
-      {asset && <button disabled={disabled} onClick={() => { setAsset(null); request.current = null; }}>{text("清除参考图", "Clear reference")}</button>}
-      {mode === "frames" && <><label className="assignment-file">{text("上传尾帧（可选）", "Upload last frame (optional)")}<input disabled={disabled} type="file" accept="image/jpeg,image/png,image/webp" onChange={e => { void upload(e.target.files?.[0], true); e.target.value = ""; }} /></label>{lastAsset && <><img className="assignment-reference" src={`/api/generation/assets/${lastAsset}`} alt={text("尾帧", "Last frame")} /><button onClick={() => { setLastAsset(null); request.current = null; }}>{text("清除尾帧", "Clear last frame")}</button></>}</>}
-    </div></div>
-    <div className="assignment-video-history">{runs.map(run => <div className="assignment-run" key={run.id}><Status value={run.status} />{run.downloadable && run.video_id && <><video controls preload="none" src={`/api/assignments/${assignmentId}/media/${run.video_id}?type=video`} /><a href={`/api/assignments/${assignmentId}/media/${run.video_id}?type=video&download=1`} download>{text("下载视频", "Download video")}</a></>}<RunError run={run} />{run.status === "reserved" && run.owner_id === currentUser && <button disabled={disabled} onClick={() => void act({ action: "video", shotId: shot.id, requestId: run.id, input: run.input }, "POST").catch(() => {})}>{text("恢复提交", "Resume submission")}</button>}{run.status === "succeeded" && !run.downloadable && <small>{text("文件已过期或不可用", "File expired or unavailable")}</small>}</div>)}</div>
+function ShotEditor({assignmentId,currentUser,shot,busy,act,onBusyChange,onSubmitted}:{assignmentId:string;currentUser:string;shot:Shot;busy:boolean;act:Act;onBusyChange:(value:boolean)=>void;onSubmitted:()=>void}) {
+  const {text}=useLanguage();
+  const [title,setTitle]=useState(shot.title),[epoch,setEpoch]=useState(0);
+  return <article className="assignment-shot">
+    <div className="card assignment-card"><div className="assignment-actions"><span className="assignment-shot-number">{String(shot.position).padStart(2,"0")}</span><h3>{shot.title}</h3></div>
+      <label>{text("分镜标题","Shot title")}<input disabled={busy} value={title} maxLength={160} onChange={e=>setTitle(e.target.value)}/></label>
+      <button disabled={busy||!title.trim()||title===shot.title} onClick={()=>void act({action:"save_shot",shotId:shot.id,title,prompt:shot.prompt,duration:shot.duration,referenceAssetId:shot.reference_asset_id}).catch(()=>{})}>{text("保存标题","Save title")}</button>
+    </div>
+    <GenerationWorkspace key={epoch} ownerId={currentUser} scope={{assignmentId,shotId:shot.id,prompt:shot.prompt,duration:shot.duration,referenceAssetId:shot.reference_asset_id}} readOnly={busy} onBusyChange={onBusyChange} onSubmitted={onSubmitted} onReset={()=>{clearGenerationDraft(`${currentUser}:assignment:${assignmentId}:shot:${shot.id}`);setEpoch(v=>v+1);}}/>
   </article>;
 }

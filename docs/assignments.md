@@ -35,3 +35,9 @@ Generation associations are reserved before provider work. assignment_runs.id eq
 ## Assignment handoff
 
 Task-scoped media URLs validate both task visibility and actual asset/run membership. Referenced assets from a previous owner remain viewable inside the task. When another owner/admin generates from an attached reference, the server makes an idempotent copy in that actor's existing generation namespace; general generation endpoints do not gain cross-user access. Runs and planner jobs retain the actual actor for usage attribution, while the task detail includes all attached runs regardless of actor. Reassigning or changing deadlines increments the version so stale planning proposals cannot overwrite newer task state. Model generation history outside Assignment System retains its existing creator/admin ownership rules.
+
+## Per-shot studio
+
+Shots use previous/next navigation and a shot selector; only the active shot studio mounts. `components/generation-workspace.tsx` is shared with `/generate`, including image editing, references/frames, compression, provider image readiness, video preview, history, error details and failed-input restore. The regular generation page remains a thin wrapper. Local drafts are namespaced by actor + assignment + shot, and reset clears only that shot's image/video drafts. Switching is disabled only while uploading/submitting; queued work continues on the server.
+
+`/api/assignments/[id]/shots/[shot]/generation/[[...operation]]` adapts the shared studio to scoped history, submission, media, restore and asset resolution. `shot-studio.ts` checks assignment and shot membership. Image runs reuse kind=storyboard with a non-null shot_id; task-level storyboards have a null shot_id. Both image and video attempts prevent replacing the whole shot list. Referenced images from a previous owner are adopted into the new actor's namespace before MiniMax preparation. No provider credentials reach the browser.
