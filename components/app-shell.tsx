@@ -7,6 +7,7 @@ import { useAuth } from "./auth-provider";
 
 type AppShellProps = {
   active:
+    | "assignments"
     | "generate"
     | "upload"
     | "dashboard"
@@ -77,6 +78,7 @@ export function AppShell({ active, status, children }: AppShellProps) {
               {text("视频流程", "Video workflow")}
             </h2>
             <div className="nav-group-links">
+              <Link className={active === "assignments" ? "active" : ""} href="/assignments" title={text("任务系统", "Assignment System")}><span aria-hidden="true">▦</span><i>{text("任务系统", "Assignment System")}</i></Link>
               <Link
                 className={active === "generate" ? "active" : ""}
                 href="/generate"

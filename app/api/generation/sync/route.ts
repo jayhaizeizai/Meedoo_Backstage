@@ -1,3 +1,4 @@
+import { runAssignmentPlans } from "../../../../lib/assignments/planner";
 import { NextRequest, NextResponse } from "next/server";
 import { syncGenerationTasks } from "../../../../lib/generation";
 import { runSeedreamQueue, cleanupSeedreamImages } from "../../../../lib/seedream";
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false }, { status: 401 });
   try {
     await cleanupSeedreamImages();
-    await Promise.all([syncGenerationTasks(), runSeedreamQueue()]);
+    await Promise.all([syncGenerationTasks(), runSeedreamQueue(), runAssignmentPlans()]);
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ success: false }, { status: 503 });

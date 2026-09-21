@@ -16,6 +16,7 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/assignments/:path*",
     "/generate/:path*",
     "/generation-history/:path*",
     "/upload/:path*",
