@@ -694,11 +694,13 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
             </div>
             <div role="tabpanel" id="generation-panel-image" aria-labelledby="generation-tab-image" hidden={rightTab !== "image"}>
           <GenerationImageStudio ownerId={draftOwner} apiBase={apiBase} readOnly={readOnly} onSubmitted={onSubmitted} onBusyChange={setImageBusy} disabled={busy || uploading} onUse={async (asset, role) => {
+            try {
             if(scope){const response=await fetch(`${apiBase}/assets/resolve`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[asset.id]})});const result=await response.json();if(!response.ok||!result.assets?.length){setError(message("INVALID_ASSETS"));return;}asset=result.assets[0];}
             const nextMode = role === "reference_image" ? "reference" : "frames";
             const keep = mode === nextMode ? assets.filter(a => a.id !== asset.id && (role === "reference_image" || a.role !== role)) : [];
             if (role === "reference_image" && keep.length >= settings.maxImages) { setError(text(`最多 ${settings.maxImages} 张参考图。`, `Up to ${settings.maxImages} reference images.`)); return; }
             setMode(nextMode); setAssets([...keep, {...asset, role}]); setError("");
+            } catch {setError(message("INVALID_ASSETS"));}
           }}/>
             </div>
             <div role="tabpanel" id="generation-panel-video" aria-labelledby="generation-tab-video" hidden={rightTab !== "video"}>

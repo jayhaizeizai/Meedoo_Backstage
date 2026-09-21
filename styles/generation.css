@@ -403,3 +403,5 @@
 .team-generation-filters label { display:flex; align-items:center; gap:10px; font-size:13px; }
 .team-generation-filters select, .team-generation-filters button { border:1px solid #dedfec; border-radius:9px; padding:9px 13px; background:#fcfcff; color:#243052; font:inherit; }
 .team-generation-filters button { cursor:pointer; }
+
+fieldset.generation-form { min-width:0; margin:0; }

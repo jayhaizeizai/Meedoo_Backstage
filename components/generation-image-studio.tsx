@@ -28,7 +28,7 @@ export function GenerationImageStudio({ ownerId, onBusyChange, disabled, onUse, 
   const pending=useRef(false), waiting=useRef<string|null>(null), intent=useRef<{id:string;fingerprint:string}|null>(null);
   const snapshot={prompt,ratio,quality,base,waiting:waiting.current,intent:intent.current};
   const draft=useGenerationDraft(ownerId,"image",snapshot,(raw)=>{const d=imageDraft(raw);if(!d)return;setPrompt(d.prompt);setRatio(d.ratio);setQuality(d.quality);setBase(d.base);waiting.current=d.waiting;intent.current=d.intent;
-    if(d.base)void fetch(`${apiBase}/assets/resolve`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[d.base.id]})}).then(async r=>{if(!r.ok)return;const data=await r.json();if(!data.assets.length){setBase(current=>current?.id===d.base?.id?null:current);setError("INVALID_ASSETS");}}).catch(()=>{});
+    if(d.base)void fetch(`${apiBase}/assets/resolve`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[d.base.id]})}).then(async r=>{if(!r.ok)return;const data=await r.json();if(data.assets.length&&apiBase!=="/api/generation")setBase(current=>current?.id===d.base?.id?data.assets[0]:current);if(!data.assets.length){setBase(current=>current?.id===d.base?.id?null:current);setError("INVALID_ASSETS");}}).catch(()=>{});
   });
   useEffect(()=>{onBusyChange(busy||uploading);return()=>onBusyChange(false);},[busy,uploading,onBusyChange]);
   const load=useCallback(async()=>{
