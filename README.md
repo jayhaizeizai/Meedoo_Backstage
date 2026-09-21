@@ -238,3 +238,5 @@ MiniMax 参考图在选图后同步到平台，默认保留原图；超过 5 MB 
 ## Assignment System
 
 任务创作入口 `/assignments`：需求 → 摘要 → 故事板（生成／上传）→ 分镜 → 逐镜视频生成 → ZIP 下载。模块、权限、模型配置和验证说明见 [docs/assignments.md](docs/assignments.md)。
+
+任务系统开关：`/etc/meedoo/features.json` 的 `assignments`（布尔值）。正式服暂设为 `false`，测试服为 `true`；开关同步控制导航、页面和任务 API，缺少配置默认关闭。详见 [任务系统说明](docs/assignments.md)。手机端通过顶部“菜单”打开完整导航，相关实现为 `components/app-shell.tsx` 与 `styles/base.css`。

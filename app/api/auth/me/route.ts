@@ -1,3 +1,4 @@
+import { assignmentsEnabled } from "../../../../lib/feature-settings";
 import { getEnabledPlatforms } from "../../../../lib/platform-settings";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -17,6 +18,7 @@ export async function GET() {
   const role = user ? await getUserRole(user.openId) : "member";
   return NextResponse.json(
     {
+      assignmentsEnabled: assignmentsEnabled(),
       configured: isLarkConfigured(),
       required: getLarkConfig().required,
       user,
