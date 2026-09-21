@@ -34,3 +34,5 @@
 .assignment-modal-backdrop { position: fixed; inset: 0; z-index: 200; background: #17152766; display: grid; place-items: center; padding: 24px; }
 .assignment-modal { max-width: 520px; padding: 28px; }
 @media(max-width:900px) { .assignment-top-grid { grid-template-columns: 1fr; } .assignment-card { padding: 18px; } }
+
+.assignment-overdue { color: #b54c3b !important; font-weight: 600; }

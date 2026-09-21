@@ -1,6 +1,6 @@
 # Assignment System
 
-First version: each signed-in user manages their own assignments. Assignment routes never inherit approver access to another user's task. Existing approver generation-history visibility remains unchanged. Deployment starts on the test environment only.
+Unassigned tasks are visible to all signed-in members. Assigned tasks are visible only to the assignee (owner) and approvers (administrators). Creator is stored separately in owner_id; assignee_id is the responsible owner. New tasks require a deadline, displayed/entered in Singapore time. Creators can manage their unassigned tasks, owners manage assigned tasks, and admins manage any task. Any member can claim an unassigned task; concurrent claims use row locks and versions. Assignment media/download routes enforce the same visibility. Existing private pre-release tasks migrate with their creator as assignee. Deployment starts on the test environment only.
 
 ## Workflow
 
@@ -31,3 +31,7 @@ Generation associations are reserved before provider work. assignment_runs.id eq
 ## Validation
 
 `node scripts/verify-assignments.cjs` requires the test Lark identity, creates an isolated schema, mocks providers and forbids unexpected network calls. It verifies cross-user denial, optimistic versions, planning with a reference image, draft application, protection of generated shots, concurrent submission idempotency, storyboard association, and ZIP integrity via Python zipfile. Do not run this fixture script against production.
+
+## Assignment handoff
+
+Task-scoped media URLs validate both task visibility and actual asset/run membership. Referenced assets from a previous owner remain viewable inside the task. When another owner/admin generates from an attached reference, the server makes an idempotent copy in that actor's existing generation namespace; general generation endpoints do not gain cross-user access. Runs and planner jobs retain the actual actor for usage attribution, while the task detail includes all attached runs regardless of actor. Reassigning or changing deadlines increments the version so stale planning proposals cannot overwrite newer task state. Model generation history outside Assignment System retains its existing creator/admin ownership rules.

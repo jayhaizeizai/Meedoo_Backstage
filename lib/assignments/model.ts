@@ -21,3 +21,8 @@ export function parsePlan(value: unknown, kind: string): PlanOutput {
   });
   return { summary, storyboardPrompt, shots };
 }
+
+export function assignmentDeadline(value: unknown): string {
+  if (typeof value !== "string" || value.length > 40 || !Number.isFinite(Date.parse(value))) throw Error("INVALID_INPUT");
+  return new Date(value).toISOString();
+}

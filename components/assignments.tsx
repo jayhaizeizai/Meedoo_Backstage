@@ -8,11 +8,14 @@ import type { PlanOutput } from "../lib/assignments/model";
 import "../styles/assignments.css";
 
 type Asset = { id: string; name: string; url: string };
-type Assignment = { id: string; title: string; brief: string; summary: string; storyboard_prompt: string; storyboard_asset_id: string | null; version: number };
+type Assignment = { assignee_id: string | null; assignee_name: string | null; creator_name: string; deadline: string | null; can_edit: boolean; is_admin: boolean; id: string; title: string; brief: string; summary: string; storyboard_prompt: string; storyboard_asset_id: string | null; version: number };
 type Shot = { id: string; position: number; title: string; prompt: string; duration: number; reference_asset_id: string | null };
-type Run = { id: string; shot_id: string | null; kind: string; status: string; error_code: string | null; provider_error: { code?: string } | null; input: Record<string, unknown>; asset_id: string | null; image_available: boolean; video_id: string | null; downloadable: boolean };
+type Run = { owner_id: string; id: string; shot_id: string | null; kind: string; status: string; error_code: string | null; provider_error: { code?: string } | null; input: Record<string, unknown>; asset_id: string | null; image_available: boolean; video_id: string | null; downloadable: boolean };
 type Plan = { id: string; kind: string; status: string; output: PlanOutput | null; error_code: string | null; source_version: number; applied_at: string | null };
-type Detail = { assignment: Assignment; shots: Shot[]; runs: Run[]; plans: Plan[]; availableAssets: string[]; plannerConfigured: boolean };
+type Detail = { currentUserId: string; members: { open_id: string; name: string }[]; assignment: Assignment; shots: Shot[]; runs: Run[]; plans: Plan[]; availableAssets: string[]; plannerConfigured: boolean };
+const deadlineInput = (value: string | null) => value ? new Date(new Date(value).getTime() + 8 * 3600000).toISOString().slice(0,16) : "";
+const deadlineValue = (value: string) => new Date(`${value}:00+08:00`).toISOString();
+const deadlineLabel = (value: string | null) => value ? new Date(value).toLocaleString("en-SG", { timeZone: "Asia/Singapore", year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) + " SGT" : "—";
 const pending = (status: string) => ["reserved", "queued", "preparing", "submitting", "running", "submitted_unknown"].includes(status);
 
 async function api<T>(url: string, method = "GET", body?: unknown): Promise<T> {
@@ -38,6 +41,7 @@ function reason(code: string, text: (zh: string, en: string) => string) {
     INVALID_AI_RESULT: ["AI 返回的内容不完整或格式不正确，请重试或手动编辑。", "AI returned incomplete or invalid content. Retry or edit manually."],
     NO_DOWNLOADS: ["暂无可下载的视频，生成文件可能已过期。", "No downloadable videos; generated files may have expired."],
     ARCHIVE_TOO_LARGE: ["打包文件超过 3 GB，请分别下载各视频。", "Archive exceeds 3 GB. Download videos individually."],
+    FORBIDDEN: ["只有负责人、任务创建人（未分配时）和管理员可以修改。", "Only the owner, creator of an unassigned task, or an administrator can edit."],
     NOT_FOUND: ["任务不存在或无权访问。", "Task not found or access denied."],
     UNAUTHORIZED: ["登录已过期，请重新登录。", "Your session expired. Sign in again."],
   };
@@ -58,9 +62,9 @@ async function uploadImage(file: File): Promise<Asset> {
 export function AssignmentsPage() {
   const { text } = useLanguage();
   const [selected, setSelected] = useState<string | null>(null);
-  const [rows, setRows] = useState<{ id: string; title: string; summary: string; shot_count: number }[]>([]);
+  const [rows, setRows] = useState<{ id: string; title: string; summary: string; shot_count: number; assignee_id: string | null; assignee_name: string | null; deadline: string | null }[]>([]);
   const [page, setPage] = useState(1), [pages, setPages] = useState(1);
-  const [title, setTitle] = useState(""), [brief, setBrief] = useState("");
+  const [title, setTitle] = useState(""), [brief, setBrief] = useState(""), [deadline, setDeadline] = useState("");
   const [error, setError] = useState(""), [busy, setBusy] = useState(false);
   const createId = useRef<string | null>(null);
   useEffect(() => { setSelected(new URLSearchParams(window.location.search).get("id")); }, []);
@@ -69,21 +73,21 @@ export function AssignmentsPage() {
   function select(id: string | null) { setSelected(id); window.history.replaceState(null, "", id ? `/assignments?id=${id}` : "/assignments"); setError(""); }
   async function create() {
     setBusy(true); setError("");
-    try { createId.current ??= crypto.randomUUID(); const data = await api<{ id: string }>("/api/assignments", "POST", { id: createId.current, title, brief }); createId.current = null; setTitle(""); setBrief(""); select(data.id); }
+    try { createId.current ??= crypto.randomUUID(); const data = await api<{ id: string }>("/api/assignments", "POST", { id: createId.current, title, brief, deadline: deadlineValue(deadline) }); createId.current = null; setTitle(""); setBrief(""); setDeadline(""); select(data.id); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   return <AppShell active="assignments" status={{ zh: "任务创作", en: "Assignment studio" }}><section className="page assignment-page">
     <div className="head"><div><p className="eyebrow">BRIEF · STORYBOARD · SHOTS</p><h1>{text("任务系统", "Assignment System")}</h1><p>{text("从创意需求到逐镜生成，让一个任务里的素材和成片集中在一起。", "Keep your brief, storyboard, shots and generated videos together.")}</p></div>{selected && <button onClick={() => select(null)}>{text("返回任务列表", "All assignments")}</button>}</div>
     {error && <p className="assignment-error" role="alert">{reason(error, text)}</p>}
-    {selected ? <AssignmentWorkspace key={selected} id={selected} /> : <>
-      <section className="card assignment-card"><h2>{text("创建任务", "New assignment")}</h2><label>{text("任务名称", "Assignment title")}<input value={title} maxLength={160} onChange={e => { setTitle(e.target.value); createId.current = null; }} /></label><label>{text("创作需求", "Creative brief")}<textarea rows={5} maxLength={16000} placeholder={text("描述产品、观众、故事、风格、目标时长……", "Describe the product, audience, story, style, target duration…")} value={brief} onChange={e => { setBrief(e.target.value); createId.current = null; }} /></label><button className="primary" disabled={busy || !title.trim() || !brief.trim()} onClick={() => void create()}>{busy ? text("创建中…", "Creating…") : text("创建任务", "Create assignment")}</button></section>
-      <div className="assignment-list">{rows.map(row => <button className="card assignment-list-item" key={row.id} onClick={() => select(row.id)}><strong>{row.title}</strong><p>{row.summary || text("尚未生成摘要", "No summary yet")}</p><small>{row.shot_count} {text("个分镜", "shots")} →</small></button>)}</div>
+    {selected ? <AssignmentWorkspace key={selected} id={selected} onClose={() => select(null)} /> : <>
+      <section className="card assignment-card"><h2>{text("创建任务", "New assignment")}</h2><label>{text("任务名称", "Assignment title")}<input value={title} maxLength={160} onChange={e => { setTitle(e.target.value); createId.current = null; }} /></label><label>{text("创作需求", "Creative brief")}<textarea rows={5} maxLength={16000} placeholder={text("描述产品、观众、故事、风格、目标时长……", "Describe the product, audience, story, style, target duration…")} value={brief} onChange={e => { setBrief(e.target.value); createId.current = null; }} /></label><label>{text("截止时间（新加坡时间）", "Deadline (Singapore time)")}<input type="datetime-local" value={deadline} required onChange={e => { setDeadline(e.target.value); createId.current = null; }} /></label><small>{text("新任务默认为未分配，所有成员可见。", "New assignments start unassigned and are visible to everyone.")}</small><button className="primary" disabled={busy || !title.trim() || !brief.trim() || !deadline} onClick={() => void create()}>{busy ? text("创建中…", "Creating…") : text("创建任务", "Create assignment")}</button></section>
+      <div className="assignment-list">{rows.map(row => <button className="card assignment-list-item" key={row.id} onClick={() => select(row.id)}><strong>{row.title}</strong><div className="assignment-actions"><span className="assignment-status">{row.assignee_id ? text("已分配", "Assigned") : text("未分配", "Unassigned")}</span>{row.assignee_name && <small>{row.assignee_name}</small>}</div><small className={row.deadline && Date.parse(row.deadline) < Date.now() ? "assignment-overdue" : ""}>{text("截止：", "Due: ")}{deadlineLabel(row.deadline)}</small><p>{row.summary || text("尚未生成摘要", "No summary yet")}</p><small>{row.shot_count} {text("个分镜", "shots")} →</small></button>)}</div>
       <div className="assignment-actions"><button disabled={page <= 1} onClick={() => setPage(page - 1)}>{text("上一页", "Previous")}</button><span>{page} / {pages}</span><button disabled={page >= pages} onClick={() => setPage(page + 1)}>{text("下一页", "Next")}</button></div>
     </>}
   </section></AppShell>;
 }
 
-function AssignmentWorkspace({ id }: { id: string }) {
+function AssignmentWorkspace({ id, onClose }: { id: string; onClose: () => void }) {
   const { text } = useLanguage();
   const [data, setData] = useState<Detail | null>(null), [error, setError] = useState("");
   const [busy, setBusy] = useState(false), [confirm, setConfirm] = useState<Plan | null>(null);
@@ -94,7 +98,7 @@ function AssignmentWorkspace({ id }: { id: string }) {
   useEffect(() => { if (!polling) return; const timer = setInterval(() => { void refresh().catch(e => setError(e.message)); }, 6000); return () => clearInterval(timer); }, [polling, refresh]);
   async function act(body: Record<string, unknown>, method = "PATCH") {
     if (busy) return; setBusy(true); setError("");
-    try { await api(`/api/assignments/${id}`, method, { version: data!.assignment.version, ...body }); await refresh(); }
+    try { await api(`/api/assignments/${id}`, method, { version: data!.assignment.version, ...body }); try { await refresh(); } catch (e) { if (body.action === "assign" && (e as Error).message === "NOT_FOUND") { onClose(); return; } throw e; } }
     catch (e) { setError((e as Error).message); throw e; } finally { setBusy(false); }
   }
   async function download() {
@@ -106,21 +110,34 @@ function AssignmentWorkspace({ id }: { id: string }) {
   return <>
     {error && <p className="assignment-error" role="alert">{reason(error, text)}</p>}
     <div className="assignment-actions"><button disabled={busy} onClick={() => void refresh().catch(e => setError(e.message))}>{text("刷新状态", "Refresh status")}</button><button disabled={!downloadable} onClick={() => void download()}>{text("下载全部已完成视频", "Download all completed videos")} ({downloadable}) ↓</button><a ref={downloadRef} href={`/api/assignments/${id}/download`} hidden download>ZIP</a><small>{text("生成图片和视频保留 14 天，请及时下载。", "Generated images and videos are kept for 14 days. Download them in time.")}</small></div>
-    <AssignmentEditor key={data.assignment.version} data={data} busy={busy} act={act} onError={setError} />
+    <AssignmentAccess key={`access:${data.assignment.version}`} data={data} busy={busy} act={act} />
+    <AssignmentEditor key={data.assignment.version} data={data} busy={busy || !data.assignment.can_edit} act={act} onError={setError} />
     {data.plans.slice(0, 4).map(plan => <section className="card assignment-card" key={plan.id}>
       <div className="assignment-actions"><h3>{plan.kind === "summary" ? text("AI 摘要草稿", "AI summary draft") : text("AI 分镜草稿", "AI shot draft")}</h3><Status value={plan.status} /></div>
       {plan.error_code && <p className="assignment-error">{reason(plan.error_code, text)}</p>}
-      {plan.output && <><p className="assignment-prewrap">{plan.output.summary}</p>{plan.kind === "shots" && <ol>{plan.output.shots.map((shot, i) => <li key={i}><strong>{shot.title} · {shot.duration}s</strong><p>{shot.prompt}</p></li>)}</ol>}<button disabled={busy || Boolean(plan.applied_at) || plan.source_version !== data.assignment.version} onClick={() => setConfirm(plan)}>{plan.applied_at ? text("已采用", "Applied") : plan.source_version !== data.assignment.version ? text("旧版本草稿", "Outdated draft") : text("采用此草稿", "Apply draft")}</button></>}
+      {plan.output && <><p className="assignment-prewrap">{plan.output.summary}</p>{plan.kind === "shots" && <ol>{plan.output.shots.map((shot, i) => <li key={i}><strong>{shot.title} · {shot.duration}s</strong><p>{shot.prompt}</p></li>)}</ol>}<button disabled={busy || !data.assignment.can_edit || Boolean(plan.applied_at) || plan.source_version !== data.assignment.version} onClick={() => setConfirm(plan)}>{plan.applied_at ? text("已采用", "Applied") : plan.source_version !== data.assignment.version ? text("旧版本草稿", "Outdated draft") : text("采用此草稿", "Apply draft")}</button></>}
     </section>)}
-    <section className="assignment-shots"><div className="assignment-actions"><h2>{text("03 · 分镜与视频", "03 · Shots & videos")}</h2><button disabled={busy || data.shots.length >= 24} onClick={() => void act({ action: "add_shot", title: text("新分镜", "New shot"), prompt: text("描述这个镜头的主体、动作和镜头运动。", "Describe the subject, action and camera movement."), duration: 6, referenceAssetId: null }).catch(() => {})}>{text("新增分镜", "Add shot")}</button></div>
+    <section className="assignment-shots"><div className="assignment-actions"><h2>{text("03 · 分镜与视频", "03 · Shots & videos")}</h2><button disabled={busy || !data.assignment.can_edit || data.shots.length >= 24} onClick={() => void act({ action: "add_shot", title: text("新分镜", "New shot"), prompt: text("描述这个镜头的主体、动作和镜头运动。", "Describe the subject, action and camera movement."), duration: 6, referenceAssetId: null }).catch(() => {})}>{text("新增分镜", "Add shot")}</button></div>
       {!data.shots.length && <p>{text("先生成并采用分镜草稿，也可以手动新增。", "Generate and apply a shot draft, or add shots manually.")}</p>}
-      {data.shots.map(shot => <ShotEditor key={shot.id} shot={shot} runs={data.runs.filter(r => r.shot_id === shot.id)} available={data.availableAssets} busy={busy} act={act} onError={setError} />)}
+      {data.shots.map(shot => <ShotEditor assignmentId={id} currentUser={data.currentUserId} key={shot.id} shot={shot} runs={data.runs.filter(r => r.shot_id === shot.id)} available={data.availableAssets} busy={busy || !data.assignment.can_edit} act={act} onError={setError} />)}
     </section>
     {confirm && <div className="assignment-modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="assignment-confirm" className="card assignment-modal"><h2 id="assignment-confirm">{text("采用 AI 草稿？", "Apply AI draft?")}</h2><p>{confirm.kind === "shots" ? text("这将替换当前未生成视频的分镜列表。", "This replaces the current shot list, provided it has no video generations.") : text("这将替换当前摘要和故事板提示词。", "This replaces the current summary and storyboard prompt.")}</p><div className="assignment-actions"><button onClick={() => setConfirm(null)}>{text("取消", "Cancel")}</button><button disabled={busy} onClick={() => void act({ action: "apply_plan", planId: confirm.id }).then(() => setConfirm(null)).catch(() => {})}>{text("确认采用", "Apply")}</button></div></section></div>}
   </>;
 }
 
 type Act = (body: Record<string, unknown>, method?: string) => Promise<void>;
+function AssignmentAccess({ data, busy, act }: { data: Detail; busy: boolean; act: Act }) {
+  const { text } = useLanguage();
+  const a = data.assignment;
+  const [assignee, setAssignee] = useState(a.assignee_id || ""), [deadline, setDeadline] = useState(deadlineInput(a.deadline));
+  return <section className="card assignment-card">
+    <div className="assignment-actions"><h2>{text("任务管理", "Assignment management")}</h2><span className="assignment-status">{a.assignee_id ? text("已分配", "Assigned") : text("未分配", "Unassigned")}</span><span>{text("创建人：", "Created by: ")}{a.creator_name}</span></div>
+    <p>{a.assignee_id ? text("仅负责人和管理员可见", "Visible only to the owner and administrators") : text("所有成员可见，可以领取此任务", "Visible to everyone; you can claim this assignment")}</p>
+    <div className="assignment-settings"><label>{text("负责人", "Owner")}<select disabled={busy || !a.can_edit} value={assignee} onChange={e => setAssignee(e.target.value)}><option value="">{text("未分配", "Unassigned")}</option>{data.members.map(member => <option key={member.open_id} value={member.open_id}>{member.name}</option>)}</select></label><label>{text("截止时间（新加坡时间）", "Deadline (Singapore time)")}<input type="datetime-local" required value={deadline} disabled={busy || !a.can_edit} onChange={e => setDeadline(e.target.value)} /></label></div>
+    <div className="assignment-actions">{a.can_edit && <button disabled={busy || !deadline} onClick={() => void act({ action: "assign", assigneeId: assignee || null, deadline: deadlineValue(deadline) }).catch(() => {})}>{text("保存分配与截止时间", "Save owner & deadline")}</button>}{!a.assignee_id && <button disabled={busy || !deadline} onClick={() => void act({ action: "assign", assigneeId: data.currentUserId, deadline: deadlineValue(deadline) }).catch(() => {})}>{text("领取任务", "Claim assignment")}</button>}{a.deadline && Date.parse(a.deadline) < Date.now() && <span className="assignment-overdue">{text("已逾期", "Overdue")}</span>}</div>
+  </section>;
+}
+
 function AssignmentEditor({ data, busy, act, onError }: { data: Detail; busy: boolean; act: Act; onError: (error: string) => void }) {
   const { text } = useLanguage(); const a = data.assignment;
   const [title, setTitle] = useState(a.title), [brief, setBrief] = useState(a.brief), [summary, setSummary] = useState(a.summary), [prompt, setPrompt] = useState(a.storyboard_prompt);
@@ -142,12 +159,12 @@ function AssignmentEditor({ data, busy, act, onError }: { data: Detail; busy: bo
       {dirty && <small>{text("有未保存修改，保存后可生成或拆镜。", "Save your changes before generating or planning shots.")}</small>}
     </section>
     <section className="card assignment-card"><h2>{text("02 · 故事板", "02 · Storyboard")}</h2>
-      {asset ? <><img className="assignment-board" src={`/api/generation/assets/${asset}`} alt={text("故事板", "Storyboard")} /><a href={`/api/generation/assets/${asset}?download=1`} download>{text("下载故事板", "Download storyboard")}</a><button disabled={disabled} onClick={() => setAsset(null)}>{text("清除当前故事板", "Clear storyboard")}</button></> : <div className="assignment-placeholder">{text("上传外部故事板，或用 Seedream 生成", "Upload a storyboard, or generate one with Seedream")}</div>}
+      {asset ? <><img className="assignment-board" src={(asset === a.storyboard_asset_id || boardRuns.some(run => run.asset_id === asset)) ? `/api/assignments/${a.id}/media/${asset}` : `/api/generation/assets/${asset}`} alt={text("故事板", "Storyboard")} /><a href={(asset === a.storyboard_asset_id || boardRuns.some(run => run.asset_id === asset)) ? `/api/assignments/${a.id}/media/${asset}?download=1` : `/api/generation/assets/${asset}?download=1`} download>{text("下载故事板", "Download storyboard")}</a><button disabled={disabled} onClick={() => setAsset(null)}>{text("清除当前故事板", "Clear storyboard")}</button></> : <div className="assignment-placeholder">{text("上传外部故事板，或用 Seedream 生成", "Upload a storyboard, or generate one with Seedream")}</div>}
       <label className="assignment-file">{uploading ? text("上传中…", "Uploading…") : text("上传故事板图片", "Upload storyboard image")}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={disabled} onChange={e => { void upload(e.target.files?.[0]); e.target.value = ""; }} /></label>
       <label>{text("故事板提示词", "Storyboard prompt")}<textarea rows={4} maxLength={3800} value={prompt} onChange={e => { setPrompt(e.target.value); request.current = null; }} /></label>
       <div className="assignment-actions"><label>{text("图片质量", "Quality")}<select value={quality} onChange={e => { setQuality(e.target.value); request.current = null; }}>{["1K", "1.5K", "2K"].map(q => <option key={q}>{q}</option>)}</select></label><button disabled={disabled || dirty || !prompt.trim() || boardRuns.some(r => pending(r.status))} onClick={() => void storyboard()}>{text("生成故事板", "Generate storyboard")}</button><button disabled={disabled || dirty || data.plans.some(p => ["queued", "running"].includes(p.status))} onClick={() => void act({ action: "plan", kind: "shots", requestId: crypto.randomUUID() }, "POST").catch(() => {})}>{asset ? text("根据故事板拆镜", "Plan shots from storyboard") : text("根据需求拆镜", "Plan shots from brief")}</button></div>
       {dirty && <button disabled={disabled} onClick={() => void save().catch(() => {})}>{text("保存故事板与内容", "Save storyboard & content")}</button>}
-      <div className="assignment-board-history">{boardRuns.map(run => <div className="assignment-run" key={run.id}><Status value={run.status} />{run.image_available && run.asset_id && <><img src={`/api/generation/assets/${run.asset_id}`} alt={text("生成的故事板", "Generated storyboard")} /><button disabled={disabled} onClick={() => { setAsset(run.asset_id); }}>{text("选为当前故事板", "Use as storyboard")}</button><a href={`/api/generation/assets/${run.asset_id}?download=1`} download>{text("下载图片", "Download image")}</a></>}<RunError run={run} />{run.status === "reserved" && <button disabled={disabled} onClick={() => void act({ action: "storyboard", requestId: run.id, input: run.input }, "POST").catch(() => {})}>{text("恢复提交", "Resume submission")}</button>}</div>)}</div>
+      <div className="assignment-board-history">{boardRuns.map(run => <div className="assignment-run" key={run.id}><Status value={run.status} />{run.image_available && run.asset_id && <><img src={`/api/assignments/${a.id}/media/${run.asset_id}`} alt={text("生成的故事板", "Generated storyboard")} /><button disabled={disabled} onClick={() => { setAsset(run.asset_id); }}>{text("选为当前故事板", "Use as storyboard")}</button><a href={`/api/assignments/${a.id}/media/${run.asset_id}?download=1`} download>{text("下载图片", "Download image")}</a></>}<RunError run={run} />{run.status === "reserved" && run.owner_id === data.currentUserId && <button disabled={disabled} onClick={() => void act({ action: "storyboard", requestId: run.id, input: run.input }, "POST").catch(() => {})}>{text("恢复提交", "Resume submission")}</button>}</div>)}</div>
     </section>
   </div>;
 }
@@ -158,7 +175,7 @@ function RunError({ run }: { run: Run }) {
   const providerCode = run.provider_error?.code;
   return <details className="assignment-error"><summary>{text("查看失败／待核对原因", "Failure / uncertainty details")}</summary><p>{providerCode ? text(...seedanceErrorReason(providerCode)) : reason(run.error_code, text)}</p><code>{providerCode || run.error_code}</code></details>;
 }
-function ShotEditor({ shot, runs, available, busy, act, onError }: { shot: Shot; runs: Run[]; available: string[]; busy: boolean; act: Act; onError: (error: string) => void }) {
+function ShotEditor({ assignmentId, currentUser, shot, runs, available, busy, act, onError }: { assignmentId: string; currentUser: string; shot: Shot; runs: Run[]; available: string[]; busy: boolean; act: Act; onError: (error: string) => void }) {
   const { text } = useLanguage();
   const [title, setTitle] = useState(shot.title), [prompt, setPrompt] = useState(shot.prompt), [duration, setDuration] = useState(shot.duration);
   const [model, setModel] = useState<GenerationModel>("seedance-2.0-fast"), [resolution, setResolution] = useState("720p"), [ratio, setRatio] = useState("9:16"), [audio, setAudio] = useState(true);
@@ -182,12 +199,12 @@ function ShotEditor({ shot, runs, available, busy, act, onError }: { shot: Shot;
       <div className="assignment-actions"><button disabled={disabled || !dirty} onClick={() => void save().catch(() => {})}>{text("保存分镜", "Save shot")}</button><button className="primary" disabled={disabled || dirty || !prompt.trim() || duration < settings.minDuration || duration > settings.maxDuration || (mode === "frames" && !asset) || runs.some(r => pending(r.status))} onClick={() => void generate()}>{text("生成此分镜视频", "Generate shot video")}</button></div>{dirty && <small>{text("先保存分镜修改，再生成视频。", "Save shot changes before generating.")}</small>}
     </div><div>
       <p>{text("单独上传该镜头参考图；不要把整张多格故事板当首帧。", "Upload a reference for this shot; use a single panel rather than the whole storyboard as a first frame.")}</p>
-      {asset && <img className="assignment-reference" src={`/api/generation/assets/${asset}`} alt={text("分镜参考图", "Shot reference")} />}
+      {asset && <img className="assignment-reference" src={asset === shot.reference_asset_id ? `/api/assignments/${assignmentId}/media/${asset}` : `/api/generation/assets/${asset}`} alt={text("分镜参考图", "Shot reference")} />}
       {asset && !available.includes(asset) && asset === shot.reference_asset_id && <p>{text("参考图可能已过期，请重新上传。", "Reference may have expired. Upload it again.")}</p>}
       <label className="assignment-file">{uploading ? text("上传中…", "Uploading…") : text("上传参考图／首帧", "Upload reference / first frame")}<input disabled={disabled} type="file" accept="image/jpeg,image/png,image/webp" onChange={e => { void upload(e.target.files?.[0]); e.target.value = ""; }} /></label>
       {asset && <button disabled={disabled} onClick={() => { setAsset(null); request.current = null; }}>{text("清除参考图", "Clear reference")}</button>}
       {mode === "frames" && <><label className="assignment-file">{text("上传尾帧（可选）", "Upload last frame (optional)")}<input disabled={disabled} type="file" accept="image/jpeg,image/png,image/webp" onChange={e => { void upload(e.target.files?.[0], true); e.target.value = ""; }} /></label>{lastAsset && <><img className="assignment-reference" src={`/api/generation/assets/${lastAsset}`} alt={text("尾帧", "Last frame")} /><button onClick={() => { setLastAsset(null); request.current = null; }}>{text("清除尾帧", "Clear last frame")}</button></>}</>}
     </div></div>
-    <div className="assignment-video-history">{runs.map(run => <div className="assignment-run" key={run.id}><Status value={run.status} />{run.downloadable && run.video_id && <><video controls preload="none" src={`/api/generation/${run.video_id}/media`} /><a href={`/api/generation/${run.video_id}/media?download=1`} download>{text("下载视频", "Download video")}</a></>}<RunError run={run} />{run.status === "reserved" && <button disabled={disabled} onClick={() => void act({ action: "video", shotId: shot.id, requestId: run.id, input: run.input }, "POST").catch(() => {})}>{text("恢复提交", "Resume submission")}</button>}{run.status === "succeeded" && !run.downloadable && <small>{text("文件已过期或不可用", "File expired or unavailable")}</small>}</div>)}</div>
+    <div className="assignment-video-history">{runs.map(run => <div className="assignment-run" key={run.id}><Status value={run.status} />{run.downloadable && run.video_id && <><video controls preload="none" src={`/api/assignments/${assignmentId}/media/${run.video_id}?type=video`} /><a href={`/api/assignments/${assignmentId}/media/${run.video_id}?type=video&download=1`} download>{text("下载视频", "Download video")}</a></>}<RunError run={run} />{run.status === "reserved" && run.owner_id === currentUser && <button disabled={disabled} onClick={() => void act({ action: "video", shotId: shot.id, requestId: run.id, input: run.input }, "POST").catch(() => {})}>{text("恢复提交", "Resume submission")}</button>}{run.status === "succeeded" && !run.downloadable && <small>{text("文件已过期或不可用", "File expired or unavailable")}</small>}</div>)}</div>
   </article>;
 }

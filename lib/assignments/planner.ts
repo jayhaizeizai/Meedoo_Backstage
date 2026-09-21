@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { db, query, transaction } from "../db";
 import { assignmentSchema } from "./schema";
 import { assignmentId, parsePlan } from "./model";
-import { ownedAssignment } from "./data";
+import { ownedAssignment, requireAssignmentEditor } from "./data";
 
 export async function queueAssignmentPlan(owner: string, id: string, body: Record<string, unknown>) {
   await assignmentSchema();
@@ -13,6 +13,7 @@ export async function queueAssignmentPlan(owner: string, id: string, body: Recor
   return transaction(async c => {
     await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,72))", [owner]);
     const a = await ownedAssignment(id, owner, c, true);
+    requireAssignmentEditor(a);
     const old = (await c.query("SELECT * FROM assignment_plans WHERE id=$1", [requestId])).rows[0];
     if (old) {
       if (old.owner_id !== owner || old.assignment_id !== id || old.kind !== kind) throw Error("REQUEST_CONFLICT");
@@ -49,7 +50,7 @@ export async function runAssignmentPlans() {
       if (!process.env.ARK_API_KEY) throw Error("NOT_CONFIGURED");
       const content: object[] = [{ type: "text", text: JSON.stringify({ task: job.kind, ...job.input }) }];
       if (job.input.storyboardAssetId) {
-        const asset = (await c.query("SELECT path,mime FROM generation_assets WHERE id=$1 AND owner_id=$2 AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())", [job.input.storyboardAssetId, job.owner_id])).rows[0];
+        const asset = (await c.query("SELECT path,mime FROM generation_assets WHERE id=$1 AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())", [job.input.storyboardAssetId])).rows[0];
         if (!asset) throw Error("INVALID_ASSETS");
         const bytes = await readFile(asset.path);
         if (bytes.length > 30 * 1024 * 1024) throw Error("INVALID_IMAGE");

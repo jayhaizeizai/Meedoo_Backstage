@@ -7,10 +7,19 @@ export async function assignmentSchema() {
   ready ??= query(`
     CREATE TABLE IF NOT EXISTS assignments (
       id uuid PRIMARY KEY, owner_id text NOT NULL REFERENCES meedoo_users(open_id),
+      assignee_id text REFERENCES meedoo_users(open_id), deadline timestamptz,
       title text NOT NULL, brief text NOT NULL, summary text NOT NULL DEFAULT '',
       storyboard_prompt text NOT NULL DEFAULT '', storyboard_asset_id uuid REFERENCES generation_assets(id),
       version integer NOT NULL DEFAULT 1, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='assignments' AND column_name='assignee_id') THEN
+        ALTER TABLE assignments ADD COLUMN assignee_id text REFERENCES meedoo_users(open_id);
+        UPDATE assignments SET assignee_id=owner_id;
+      END IF;
+    END $$;
+    ALTER TABLE assignments ADD COLUMN IF NOT EXISTS deadline timestamptz;
+    CREATE INDEX IF NOT EXISTS assignments_assignee_deadline ON assignments(assignee_id,deadline);
     CREATE INDEX IF NOT EXISTS assignments_owner_created ON assignments(owner_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS assignment_shots (
       id uuid PRIMARY KEY, assignment_id uuid NOT NULL REFERENCES assignments(id), position integer NOT NULL,

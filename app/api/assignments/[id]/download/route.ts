@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const rows = (await query(`SELECT r.id,s.position,s.title,g.status,g.media_path,g.media_deleted_at,g.media_expires_at
       FROM assignment_runs r JOIN assignment_shots s ON s.id=r.shot_id
       LEFT JOIN generation_tasks g ON g.owner_id=r.owner_id AND g.request_id=r.id
-      WHERE r.assignment_id=$1 AND r.owner_id=$2 AND r.kind='video' ORDER BY s.position,r.created_at,r.id`, [id, user.openId])).rows;
+      WHERE r.assignment_id=$1 AND r.kind='video' ORDER BY s.position,r.created_at,r.id`, [id])).rows;
     const entries: ZipEntry[] = [], manifest: object[] = [];
     const root = await realpath(path.join(process.env.MEEDOO_MEDIA_DIR || "/opt/meedoo/media", "generation"));
     for (const [index, row] of rows.entries()) {
