@@ -19,7 +19,7 @@ export function videoDraft(v: any) {
 }
 export function imageDraft(v:any) {
   if(!v || typeof v !== "object") return null;
-  return {prompt:typeof v.prompt === "string" ? v.prompt.slice(0,4000) : "",base:draftAsset(v.base),
+  return {prompt:typeof v.prompt === "string" ? v.prompt.slice(0,4000) : "",base:draftAsset(v.base),bases:(Array.isArray(v.bases)?v.bases:(v.base?[v.base]:[])).slice(0,10).flatMap((a:any)=>{const asset=draftAsset(a);return asset?[asset]:[];}),
     ratio:(generationRatios as readonly string[]).includes(v.ratio)?v.ratio:"9:16",
     quality:(seedreamQualities as readonly string[]).includes(v.quality)?v.quality:"2K",intent:draftIntent(v.intent),
     waiting:typeof v.waiting === "string" && uuidPattern.test(v.waiting)?v.waiting:null};

@@ -108,7 +108,7 @@ export function verifyGenerationImage(
     return false;
   return timingSafeEqual(Buffer.from(signature(id, n)), Buffer.from(supplied));
 }
-function imageUrl(id: string) {
+export function imageUrl(id: string) {
   const expires = Math.floor(Date.now() / 1000) + 86400;
   return `${process.env.APP_URL}/api/generation/assets/${id}?expires=${expires}&signature=${signature(id, expires)}`;
 }

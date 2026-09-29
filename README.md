@@ -249,3 +249,10 @@ The video workspace accepts reference images, MP4/MOV video and MP3/WAV audio in
 `generation_assets.media_duration` stores server-probed duration. The upload handler validates container, codec, dimensions and duration with ffprobe, and submission checks ownership, MIME/role matching and total duration again. Media references use signed asset URLs; only images enter the MiniMax image-sync queue. Video/audio uploads expire after 14 days. Drafts and failed-task restore preserve media roles. Seedream image selectors exclude video/audio.
 
 Deployment needs ffprobe and an HTTP upload body limit of at least 51 MB (`deploy/nginx.conf`). Run `node scripts/verify-reference-media.cjs` for model validation, draft and mocked provider-payload checks. No paid provider request is made by this script.
+
+
+### Multiple Seedream references
+
+Seedream 5.0 Pro accepts up to 10 ordered reference images. The image workspace supports multi-file upload and adding from upload history. Selecting a generated version makes it the sole reference for continued editing. Each reference is numbered in upload order; removing one renumbers subsequent references. `baseAssetIds` is the new input field; the worker and validator still accept historical `baseAssetId` requests. Drafts migrate the former single `base` into `bases` automatically. All references are checked for ownership, expiration, deletion and image MIME before queueing and again before submission. Multiple references use signed asset URLs to avoid large Base64 requests; the existing single-image path remains unchanged.
+
+Checks: `node scripts/verify-seedream-references.cjs` and `node scripts/verify-seedream-reference-worker.cjs`. The worker test mocks storage, database and provider: it does not consume generation credit.

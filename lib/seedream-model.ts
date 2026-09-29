@@ -4,12 +4,17 @@ export const seedreamModel = { id: "doubao-seedream-5-0-pro-260628", label: "See
 export type ImageDraft = { id: string; name: string; url: string };
 export const seedreamQualities = ["1K", "1.5K", "2K"] as const;
 export type SeedreamQuality = typeof seedreamQualities[number];
-export type SeedreamInput = { requestId: string; prompt: string; ratio: string; quality?: SeedreamQuality; baseAssetId: string | null };
+export type SeedreamInput = { requestId: string; prompt: string; ratio: string; quality?: SeedreamQuality; baseAssetId: string | null; baseAssetIds?: string[] };
+export const seedreamMaxReferences = 10;
+export function seedreamAssetIds(input: Pick<SeedreamInput, "baseAssetId" | "baseAssetIds">): string[] {
+  return input.baseAssetIds ?? (input.baseAssetId ? [input.baseAssetId] : []);
+}
 export function validateSeedream(value: unknown): SeedreamInput {
   const v = value as SeedreamInput;
   if (!v || !uuidPattern.test(v.requestId) || typeof v.prompt !== "string" || !v.prompt.trim() || v.prompt.length > 4000 ||
     (v.quality !== undefined && !(seedreamQualities as readonly string[]).includes(v.quality)) || !(generationRatios as readonly string[]).includes(v.ratio) || (v.baseAssetId != null && !uuidPattern.test(v.baseAssetId))) throw Error("INVALID_INPUT");
-  return { requestId: v.requestId, prompt: v.prompt.trim(), ratio: v.ratio, quality: v.quality ?? "2K", baseAssetId: v.baseAssetId ?? null };
+  if (v.baseAssetIds !== undefined && (!Array.isArray(v.baseAssetIds) || v.baseAssetIds.length > seedreamMaxReferences || v.baseAssetIds.some(id=>typeof id!=="string" || !uuidPattern.test(id)) || new Set(v.baseAssetIds).size !== v.baseAssetIds.length || (v.baseAssetId != null && v.baseAssetIds[0] !== v.baseAssetId))) throw Error("INVALID_INPUT");
+  return { ...(v.baseAssetIds !== undefined ? {baseAssetIds:[...v.baseAssetIds]} : {}), requestId: v.requestId, prompt: v.prompt.trim(), ratio: v.ratio, quality: v.quality ?? "2K", baseAssetId: v.baseAssetId ?? null };
 }
 // Official 2K pixel sizes; explicit dimensions keep successive edits in the same aspect ratio.
 export const seedreamSizes: Record<string, string> = { "1:1": "2048x2048", "9:16": "1584x2816", "16:9": "2816x1584", "4:3": "2368x1776", "3:4": "1776x2368", "21:9": "3136x1344" };

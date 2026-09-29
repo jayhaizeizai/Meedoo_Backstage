@@ -27,7 +27,7 @@ export function requireAssignmentEditor(row: { can_edit: boolean }) { if (!row.c
 export const assetAttachment = `(EXISTS (SELECT 1 FROM assignments WHERE id=$3 AND storyboard_asset_id=a.id)
   OR EXISTS (SELECT 1 FROM assignment_shots WHERE assignment_id=$3 AND reference_asset_id=a.id)
   OR EXISTS (SELECT 1 FROM assignment_runs r JOIN seedream_tasks t ON t.owner_id=r.owner_id AND t.request_id=r.id WHERE r.assignment_id=$3 AND t.asset_id=a.id)
-  OR EXISTS (SELECT 1 FROM assignment_runs r WHERE r.assignment_id=$3 AND (r.input->>'baseAssetId'=a.id::text OR r.input->'assets' @> jsonb_build_array(jsonb_build_object('id',a.id::text)))))`;
+  OR EXISTS (SELECT 1 FROM assignment_runs r WHERE r.assignment_id=$3 AND (r.input->>'baseAssetId'=a.id::text OR r.input->'baseAssetIds' @> jsonb_build_array(a.id::text) OR r.input->'assets' @> jsonb_build_array(jsonb_build_object('id',a.id::text)))))`;
 export async function ownedAsset(id: unknown, owner: string, c: PoolClient, assignment: string) {
   if (id == null || id === "") return null;
   assignmentId(id);
@@ -154,6 +154,10 @@ export async function generateForAssignment(user: { openId: string; name: string
     requireAssignmentEditor(await ownedAssignment(id, user.openId, c, true));
     if ("assets" in input) {
       for (const reference of input.assets) reference.id = await assetForGeneration(reference.id, user.openId, c, id);
+    } else if (input.baseAssetIds) {
+      const resolved: string[] = [];
+      for (const assetId of input.baseAssetIds) resolved.push(await assetForGeneration(assetId, user.openId, c, id));
+      input.baseAssetIds = resolved; input.baseAssetId = resolved[0] ?? null;
     } else if (input.baseAssetId) input.baseAssetId = await assetForGeneration(input.baseAssetId, user.openId, c, id);
     if (shotId && !(await c.query("SELECT id FROM assignment_shots WHERE id=$1 AND assignment_id=$2", [shotId, id])).rowCount) throw Error("NOT_FOUND");
     const old = (await c.query("SELECT *,input=$2::jsonb same FROM assignment_runs WHERE id=$1", [runId, JSON.stringify(input)])).rows[0];

@@ -1,0 +1,17 @@
+const fs=require('node:fs'),assert=require('node:assert/strict'),ts=require('typescript'),{randomUUID}=require('node:crypto');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+const {validateSeedream,seedreamAssetIds}=require('../lib/seedream-model.ts'),{imageDraft}=require('../lib/generation-draft.ts');
+const ids=Array.from({length:11},()=>randomUUID()),base={requestId:randomUUID(),prompt:'Combine image 1 and image 2',ratio:'9:16',baseAssetId:null};
+assert.deepEqual(seedreamAssetIds(validateSeedream({...base,baseAssetIds:ids.slice(0,10)})),ids.slice(0,10));
+assert.throws(()=>validateSeedream({...base,baseAssetIds:ids}));
+assert.throws(()=>validateSeedream({...base,baseAssetIds:[ids[0],ids[0]]}));
+assert.throws(()=>validateSeedream({...base,baseAssetId:ids[0],baseAssetIds:[ids[1]]}));
+assert.throws(()=>validateSeedream({...base,baseAssetIds:['invalid']}));
+assert.deepEqual(seedreamAssetIds(validateSeedream({...base,baseAssetId:ids[0]})),[ids[0]]);
+assert.equal('baseAssetIds' in validateSeedream({...base,baseAssetId:ids[0]}),false);
+assert.deepEqual(seedreamAssetIds(validateSeedream(base)),[]);
+const assets=ids.slice(0,3).map((id,i)=>({id,name:'ref'+i,url:'https://invalid.example/'+id}));
+assert.deepEqual(imageDraft({bases:assets}).bases.map(a=>a.id),ids.slice(0,3));
+assert.deepEqual(imageDraft({base:assets[0]}).bases.map(a=>a.id),[ids[0]]);
+assert.ok(imageDraft({bases:assets}).bases.every(a=>a.url.startsWith('/api/generation/assets/')));
+console.log('PASS multiple Seedream references: 0/1/10 images, >10/duplicate/invalid rejection, legacy request compatibility, ordered draft restoration');

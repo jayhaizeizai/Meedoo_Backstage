@@ -1,12 +1,12 @@
 import { historyPage, pagination } from "./generation-pagination";
 import { uuidPattern } from "./generation-model";
 import { randomUUID } from "node:crypto";
-import { readFile, unlink, realpath } from "node:fs/promises";
+import { readFile, unlink, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { db, query, transaction } from "./db";
-import { generationSchema, storeGenerationImage } from "./generation";
+import { generationSchema, storeGenerationImage, imageUrl } from "./generation";
 import { safeProviderDiagnostic, ProviderError } from "./generation-provider";
-import { seedreamModel, seedreamSize, validateSeedream } from "./seedream-model";
+import { seedreamModel, seedreamSize, validateSeedream, seedreamAssetIds } from "./seedream-model";
 
 let schema: Promise<unknown> | undefined;
 export async function seedreamSchema() {
@@ -28,7 +28,7 @@ export async function createSeedream(owner: string, value: unknown) {
     await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,41))", [owner]);
     const old = (await c.query("SELECT id,input=$3::jsonb same FROM seedream_tasks WHERE owner_id=$1 AND request_id=$2", [owner, input.requestId, JSON.stringify(input)])).rows[0];
     if (old) { if (!old.same) throw Error("REQUEST_CONFLICT"); return old.id as string; }
-    if (input.baseAssetId && !(await c.query("SELECT id FROM generation_assets WHERE id=$1 AND owner_id=$2 AND mime LIKE 'image/%' AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())", [input.baseAssetId, owner])).rowCount) throw Error("INVALID_ASSETS");
+    for (const assetId of seedreamAssetIds(input)) if (!(await c.query("SELECT id FROM generation_assets WHERE id=$1 AND owner_id=$2 AND mime LIKE 'image/%' AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())", [assetId, owner])).rowCount) throw Error("INVALID_ASSETS");
     if (Number((await c.query("SELECT count(*) n FROM seedream_tasks WHERE owner_id=$1 AND status IN ('queued','running')", [owner])).rows[0].n) >= 2) throw Error("TOO_MANY_TASKS");
     const id = randomUUID();
     await c.query("INSERT INTO seedream_tasks(id,owner_id,request_id,input,model) VALUES($1,$2,$3,$4,$5)", [id, owner, input.requestId, JSON.stringify(input), seedreamModel.id]);
@@ -71,14 +71,18 @@ export async function runSeedreamQueue() {
     if (!task) return;
     let sent = false, received = false;
     try {
-      let image: string | undefined;
-      if (task.input.baseAssetId) {
-        const asset = (await c.query("SELECT path,mime FROM generation_assets WHERE id=$1 AND owner_id=$2 AND mime LIKE 'image/%' AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())", [task.input.baseAssetId, task.owner_id])).rows[0];
+      let image: string | string[] | undefined;
+      const referenceIds = seedreamAssetIds(task.input);
+      const references: string[] = [];
+      for (const assetId of referenceIds) {
+        const asset = (await c.query("SELECT path,mime FROM generation_assets WHERE id=$1 AND owner_id=$2 AND mime LIKE 'image/%' AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())", [assetId, task.owner_id])).rows[0];
         if (!asset) throw Error("INVALID_ASSETS");
-        const bytes = await readFile(asset.path);
-        if (bytes.length > 30 * 1024 * 1024) throw Error("INVALID_IMAGE");
-        image = `data:${asset.mime};base64,${bytes.toString("base64")}`;
+        if ((await stat(asset.path)).size > 30 * 1024 * 1024) throw Error("INVALID_IMAGE");
+        // Multi-image requests use signed URLs to avoid loading hundreds of MB of Base64.
+        if (referenceIds.length > 1) references.push(imageUrl(assetId));
+        else references.push(`data:${asset.mime};base64,${(await readFile(asset.path)).toString("base64")}`);
       }
+      if (references.length) image = references.length === 1 ? references[0] : references;
       if (!process.env.ARK_API_KEY) throw Error("NOT_CONFIGURED");
       sent = true;
       const response = await fetch("https://ark.cn-beijing.volces.com/api/v3/images/generations", {
@@ -111,11 +115,11 @@ export async function runSeedreamQueue() {
 export async function cleanupSeedreamImages() {
   await seedreamSchema();
   const root = path.resolve(process.env.MEEDOO_MEDIA_DIR || "/opt/meedoo/media", "generation");
-  const rows = (await query("SELECT id,path FROM generation_assets WHERE expires_at<=now() AND NOT file_deleted LIMIT 100")).rows;
+  const rows = (await query("SELECT id,path,mime FROM generation_assets WHERE expires_at<=now() AND NOT file_deleted LIMIT 100")).rows;
   if (!rows.length) return;
   if (await realpath(root) !== root) throw Error("CLEANUP_PATH_INVALID");
   for (const row of rows) {
-    if (path.resolve(row.path) !== path.join(root, `${row.id}.image`)) throw Error("CLEANUP_PATH_INVALID");
+    if (![".image", ...(row.mime === "video/mp4" ? [".mp4"] : row.mime === "video/quicktime" ? [".mov"] : row.mime === "audio/mpeg" ? [".mp3"] : row.mime === "audio/wav" ? [".wav"] : [])].some(ext=>path.resolve(row.path) === path.join(root, `${row.id}${ext}`))) throw Error("CLEANUP_PATH_INVALID");
     await unlink(row.path).catch((e: NodeJS.ErrnoException) => { if (e.code !== "ENOENT") throw e; });
     await query("UPDATE generation_assets SET file_deleted=true WHERE id=$1", [row.id]);
   }
