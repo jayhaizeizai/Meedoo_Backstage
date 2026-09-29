@@ -101,6 +101,12 @@ docs/                        专项说明、历史发布记录
 
 ## 关键流程与规则
 
+### 视频生成（MiniMax H3）
+
+视频流程中的 `/generate` 支持参考图、首尾帧、提示词、时长、比例、清晰度和成片预览下载。国内站密钥通过服务器 `MINIMAX_API_KEY` 配置，前端不配置或接触密钥。任务绑定登录员工及需求名称，保存平台实际返回的 Token/秒数；费用按国内单价快照预估，缺失用量不填零。生成不会自动发布，下载后走原上传审批流程。
+
+入口：`app/generate/page.tsx`；服务端：`lib/generation.ts`；参考图缓存：`lib/generation-minimax-files.ts`；模型适配：`lib/generation-provider.ts`（MiniMax H3、Seedance 2.0／2.5）；纯参数与计费规则：`lib/generation-model.ts`；接口：`app/api/generation/`；样式：`styles/generation.css`。任务/素材保存在 `generation_tasks`、`generation_assets`，生成成片保存 14 天后自动清理，记录与用量保留；已提交到上传流程的视频仍长期保存。需要安装独立 `meedoo-generation.timer`，在浏览器关闭后继续回收任务。上线配置、异常任务对账与验证方法见 [MiniMax 接手说明](docs/minimax-generation.md)。
+
 ### 上传、审批、发布
 
 1. `/api/uploads/init` 创建会话，通过 `/api/uploads/[id]/chunks/[index]` 上传分片，`/complete` 合并并校验视频。
@@ -220,3 +226,33 @@ pnpm build
 后续逐步拆分数据查询与指标汇总、同步任务，建立版本化迁移及翻译字典。结构整理不应同时改变指标、奖金或发布规则。
 
 每次交接记录分支/提交、变更目的、验证项目、两台服务器版本、备份位置、未完成项及需要的账号权限；不记录秘密值。
+
+MiniMax 参考图在选图后同步到平台，默认保留原图；超过 5 MB 时可选择压缩到约 1 MB 后上传；缩略图下可查看状态并重试。实现及排障见 [生成模块文档](docs/minimax-generation.md#reference-pre-upload-2026-09-16)。
+
+## 视频素材生图
+
+视频生成页右侧的 Seedream 图片工作台支持 2K 文生图、上传图编辑和连续修改；操作、后台队列和接手说明见 [Seedream image studio](docs/seedream-image-studio.md)。
+
+生成记录：视频流程只显示个人视频/图片历史（含审批人），支持分页；数据看板下的 `/generation-history` 提供审批人可见的团队视频和图片记录、类型筛选、预览及下载。详见 [生成记录说明](docs/seedream-image-studio.md#生成记录入口与分页)。
+
+## Assignment System
+
+任务创作入口 `/assignments`：需求 → 摘要 → 故事板（生成／上传）→ 分镜 → 逐镜视频生成 → ZIP 下载。模块、权限、模型配置和验证说明见 [docs/assignments.md](docs/assignments.md)。
+
+任务系统开关：`/etc/meedoo/features.json` 的 `assignments`（布尔值）。正式服暂设为 `false`，测试服为 `true`；开关同步控制导航、页面和任务 API，缺少配置默认关闭。详见 [任务系统说明](docs/assignments.md)。手机端通过顶部“菜单”打开完整导航，相关实现为 `components/app-shell.tsx` 与 `styles/base.css`。
+
+
+### Video/audio generation references
+
+The video workspace accepts reference images, MP4/MOV video and MP3/WAV audio in reference mode. First/last-frame mode remains exclusive. Each video/audio clip is 2–15 seconds; each kind allows up to 3 clips and 15 seconds combined. Video files are limited to 50 MB, audio to 15 MB. These are intentionally conservative workspace limits, including for Seedance 2.5. Seedance audio must accompany visual input; 2.0-family requests are limited to 12 total references.
+
+`generation_assets.media_duration` stores server-probed duration. The upload handler validates container, codec, dimensions and duration with ffprobe, and submission checks ownership, MIME/role matching and total duration again. Media references use signed asset URLs; only images enter the MiniMax image-sync queue. Video/audio uploads expire after 14 days. Drafts and failed-task restore preserve media roles. Seedream image selectors exclude video/audio.
+
+Deployment needs ffprobe and an HTTP upload body limit of at least 51 MB (`deploy/nginx.conf`). Run `node scripts/verify-reference-media.cjs` for model validation, draft and mocked provider-payload checks. No paid provider request is made by this script.
+
+
+### Multiple Seedream references
+
+Seedream 5.0 Pro accepts up to 10 ordered reference images. The image workspace supports multi-file upload and adding from upload history. Selecting a generated version makes it the sole reference for continued editing. Each reference is numbered in upload order; removing one renumbers subsequent references. `baseAssetIds` is the new input field; the worker and validator still accept historical `baseAssetId` requests. Drafts migrate the former single `base` into `bases` automatically. All references are checked for ownership, expiration, deletion and image MIME before queueing and again before submission. Multiple references use signed asset URLs to avoid large Base64 requests; the existing single-image path remains unchanged.
+
+Checks: `node scripts/verify-seedream-references.cjs` and `node scripts/verify-seedream-reference-worker.cjs`. The worker test mocks storage, database and provider: it does not consume generation credit.

@@ -1036,3 +1036,25 @@ select {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Mobile navigation uses a native modal for focus trapping, Escape and background isolation. */
+.mobile-navigation-toggle { display:none; }
+.mobile-navigation { border:0; padding:0; margin:0; width:min(340px,90vw); max-width:none; height:100dvh; max-height:100dvh; background:#fff; color:var(--ink); box-shadow:8px 0 32px #18213626; }
+.mobile-navigation::backdrop { background:#18213666; }
+.mobile-navigation-content { display:flex; flex-direction:column; min-height:100%; padding:20px 18px max(20px,env(safe-area-inset-bottom)); }
+.mobile-navigation-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+.mobile-navigation-heading button { width:44px; height:44px; border:1px solid var(--line); border-radius:10px; background:white; font-size:26px; color:var(--ink); cursor:pointer; }
+.mobile-navigation .brand div, .mobile-navigation .user div { display:block; font-size:13px; }
+.mobile-navigation .nav a { display:flex; align-items:center; min-height:46px; font-size:14px; text-align:left; }
+.mobile-navigation .nav a span { margin-right:12px; font-size:20px; }
+.mobile-navigation .nav a i { display:inline; font-size:14px; }
+.mobile-navigation .nav-group-title { display:block; }
+.mobile-navigation .user { justify-content:flex-start; }
+.mobile-navigation .brand { padding:0 10px 20px; }
+.mobile-navigation .side-bottom { padding-top:20px; }
+@media(max-width:620px) {
+  .mobile-navigation-toggle { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:8px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-weight:700; cursor:pointer; }
+  .mobile-navigation-toggle span { font-size:21px; }
+  .topbar { gap:12px; padding-left:max(12px,env(safe-area-inset-left)); padding-right:max(12px,env(safe-area-inset-right)); }
+  .top-actions { margin-left:auto; }
+}

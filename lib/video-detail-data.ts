@@ -1,3 +1,4 @@
+import { dailyPlatformHistory } from "./daily-platform-history";
 import { supportedPlatforms, viewMetricKeys } from "./social-platforms";
 import { query } from "./db";
 import { loadFollowerHistory } from "./follower-history";
@@ -356,6 +357,10 @@ export async function getVideoDetailData(uploadId: string) {
   return {
     updatedAt: new Date().toISOString(),
     metricDefinitions: videoMetricDefinitions,
+    dailyHistory: dailyPlatformHistory(targetRows.filter(row=>row.captured_at&&row.metrics&&platforms.includes(row.platform as Platform)).map(row=>({
+      publicationId:row.publication_id,platform:row.platform as Platform,capturedAt:row.captured_at!,
+      metrics:normalize(row.platform,row.metrics,row.attributed_followers,row.video_duration_seconds),
+    })),platforms,videoMetricDefinitions.map(item=>item.key).filter(key=>key!=="retention")),
     video: {
       id: video.id,
       title: video.title,

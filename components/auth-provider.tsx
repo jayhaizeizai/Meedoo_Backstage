@@ -12,6 +12,7 @@ import type { SocialPlatform } from "../lib/social-platforms";
 import type { MeeDooUser } from "../lib/auth";
 
 type AuthState = {
+  assignmentsEnabled: boolean;
   enabledPlatforms: SocialPlatform[];
   configured: boolean;
   required: boolean;
@@ -28,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [enabledPlatforms, setEnabledPlatforms] = useState<SocialPlatform[]>(
     [],
   );
+  const [assignmentsEnabled,setAssignmentsEnabled]=useState(false);
   const [configured, setConfigured] = useState(false);
   const [required, setRequired] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -38,12 +40,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await fetch("/api/auth/me", { cache: "no-store" });
       const data = (await response.json()) as {
+        assignmentsEnabled?: boolean;
         enabledPlatforms?: SocialPlatform[];
         configured: boolean;
         required: boolean;
         user: MeeDooUser | null;
         role?: "member" | "approver";
       };
+      setAssignmentsEnabled(data.assignmentsEnabled === true);
       setEnabledPlatforms(data.enabledPlatforms ?? []);
       setConfigured(data.configured);
       setRequired(data.required);
@@ -66,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(
     () => ({
+      assignmentsEnabled,
       enabledPlatforms,
       configured,
       required,
@@ -76,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
     }),
     [
+      assignmentsEnabled,
       enabledPlatforms,
       configured,
       required,

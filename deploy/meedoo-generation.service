@@ -1,0 +1,12 @@
+[Unit]
+Description=MeeDoo generation status and durable media sync
+After=network-online.target meedoo.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/meedoo
+EnvironmentFile=/etc/meedoo/meedoo.env
+ExecStart=/usr/bin/node /opt/meedoo/scripts/sync-generation.mjs
+TimeoutStartSec=650
+UMask=0077
+

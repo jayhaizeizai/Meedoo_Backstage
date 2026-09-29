@@ -4,7 +4,7 @@ import { query, transaction } from "./db";
 import { getDashboardData } from "./dashboard-data";
 
 type Dashboard = Awaited<ReturnType<typeof getDashboardData>>;
-const prefix = "dashboard:v3:";
+const prefix = "dashboard:v6:";
 const revisionKey = "dashboard:revision";
 const lockId = 7241901;
 export const dashboardRanges = [30, 1, 7, 90, 365] as const;

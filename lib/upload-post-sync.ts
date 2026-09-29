@@ -1,3 +1,4 @@
+import { providerPublicationState } from "./provider-publication-state";
 import { updateUploadSummary } from "./publication-status";
 import { withTikTokRetention } from "./tiktok-retention";
 import { backfillTikTokRetention } from "./tiktok-retention-backfill";
@@ -59,27 +60,14 @@ export async function applyStatusPayload(
             item.error_code ??
             item.failure_stage,
         );
-        const success =
-          item.success === true ||
-          successStatuses.has(rawStatus) ||
-          Boolean(
-            item.platform_post_id ??
-              item.post_id ??
-              item.publish_id ??
-              item.post_url ??
-              item.url,
-          );
-        const failed =
-          !success &&
-          (Boolean(error) ||
-            failureStatuses.has(rawStatus) ||
-            item.success === false);
-        const status = success ? "completed" : failed ? "failed" : "processing";
+        const status = providerPublicationState(item,payload.status);
+        const success = status === "completed", failed = status === "failed";
         await client.query(
           `UPDATE publications SET status=$4,success=$5,provider_job_id=COALESCE($6,provider_job_id),
           platform_post_id=COALESCE($7,platform_post_id),post_url=COALESCE($8,post_url),error_message=$9,
           last_synced_at=now(),updated_at=now() WHERE upload_id=$1 AND platform=$2 AND request_id=$3 AND removed_at IS NULL
-          AND (status NOT IN ('completed','failed') OR $4 IN ('completed','failed'))`,
+          AND (status <> 'completed' OR $4='completed')
+          AND (status <> 'failed' OR $4 IN ('completed','failed'))`,
           [
             upload.id,
             platform,
@@ -144,6 +132,7 @@ export async function syncHistory() {
       : syntheticUuid(requestId);
     const createdAt =
       stringValue(row.upload_timestamp) ?? new Date().toISOString();
+    const rowStatus=providerPublicationState({...row,status:row.status ?? (row.success===false?"failed":"completed")});
     await transaction(async (client) => {
       const existing = await client.query<{ id: string; status: string }>(
         `SELECT u.id,u.status FROM uploads u WHERE u.removed_at IS NULL AND (u.request_id=$1 OR u.id=$2 OR EXISTS
@@ -164,7 +153,7 @@ export async function syncHistory() {
             stringValue(row.post_title) ?? "Untitled import",
             stringValue(row.post_caption) ?? "",
             Number(row.media_size_bytes ?? 0) || null,
-            row.success === false ? "failed" : "completed",
+            rowStatus,
             platform,
             createdAt,
           ],
@@ -181,17 +170,19 @@ export async function syncHistory() {
         ON CONFLICT(upload_id,platform) DO UPDATE SET provider_job_id=COALESCE(excluded.provider_job_id,publications.provider_job_id),
           platform_post_id=COALESCE(excluded.platform_post_id,publications.platform_post_id),status=excluded.status,success=excluded.success,
           post_url=COALESCE(excluded.post_url,publications.post_url),error_message=excluded.error_message,last_synced_at=now(),updated_at=now()
-          WHERE publications.removed_at IS NULL AND publications.request_id=excluded.request_id`,
+          WHERE publications.removed_at IS NULL AND publications.request_id=excluded.request_id
+          AND (publications.status <> 'completed' OR excluded.status='completed')
+          AND (publications.status <> 'failed' OR excluded.status IN ('completed','failed'))`,
         [
           actualUploadId,
           platform,
           requestId,
           stringValue(row.job_id),
           stringValue(row.platform_post_id),
-          row.success === false ? "failed" : "completed",
-          boolValue(row.success),
+          rowStatus,
+          rowStatus === "completed" ? true : rowStatus === "failed" ? false : null,
           stringValue(row.post_url),
-          stringValue(row.error_message),
+          rowStatus === "failed" ? stringValue(row.error_message) : null,
           Boolean(row.fallback_to_inbox),
           createdAt,
         ],

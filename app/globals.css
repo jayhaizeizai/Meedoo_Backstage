@@ -3021,3 +3021,73 @@
 .platform-selector {
   flex-wrap: wrap;
 }
+
+.retention-media-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+}
+.retention-video-panel {
+  min-width: 0;
+}
+.retention-video-panel video {
+  display: block;
+  width: 100%;
+  max-height: 440px;
+  background: #111827;
+  border-radius: 12px;
+}
+.retention-media-layout .retention-curve-plot {
+  min-width: 0;
+}
+.retention-media-layout .retention-curve-plot svg {
+  cursor: crosshair;
+}
+@media (max-width: 850px) {
+  .retention-media-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .retention-video-panel video {
+    max-height: 360px;
+  }
+}
+
+.account-followers-card { grid-column: 1 / -1; padding: 24px; min-width: 0; }
+.account-followers-card h2 { margin: 0 0 8px; font-size: 18px; }
+.account-followers-card p, .account-followers-card small { color: #73798d; }
+.account-followers-chart { display: flex; gap: 12px; padding: 16px 0; overflow-x: auto; }
+.account-followers-column { flex: 1; min-width: 68px; text-align: center; display: flex; flex-direction: column; gap: 8px; padding: 4px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.account-followers-column:focus-visible { outline: 2px solid #6757e8; outline-offset: -2px; }
+.account-followers-track { height: 180px; display: flex; flex-direction: column-reverse; align-items: center; border-bottom: 1px solid #e4e6ef; width: 100%; }
+.account-followers-track > div { width: min(44px, 80%); flex-shrink: 0; }
+.follower-legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; }
+.follower-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.follower-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.video-type-field { display: grid; gap: 10px; margin: 16px 0; }
+.video-type-field select { width: 100%; min-width: 0; padding: 12px; border: 1px solid #ddddec; border-radius: 8px; background: white; color: inherit; }
+.video-type-field small { color: #73798d; line-height: 1.5; }
+
+.follower-tooltip { position: fixed; z-index: 100; width: 260px; max-width: calc(100vw - 16px); padding: 14px; display: grid; gap: 10px; border: 1px solid #e4e6ef; border-radius: 10px; background: #fff; color: #252936; box-shadow: 0 8px 28px #25293626; pointer-events: none; font-size: 13px; }
+.follower-tooltip > span { display: flex; align-items: center; gap: 8px; }
+.follower-tooltip > span strong { margin-left: auto; }
+.follower-tooltip i { width: 9px; height: 9px; border-radius: 2px; }
+
+/* Shared dense daily bars: 30 days fit a typical desktop chart. */
+.compact-platform-chart { gap:2px; padding:14px 0 8px; }
+.compact-platform-chart .account-followers-column { flex:1 0 22px; min-width:22px; padding:0; gap:5px; font-size:9px; }
+.compact-platform-chart .account-followers-column span, .compact-platform-chart .account-followers-column strong { white-space:nowrap; font-size:9px; line-height:1.3; }
+.compact-platform-chart .account-followers-track > div { width:min(24px,88%); }
+.detail-kpis .detail-metric-button { position:relative; padding:17px; text-align:left; color:inherit; cursor:pointer; }
+.detail-metric-button:hover { border-color:#b8aff5; background:#fcfbff; }
+.detail-metric-button:focus-visible { outline:2px solid var(--p); outline-offset:2px; }
+.detail-metric-action { display:block; margin-top:9px; font-size:11px; color:var(--p); }
+.metric-detail-dialog { padding:0; border:1px solid var(--line); border-radius:18px; width:min(1180px,calc(100vw - 32px)); max-width:none; max-height:90dvh; background:var(--bg); color:var(--ink); }
+.metric-detail-dialog::backdrop { background:#18213688; }
+.metric-detail-content { padding:24px; min-width:0; }
+.metric-detail-content > header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; }
+.metric-detail-content > header h2 { margin:0 0 8px; font-size:20px; }
+.metric-detail-content > header p { margin:0; color:var(--muted); font-size:12px; }
+.metric-detail-content > header button { flex-shrink:0; width:40px; height:40px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-size:24px; cursor:pointer; }
+.metric-detail-dialog .follower-tooltip { z-index:1; }
+@media(max-width:620px) { .metric-detail-content { padding:16px; } .account-followers-card { padding:16px; } }

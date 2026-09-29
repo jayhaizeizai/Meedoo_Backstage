@@ -191,6 +191,12 @@ async function main() {
       ).rows[0].status,
       "queued",
     );
+    await sync.applyStatusPayload(current, {status:"failed",results:[{platform:"youtube",status:"processing",success:false}]});
+    const pendingRow=(await db.query("SELECT status,success,error_message FROM publications WHERE upload_id=$1 AND platform='youtube'",[id])).rows[0];
+    assert.deepEqual(pendingRow,{status:"processing",success:null,error_message:null});
+    assert.equal((await db.query("SELECT status FROM uploads WHERE id=$1",[id])).rows[0].status,"processing");
+    await sync.applyStatusPayload(current,{status:"failed",results:[{platform:"youtube",status:"failed",success:false,error_message:"real rejection"}]});
+    assert.equal((await db.query("SELECT error_message FROM publications WHERE upload_id=$1 AND platform='youtube'",[id])).rows[0].error_message,"real rejection");
     await sync.applyStatusPayload(current, {
       status: "completed",
       platforms: {
@@ -202,6 +208,10 @@ async function main() {
         .status,
       "completed",
     );
+    await sync.applyStatusPayload(current,{status:"processing",results:[{platform:"youtube",status:"processing",success:false}]});
+    await sync.applyStatusPayload(current,{status:"failed",results:[{platform:"youtube",status:"failed",success:false}]});
+    assert.equal((await db.query("SELECT status FROM publications WHERE upload_id=$1 AND platform='youtube'",[id])).rows[0].status,"completed");
+    console.log("PASS processing+false is pending; genuine rejection stays failed; completed result does not regress");
     await db.query(
       "UPDATE publications SET status='failed' WHERE upload_id=$1 AND platform='youtube'",
       [id],
@@ -334,6 +344,18 @@ async function main() {
       "PASS 1001 CSV rows batched into 3 inserts; duplicates and overlap preserved",
     );
     const notifications = require("../lib/notifications.ts");
+    await db.query("INSERT INTO meedoo_users(open_id,name,role) VALUES('fixture-admin','Jay fixture','approver')");
+    process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID = "fixture-admin";
+    await notifications.createNotification(id, "publish_failed", "Fixture failure");
+    assert.deepEqual((await db.query("SELECT user_open_id FROM notifications WHERE upload_id=$1 AND kind='publish_failed' AND message LIKE '%Fixture failure' ORDER BY user_open_id", [id])).rows.map(r=>r.user_open_id), ["fixture-admin", "fixture-user"]);
+    process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID = "fixture-user";
+    await notifications.createNotification(id, "publish_failed", "Same recipient");
+    assert.equal(Number((await db.query("SELECT count(*) FROM notifications WHERE upload_id=$1 AND kind='publish_failed' AND message LIKE '%Same recipient'", [id])).rows[0].count), 1);
+    process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID = "fixture-admin";
+    await notifications.createNotification(id, "review_approved", "Approved fixture");
+    assert.equal(Number((await db.query("SELECT count(*) FROM notifications WHERE upload_id=$1 AND kind='review_approved' AND user_open_id='fixture-admin'", [id])).rows[0].count), 0);
+    delete process.env.LARK_PUBLISH_FAILURE_ADMIN_OPEN_ID;
+    console.log("PASS publish-failure admin copy, recipient deduplication, other events unchanged");
     await notifications.notifyUser(
       "fixture-user",
       null,
@@ -449,6 +471,31 @@ async function main() {
       "1",
     );
     console.log("PASS expired session cannot delete a submitted video");
+    // The schema is isolated; hide earlier fixtures for deterministic digest counts.
+    await db.query("UPDATE uploads SET removed_at=now()");
+    const end = new Date("2026-09-20T14:00:00Z");
+    for (let n=0;n<23;n++) {
+      const status=n===0?'pending':n===1?'rejected':'approved';
+      await db.query(`INSERT INTO uploads(id,title,profile_username,status,review_status,uploader_name,submitted_at,reviewed_at,review_comment)
+        VALUES($1,$2,'fixture','pending_review',$3,'Fixture', $4,$5,$6)`,
+        [randomUUID(),`Digest video ${n}`,status,'2026-09-01T00:00:00Z',status==='pending'?null:'2026-09-20T13:00:00Z',status==='rejected'?'Please revise caption':null]);
+    }
+    const {queueApprovalDigest}=require('../lib/approval-digest.ts');
+    const queued=await Promise.all([queueApprovalDigest('2026-09-20',end),queueApprovalDigest('2026-09-20',end)]);
+    assert.equal(queued.filter(Boolean).length,1);
+    const messages=(await db.query("SELECT message FROM notifications WHERE kind='approval_digest'")).rows;
+    assert.equal(messages.length,Number((await db.query("SELECT count(*) FROM meedoo_users WHERE role='approver'")).rows[0].count));
+    assert.ok(messages[0].message.includes('Pending / 待审批 (1)'));
+    assert.ok(messages[0].message.includes('Approved / 已批准 (21)'));
+    assert.ok(messages[0].message.includes('Rejected / 已拒绝 (1)'));
+    assert.ok(messages[0].message.includes('Please revise caption'));
+    assert.ok(messages[0].message.includes('1 more'));
+    assert.equal(await queueApprovalDigest('2026-09-21',new Date('2026-09-21T14:00:00Z')),true);
+    const next=(await db.query("SELECT message FROM notifications WHERE kind='approval_digest' ORDER BY created_at DESC LIMIT 1")).rows[0].message;
+    assert.ok(next.includes('Approved / 已批准 (0)'));
+    assert.ok(next.includes('Rejected / 已拒绝 (0)'));
+    assert.ok(next.includes('Pending / 待审批 (1)'));
+    console.log('PASS three-section digest, exact counts, truncation, rejection reasons, concurrent deduplication and reporting boundary');
     console.log("ALL RELIABILITY TESTS PASSED; no external calls made");
   } finally {
     await global.meedooPool.end();

@@ -1,3 +1,4 @@
+import { providerPublicationState } from "../../lib/provider-publication-state";
 export const platformOptions = [
   { id: "tiktok", name: "TikTok", icon: "♪", className: "tt" },
   { id: "instagram", name: "Instagram", icon: "◎", className: "ig" },
@@ -100,27 +101,8 @@ export function platformResultState(
   jobStatus: string | undefined,
 ) {
   if (!result) return "pending" as const;
-  const status = result.status?.toLowerCase();
-  const hasFailure =
-    Boolean(
-      result.error_message ||
-        result.error_code ||
-        result.failure_stage ||
-        result.error,
-    ) ||
-    ["failed", "error", "rejected"].includes(status ?? "") ||
-    (["completed", "failed"].includes(jobStatus ?? "") &&
-      result.success === false);
-  if (hasFailure) return "failed" as const;
-  if (
-    result.success === true ||
-    result.platform_post_id ||
-    result.post_url ||
-    result.url ||
-    ["completed", "success", "published"].includes(status ?? "")
-  )
-    return "completed" as const;
-  return "pending" as const;
+  const status=providerPublicationState(result,jobStatus);
+  return status === "processing" ? "pending" as const : status;
 }
 
 export function platformFailureReason(

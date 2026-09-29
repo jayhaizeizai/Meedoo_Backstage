@@ -1,19 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "./language-provider";
 import { useAuth } from "./auth-provider";
 
 type AppShellProps = {
-  active: "upload" | "dashboard" | "weekly-report" | "records" | "approvals";
+  active:
+    | "assignments"
+    | "generate"
+    | "upload"
+    | "dashboard"
+    | "generation-history"
+    | "weekly-report"
+    | "records"
+    | "approvals";
   status: { zh: string; en: string };
   children: React.ReactNode;
 };
 
 export function AppShell({ active, status, children }: AppShellProps) {
   const { language, text, toggleLanguage } = useLanguage();
-  const { configured, loading, user, role, logout } = useAuth();
+  const { configured, loading, user, role, logout, assignmentsEnabled } = useAuth();
+  const mobileDialog=useRef<HTMLDialogElement>(null);
+  const [mobileOpen,setMobileOpen]=useState(false);
+  function closeNavigation(){mobileDialog.current?.close();setMobileOpen(false);}
+  useEffect(()=>{const media=window.matchMedia("(min-width: 621px)");const resize=()=>{if(media.matches)closeNavigation();};media.addEventListener("change",resize);return()=>media.removeEventListener("change",resize);},[]);
+  useEffect(()=>{if(!mobileOpen)return;const previous=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{document.body.style.overflow=previous;};},[mobileOpen]);
   const userInitials =
     user?.name
       .split(/\s+/)
@@ -54,9 +67,7 @@ export function AppShell({ active, status, children }: AppShellProps) {
     }
   }
 
-  return (
-    <div className="shell">
-      <aside className="sidebar">
+  const sidebarContent=(prefix:string)=><>
         <div className="brand">
           <span className="mark">M</span>
           <div>
@@ -64,12 +75,21 @@ export function AppShell({ active, status, children }: AppShellProps) {
             <small>{text("短视频管理", "Short video manager")}</small>
           </div>
         </div>
-        <nav className="nav" aria-label={text("主导航", "Main navigation")}>
-          <section className="nav-group" aria-labelledby="nav-video-workflow">
-            <h2 className="nav-group-title" id="nav-video-workflow">
+        <nav onClick={event=>{if((event.target as Element).closest("a"))closeNavigation();}} className="nav" aria-label={text("主导航", "Main navigation")}>
+          <section className="nav-group" aria-labelledby={`${prefix}-video-workflow`}>
+            <h2 className="nav-group-title" id={`${prefix}-video-workflow`}>
               {text("视频流程", "Video workflow")}
             </h2>
             <div className="nav-group-links">
+              {assignmentsEnabled && <Link className={active === "assignments" ? "active" : ""} href="/assignments" title={text("任务系统", "Assignment System")}><span aria-hidden="true">▦</span><i>{text("任务系统", "Assignment System")}</i></Link>}
+              <Link
+                className={active === "generate" ? "active" : ""}
+                href="/generate"
+                title={text("生成视频", "Generate video")}
+              >
+                <span aria-hidden="true">✦</span>
+                <i>{text("生成视频", "Generate video")}</i>
+              </Link>
               <Link
                 className={active === "upload" ? "active" : ""}
                 href="/upload"
@@ -98,19 +118,20 @@ export function AppShell({ active, status, children }: AppShellProps) {
               )}
             </div>
           </section>
-          <section className="nav-group" aria-labelledby="nav-analytics">
-            <h2 className="nav-group-title" id="nav-analytics">
+          <section className="nav-group" aria-labelledby={`${prefix}-analytics`}>
+            <h2 className="nav-group-title" id={`${prefix}-analytics`}>
               {text("数据看板", "Analytics")}
             </h2>
             <div className="nav-group-links">
               <Link
                 className={active === "dashboard" ? "active" : ""}
                 href="/dashboard"
-                title={text("视频数据看报", "Video analytics report")}
+                title={text("视频数据看板", "Video analytics dashboard")}
               >
                 <span aria-hidden="true">⌁</span>
-                <i>{text("视频数据看报", "Video analytics report")}</i>
+                <i>{text("视频数据看板", "Video analytics dashboard")}</i>
               </Link>
+              {role === "approver" && <Link className={active === "generation-history" ? "active" : ""} href="/generation-history" title={text("团队生成记录","Team generation history")}><span aria-hidden="true">▤</span><i>{text("团队生成记录","Team generation history")}</i></Link>}
               <Link
                 className={active === "weekly-report" ? "active" : ""}
                 href="/weekly-report"
@@ -162,9 +183,22 @@ export function AppShell({ active, status, children }: AppShellProps) {
             )}
           </div>
         </div>
+  </>;
+
+  return (
+    <div className="shell">
+      <aside className="sidebar">
+        {sidebarContent("desktop")}
       </aside>
+      <dialog ref={mobileDialog} id="mobile-navigation" className="mobile-navigation" aria-labelledby="mobile-navigation-title" onClose={()=>setMobileOpen(false)} onClick={e=>{if(e.target===e.currentTarget)closeNavigation();}}>
+        <div className="mobile-navigation-content">
+          <div className="mobile-navigation-heading"><strong id="mobile-navigation-title">{text("导航","Navigation")}</strong><button type="button" aria-label={text("关闭导航","Close navigation")} onClick={closeNavigation}>×</button></div>
+          {sidebarContent("mobile")}
+        </div>
+      </dialog>
       <main className="main">
         <header className="topbar">
+          <button type="button" className="mobile-navigation-toggle" aria-label={text("打开导航","Open navigation")} aria-controls="mobile-navigation" aria-expanded={mobileOpen} onClick={()=>{mobileDialog.current?.showModal();setMobileOpen(true);}}><span aria-hidden="true">☰</span>{text("菜单","Menu")}</button>
           <div className="live">
             <i />
             <span>{text(status.zh, status.en)}</span>
