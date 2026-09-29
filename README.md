@@ -240,3 +240,12 @@ MiniMax 参考图在选图后同步到平台，默认保留原图；超过 5 MB 
 任务创作入口 `/assignments`：需求 → 摘要 → 故事板（生成／上传）→ 分镜 → 逐镜视频生成 → ZIP 下载。模块、权限、模型配置和验证说明见 [docs/assignments.md](docs/assignments.md)。
 
 任务系统开关：`/etc/meedoo/features.json` 的 `assignments`（布尔值）。正式服暂设为 `false`，测试服为 `true`；开关同步控制导航、页面和任务 API，缺少配置默认关闭。详见 [任务系统说明](docs/assignments.md)。手机端通过顶部“菜单”打开完整导航，相关实现为 `components/app-shell.tsx` 与 `styles/base.css`。
+
+
+### Video/audio generation references
+
+The video workspace accepts reference images, MP4/MOV video and MP3/WAV audio in reference mode. First/last-frame mode remains exclusive. Each video/audio clip is 2–15 seconds; each kind allows up to 3 clips and 15 seconds combined. Video files are limited to 50 MB, audio to 15 MB. These are intentionally conservative workspace limits, including for Seedance 2.5. Seedance audio must accompany visual input; 2.0-family requests are limited to 12 total references.
+
+`generation_assets.media_duration` stores server-probed duration. The upload handler validates container, codec, dimensions and duration with ffprobe, and submission checks ownership, MIME/role matching and total duration again. Media references use signed asset URLs; only images enter the MiniMax image-sync queue. Video/audio uploads expire after 14 days. Drafts and failed-task restore preserve media roles. Seedream image selectors exclude video/audio.
+
+Deployment needs ffprobe and an HTTP upload body limit of at least 51 MB (`deploy/nginx.conf`). Run `node scripts/verify-reference-media.cjs` for model validation, draft and mocked provider-payload checks. No paid provider request is made by this script.

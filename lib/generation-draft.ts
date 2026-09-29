@@ -1,7 +1,7 @@
 import { generationModels, generationModel, generationRatios, uuidPattern } from "./generation-model";
 import { seedreamQualities } from "./seedream-model";
 export function draftAsset(v: any) {
-  return v && typeof v.id === "string" && uuidPattern.test(v.id) ? {id:v.id,name:typeof v.name === "string" ? v.name.slice(0,180) : "Image",url:`/api/generation/assets/${v.id}`} : null;
+  return v && typeof v.id === "string" && uuidPattern.test(v.id) ? {id:v.id,duration:typeof v.duration === "number" && Number.isFinite(v.duration) ? v.duration : undefined,name:typeof v.name === "string" ? v.name.slice(0,180) : "Image",url:`/api/generation/assets/${v.id}`} : null;
 }
 export function draftIntent(v: any) {
   return v && typeof v.id === "string" && uuidPattern.test(v.id) && typeof v.fingerprint === "string" && v.fingerprint.length<50000 ? {id:v.id,fingerprint:v.fingerprint} : null;
@@ -15,7 +15,7 @@ export function videoDraft(v: any) {
     resolution:(model.resolutions as readonly string[]).includes(v.resolution) ? v.resolution : model.resolutions[0],
     generateAudio:v.generateAudio !== false, rightTab:v.rightTab === "video" ? "video" : "image",
     selected:typeof v.selected === "string" && uuidPattern.test(v.selected) ? v.selected : null,
-    assets:Array.isArray(v.assets) ? v.assets.slice(0,30).flatMap((a:any)=>{const item=draftAsset(a);return item && ["first_frame","last_frame","reference_image"].includes(a.role)?[{...item,role:a.role}]:[];}) : [],intent:draftIntent(v.intent)};
+    assets:Array.isArray(v.assets) ? v.assets.slice(0,36).flatMap((a:any)=>{const item=draftAsset(a);return item && ["first_frame","last_frame","reference_image","reference_video","reference_audio"].includes(a.role)?[{...item,role:a.role}]:[];}) : [],intent:draftIntent(v.intent)};
 }
 export function imageDraft(v:any) {
   if(!v || typeof v !== "object") return null;

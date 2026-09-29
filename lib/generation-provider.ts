@@ -74,11 +74,10 @@ export async function submitGeneration(
     model: model.apiModel,
     content: [
       { type: "text", text: input.prompt },
-      ...input.assets.map((a) => ({
-        type: "image_url",
-        image_url: { url: imageUrl(a.id) },
-        role: a.role,
-      })),
+      ...input.assets.map((a) => {
+        const type = a.role === "reference_video" ? "video_url" : a.role === "reference_audio" ? "audio_url" : "image_url";
+        return { type, [type]: { url: imageUrl(a.id) }, role: a.role };
+      }),
     ],
     resolution: input.resolution,
     duration: input.duration,

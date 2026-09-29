@@ -2,10 +2,10 @@ import { query } from "./db";
 import { generationSchema } from "./generation";
 import { uuidPattern } from "./generation-model";
 export async function resolveGenerationAssets(owner:string, ids:unknown) {
-  if(!Array.isArray(ids)||ids.length>30||ids.some(id=>typeof id!=="string"||!uuidPattern.test(id)))throw Error("INVALID_INPUT");
+  if(!Array.isArray(ids)||ids.length>36||ids.some(id=>typeof id!=="string"||!uuidPattern.test(id)))throw Error("INVALID_INPUT");
   await generationSchema();
-  const rows=(await query("SELECT id,filename FROM generation_assets WHERE owner_id=$1 AND id=ANY($2::uuid[]) AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())",[owner,ids])).rows;
-  return rows.map(a=>({id:a.id,name:a.filename,url:`/api/generation/assets/${a.id}`}));
+  const rows=(await query("SELECT id,filename,media_duration FROM generation_assets WHERE owner_id=$1 AND id=ANY($2::uuid[]) AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())",[owner,ids])).rows;
+  return rows.map(a=>({id:a.id,name:a.filename,duration:a.media_duration == null ? undefined : Number(a.media_duration),url:`/api/generation/assets/${a.id}`}));
 }
 export async function restoreFailedGeneration(owner:string,id:string) {
   if(!uuidPattern.test(id))throw Error("NOT_FOUND");

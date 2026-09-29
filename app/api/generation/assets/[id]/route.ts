@@ -33,7 +33,7 @@ export async function GET(
         "Content-Type": row.mime,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
-        ...(request.nextUrl.searchParams.get("download") === "1" ? { "Content-Disposition": `attachment; filename="image-${id}.${row.mime === "image/png" ? "png" : row.mime === "image/webp" ? "webp" : row.mime === "image/heic" ? "heic" : "jpg"}"` } : {}),
+        ...(request.nextUrl.searchParams.get("download") === "1" ? { "Content-Disposition": `attachment; filename="reference-${id}.${row.mime === "video/mp4" ? "mp4" : row.mime === "video/quicktime" ? "mov" : row.mime === "audio/mpeg" ? "mp3" : row.mime === "audio/wav" ? "wav" : row.mime === "image/png" ? "png" : row.mime === "image/webp" ? "webp" : row.mime === "image/heic" ? "heic" : "jpg"}"` } : {}),
       },
     });
   } catch (e) {

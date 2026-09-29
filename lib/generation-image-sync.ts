@@ -7,7 +7,7 @@ export async function imageSyncStatus(id: string, owner: string) {
   const row = (await query(`SELECT j.status,j.error_code,j.attempts,
     j.expires_at,j.credential_sha256 FROM generation_assets a
     LEFT JOIN generation_image_sync j ON j.asset_id=a.id
-    WHERE a.id=$1 AND a.owner_id=$2`, [id, owner])).rows[0];
+    WHERE a.id=$1 AND a.owner_id=$2 AND a.mime LIKE 'image/%'`, [id, owner])).rows[0];
   if (!row) throw Error("NOT_FOUND");
   const stale = row.credential_sha256 !== credential() ||
     (row.status === "ready" && new Date(row.expires_at).getTime() <= Date.now() + 600000);

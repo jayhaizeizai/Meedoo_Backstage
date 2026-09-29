@@ -24,6 +24,7 @@ type Asset = {
   id: string;
   name: string;
   url: string;
+  duration?: number;
   role: GenerationInput["assets"][number]["role"];
 };
 type Task = {
@@ -126,6 +127,8 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
         "服务尚未配置，请联系管理员。",
         "Service is not configured. Contact an administrator.",
       ),
+      INVALID_REFERENCE_MEDIA: text("素材不符合要求：视频需 MP4/MOV、H.264/H.265、24–60 fps、最大 50 MB；音频需 MP3/WAV、最大 15 MB。每段 2–15 秒。", "Invalid reference: MP4/MOV H.264/H.265 video, 24–60 fps, up to 50 MB; MP3/WAV audio up to 15 MB. Each clip must be 2–15s."),
+      REFERENCE_DURATION_EXCEEDED: text("参考视频或音频总时长超过 15 秒，请移除部分素材。", "Reference video or audio exceeds 15s in total. Remove some clips."),
       INVALID_IMAGE: text(
         "图片须为 JPG、PNG、WEBP 或 HEIC，最大 30 MB，宽高 256–5760 像素，宽高比 0.4–2.5。",
         "Use JPG, PNG, WEBP or HEIC up to 30 MB, 256–5760 pixels per side, aspect ratio 0.4–2.5.",
@@ -222,7 +225,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
     let active = true, checking = false;
     // Includes images uploaded while another model was selected.
     void (async () => {
-      for (const asset of assets) {
+      for (const asset of assets.filter(a=>!["reference_video", "reference_audio"].includes(a.role))) {
         if (!active) break;
         await syncImage(asset.id, true);
       }
@@ -231,7 +234,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
       if (!active || checking || document.hidden) return;
       checking = true;
       void (async () => {
-        try { for (const asset of assets) { if (!active) break; await syncImage(asset.id); } }
+        try { for (const asset of assets.filter(a=>!["reference_video", "reference_audio"].includes(a.role))) { if (!active) break; await syncImage(asset.id); } }
         finally { checking = false; }
       })();
     }, 5000);
@@ -240,12 +243,12 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
   async function upload(files: FileList | null, role: Asset["role"]) {
     if (!files?.length || uploading || busy) return;
     const limit =
-      role === "reference_image" ? settings.maxImages - assets.length : 1;
+      role === "reference_image" ? settings.maxImages - assets.filter(a=>a.role === role).length : role === "reference_video" || role === "reference_audio" ? 3 - assets.filter(a=>a.role === role).length : 1;
     if (files.length > limit) {
       setError(
         text(
-          `参考图最多 ${settings.maxImages} 张，首帧和尾帧各 1 张。`,
-          `Up to ${settings.maxImages} references, or one image per frame.`,
+          `参考图最多 ${settings.maxImages} 张；参考视频、音频各最多 3 段；首尾帧各 1 张。`,
+          `Up to ${settings.maxImages} images, 3 videos and 3 audio clips; one image per frame.`,
         ),
       );
       return;
@@ -253,13 +256,15 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
     setUploading(true);
     setError("");
     try {
-      const prepared = await compression.prepareFiles(Array.from(files));
+      const media = role === "reference_video" || role === "reference_audio";
+      const prepared = media ? Array.from(files) : await compression.prepareFiles(Array.from(files));
       if (!prepared) return;
       for (const file of prepared) {
-        if (file.size > 30 * 1024 * 1024) throw Error("INVALID_IMAGE");
+        if (file.size > (role === "reference_video" ? 50 : role === "reference_audio" ? 15 : 30) * 1024 * 1024) throw Error(media ? "INVALID_REFERENCE_MEDIA" : "INVALID_IMAGE");
         const form = new FormData();
         form.set("file", file);
         form.set("model", model);
+        form.set("kind", role === "reference_video" ? "video" : role === "reference_audio" ? "audio" : "image");
         const r = await fetch("/api/generation/assets", {
           method: "POST",
           body: form,
@@ -267,7 +272,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
         const d = await r.json();
         if (!r.ok) throw Error(d.code);
         setAssets((a) => [
-          ...(role === "reference_image"
+          ...(role.startsWith("reference_")
             ? a
             : a.filter((x) => x.role !== role)),
           { ...d.asset, role },
@@ -372,11 +377,11 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
     <label className="generation-drop">
       <span>{label}</span>
       <small>
-        {text("选择图片 · 最大 30 MB", "Choose images · up to 30 MB")}
+        {role === "reference_video" ? text("MP4 / MOV · 每段 2–15 秒 · 最大 50 MB", "MP4 / MOV · 2–15s each · up to 50 MB") : role === "reference_audio" ? text("MP3 / WAV · 每段 2–15 秒 · 最大 15 MB", "MP3 / WAV · 2–15s each · up to 15 MB") : text("选择图片 · 最大 30 MB", "Choose images · up to 30 MB")}
       </small>
       <input
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+        accept={role === "reference_video" ? ".mp4,.mov" : role === "reference_audio" ? ".mp3,.wav" : "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"}
         multiple={multiple}
         disabled={busy || uploading}
         onChange={(e) => {
@@ -463,7 +468,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
                 </select>
               </label>
             )}
-            {assets.length > settings.maxImages && (
+            {assets.filter(a=>a.role === "reference_image").length > settings.maxImages && (
               <p className="data-message">
                 {text(
                   `当前模型最多支持 ${settings.maxImages} 张参考图，请移除多余图片。`,
@@ -491,7 +496,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
                   }}
                 >
                   {m === "reference"
-                    ? text("参考图", "Reference images")
+                    ? text("参考素材", "Reference media")
                     : text("首尾帧", "First & last frame")}
                 </button>
               ))}
@@ -517,11 +522,18 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
                 )}
               </div>
             )}
+            {mode === "reference" && <>
+              <div className="generation-frame-inputs">
+                {input("reference_video", text("添加参考视频（最多 3 段）", "Add reference videos (up to 3)"), true)}
+                {input("reference_audio", text("添加参考音频（最多 3 段）", "Add reference audio (up to 3)"), true)}
+              </div>
+              <small>{text("参考视频合计不超过 15 秒，参考音频合计不超过 15 秒。Seedance 的音频参考需搭配图片或视频。", "Videos: up to 15s total. Audio: up to 15s total. Seedance audio references require an image or video.")}</small>
+            </>}
             {uploading && (
               <small role="status">
                 {compression.compressing
                   ? text("正在压缩图片…", "Compressing images…")
-                  : text("正在准备并上传图片…", "Preparing and uploading images…")}
+                  : text("正在准备并上传素材…", "Preparing and uploading media…")}
               </small>
             )}
             <div className="generation-assets">
@@ -532,21 +544,24 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
                     onClick={() =>
                       setPrompt(
                         (p) =>
-                          `${p} ${mode === "reference" ? `图片${i + 1}` : a.role === "first_frame" ? "首帧" : "尾帧"} `,
+                          `${p} ${mode === "reference" ? `${a.role === "reference_video" ? "视频" : a.role === "reference_audio" ? "音频" : "图片"}${assets.slice(0,i+1).filter(x=>x.role===a.role).length}` : a.role === "first_frame" ? "首帧" : "尾帧"} `,
                       )
                     }
-                    title={text("插入图片引用", "Insert image reference")}
+                    title={text("插入素材引用", "Insert media reference")}
                   >
-                    <img src={a.url} alt={a.name} />
+                    {a.role === "reference_video" ? <span aria-label={a.name}>▶ {a.name}</span> : a.role === "reference_audio" ? <span aria-label={a.name}>♫ {a.name}</span> : <img src={a.url} alt={a.name} />}
                     <span>
                       {mode === "reference"
-                        ? `${text("图片", "Image ")}${i + 1}`
+                        ? `${a.role === "reference_video" ? text("视频", "Video ") : a.role === "reference_audio" ? text("音频", "Audio ") : text("图片", "Image ")}${assets.slice(0,i+1).filter(x=>x.role===a.role).length}`
                         : a.role === "first_frame"
                           ? text("首帧", "First frame")
                           : text("尾帧", "Last frame")}
                     </span>
+                    {a.duration !== undefined && <small>{a.duration.toFixed(1)}s</small>}
                   </button>
-                  {model === "minimax-h3" && (
+                  {a.role === "reference_video" && <video src={a.url} controls preload="metadata" style={{width:"100%",maxHeight:140}} />}
+                  {a.role === "reference_audio" && <audio src={a.url} controls preload="metadata" style={{width:"100%"}} />}
+                  {model === "minimax-h3" && !["reference_video", "reference_audio"].includes(a.role) && (
                     <div className="generation-image-status" aria-live="polite">
                       <small>{imageSync[a.id] === "ready"
                         ? text("已就绪", "Ready")
@@ -567,7 +582,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
                     type="button"
                     disabled={busy || uploading}
                     className="generation-remove"
-                    aria-label={text("移除图片", "Remove image")}
+                    aria-label={text("移除素材", "Remove media")}
                     onClick={() =>
                       setAssets((v) => v.filter((x) => x.id !== a.id))
                     }
@@ -585,7 +600,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={text(
-                  "描述角色、动作、场景和镜头。点击参考图可插入图片编号。",
+                  "描述角色、动作、场景和镜头。点击素材可插入图片、视频或音频编号。",
                   "Describe the characters, action, setting and camera. Click a reference to insert its number.",
                 )}
               />
@@ -647,10 +662,15 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
                 )}
               </small>
             )}
+            {settings.provider === "ark" && model !== "seedance-2.5" && assets.length > 12 && <p role="alert">{text("当前模型参考素材合计最多 12 个，请移除部分素材。", "This model supports up to 12 references in total.")}</p>}
+            {settings.provider === "ark" && assets.some(a=>a.role === "reference_audio") && !assets.some(a=>["reference_image","reference_video"].includes(a.role)) && <p role="alert">{text("请搭配至少一张参考图或一段参考视频。", "Add at least one reference image or video with audio.")}</p>}
+            {["reference_video", "reference_audio"].some(role=>assets.filter(a=>a.role===role).reduce((n,a)=>n+(a.duration??0),0)>15.05) && <p role="alert">{text("参考视频或音频合计超过 15 秒，请移除部分素材。", "Video or audio references exceed 15s in total.")}</p>}
             <button
               className="primary generation-submit"
               disabled={
                 !configured ||
+                (settings.provider === "ark" && assets.some(a=>a.role === "reference_audio") && !assets.some(a=>["reference_image","reference_video"].includes(a.role))) ||
+                ["reference_video","reference_audio"].some(role=>assets.filter(a=>a.role===role).reduce((n,a)=>n+(a.duration??0),0)>15.05) ||
                 busy ||
                 uploading ||
                 !prompt.trim() ||
@@ -658,7 +678,9 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
                 duration < settings.minDuration ||
                 duration > settings.maxDuration ||
                 !models.includes(model) ||
-                assets.length > settings.maxImages ||
+                assets.filter(a=>a.role === "reference_image").length > settings.maxImages ||
+                assets.filter(a=>a.role === "reference_video").length > 3 || assets.filter(a=>a.role === "reference_audio").length > 3 ||
+                (settings.provider === "ark" && model !== "seedance-2.5" && assets.length > 12) ||
                 (model === "minimax-h3" && assets.some((a) => imageSync[a.id] === "failed")) ||
                 (mode === "frames" &&
                   !assets.some((a) => a.role === "first_frame"))

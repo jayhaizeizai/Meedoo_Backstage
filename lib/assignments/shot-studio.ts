@@ -13,7 +13,7 @@ export async function shotAccess(owner:string,id:string,shot:string,edit=false) 
   return task;
 }
 export async function shotAssets(owner:string,id:string,ids:unknown) {
-  if(!Array.isArray(ids)||ids.length>30)throw Error("INVALID_INPUT");
+  if(!Array.isArray(ids)||ids.length>36)throw Error("INVALID_INPUT");
   return transaction(async c=>{
     requireAssignmentEditor(await ownedAssignment(id,owner,c,true));
     const assets=[];
@@ -44,7 +44,7 @@ export async function shotHistory(owner:string,id:string,shot:string,page:unknow
     WHERE r.assignment_id=$1 AND r.shot_id=$2 AND r.kind='video' ORDER BY t.created_at DESC,t.id DESC`,[id,shot])).rows;
   const paging=pagination(rows.length,historyPage(page),images?12:20);
   const result={tasks:rows.slice((paging.page-1)*paging.pageSize,paging.page*paging.pageSize),pagination:paging};
-  if(images){const uploads=(await query("SELECT id,filename FROM generation_assets WHERE owner_id=$1 AND expires_at IS NULL AND NOT file_deleted ORDER BY created_at DESC LIMIT 100",[owner])).rows.map(a=>({id:a.id,name:a.filename,url:`/api/generation/assets/${a.id}`}));
+  if(images){const uploads=(await query("SELECT id,filename FROM generation_assets WHERE owner_id=$1 AND mime LIKE 'image/%' AND expires_at IS NULL AND NOT file_deleted ORDER BY created_at DESC LIMIT 100",[owner])).rows.map(a=>({id:a.id,name:a.filename,url:`/api/generation/assets/${a.id}`}));
     return {...result,configured:Boolean(process.env.ARK_API_KEY),recentTasks:rows,uploads};}
   return {...result,configured:Boolean(process.env.MINIMAX_API_KEY||process.env.ARK_API_KEY),models:Object.keys(generationModels).filter(providerConfigured),ownTasks:rows};
 }

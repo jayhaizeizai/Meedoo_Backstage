@@ -28,7 +28,7 @@ export async function createSeedream(owner: string, value: unknown) {
     await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,41))", [owner]);
     const old = (await c.query("SELECT id,input=$3::jsonb same FROM seedream_tasks WHERE owner_id=$1 AND request_id=$2", [owner, input.requestId, JSON.stringify(input)])).rows[0];
     if (old) { if (!old.same) throw Error("REQUEST_CONFLICT"); return old.id as string; }
-    if (input.baseAssetId && !(await c.query("SELECT id FROM generation_assets WHERE id=$1 AND owner_id=$2 AND (expires_at IS NULL OR expires_at>now())", [input.baseAssetId, owner])).rowCount) throw Error("INVALID_ASSETS");
+    if (input.baseAssetId && !(await c.query("SELECT id FROM generation_assets WHERE id=$1 AND owner_id=$2 AND mime LIKE 'image/%' AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())", [input.baseAssetId, owner])).rowCount) throw Error("INVALID_ASSETS");
     if (Number((await c.query("SELECT count(*) n FROM seedream_tasks WHERE owner_id=$1 AND status IN ('queued','running')", [owner])).rows[0].n) >= 2) throw Error("TOO_MANY_TASKS");
     const id = randomUUID();
     await c.query("INSERT INTO seedream_tasks(id,owner_id,request_id,input,model) VALUES($1,$2,$3,$4,$5)", [id, owner, input.requestId, JSON.stringify(input), seedreamModel.id]);
@@ -45,7 +45,7 @@ export async function listSeedream(owner: string, requestedPage: unknown = 1, tr
   const result=await query(fields+" WHERE t.owner_id=$1 ORDER BY t.created_at DESC,t.id DESC LIMIT $2 OFFSET $3",[owner,paging.pageSize,(paging.page-1)*paging.pageSize]);
   const recent=await query(fields+" WHERE t.owner_id=$1 ORDER BY t.created_at DESC,t.id DESC LIMIT 60",[owner]);
   const watched=tracked&&uuidPattern.test(tracked)?await query(fields+" WHERE t.owner_id=$1 AND t.id=$2",[owner,tracked]):{rows:[]};
-  const uploads = (await query("SELECT id,filename FROM generation_assets WHERE owner_id=$1 AND expires_at IS NULL AND NOT file_deleted ORDER BY created_at DESC LIMIT 100", [owner])).rows.map(a => ({id:a.id,name:a.filename,url:`/api/generation/assets/${a.id}`}));
+  const uploads = (await query("SELECT id,filename FROM generation_assets WHERE owner_id=$1 AND mime LIKE 'image/%' AND expires_at IS NULL AND NOT file_deleted ORDER BY created_at DESC LIMIT 100", [owner])).rows.map(a => ({id:a.id,name:a.filename,url:`/api/generation/assets/${a.id}`}));
   const present=(t:typeof result.rows[number])=>({...t,asset:t.asset_id&&!t.expired?{id:t.asset_id,name:t.filename,url:`/api/generation/assets/${t.asset_id}`} : null});
   return {configured:Boolean(process.env.ARK_API_KEY),model:seedreamModel.label,uploads,pagination:paging,
     tasks:result.rows.map(present),recentTasks:[...new Map([...recent.rows,...watched.rows].map(t=>[t.id,t])).values()].map(present)};
@@ -73,7 +73,7 @@ export async function runSeedreamQueue() {
     try {
       let image: string | undefined;
       if (task.input.baseAssetId) {
-        const asset = (await c.query("SELECT path,mime FROM generation_assets WHERE id=$1 AND owner_id=$2 AND (expires_at IS NULL OR expires_at>now())", [task.input.baseAssetId, task.owner_id])).rows[0];
+        const asset = (await c.query("SELECT path,mime FROM generation_assets WHERE id=$1 AND owner_id=$2 AND mime LIKE 'image/%' AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())", [task.input.baseAssetId, task.owner_id])).rows[0];
         if (!asset) throw Error("INVALID_ASSETS");
         const bytes = await readFile(asset.path);
         if (bytes.length > 30 * 1024 * 1024) throw Error("INVALID_IMAGE");

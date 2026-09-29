@@ -1,0 +1,11 @@
+const fs=require('node:fs'),assert=require('node:assert/strict'),ts=require('typescript'),{randomUUID}=require('node:crypto');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+const {validateGeneration}=require('../lib/generation-model.ts'),{videoDraft}=require('../lib/generation-draft.ts'),{submitGeneration}=require('../lib/generation-provider.ts');
+const asset=role=>({id:randomUUID(),role});
+const base={requestId:randomUUID(),model:'minimax-h3',prompt:'Reference video 1 and audio 1',mode:'reference',duration:4,resolution:'768P',ratio:'9:16',assets:[asset('reference_image'),asset('reference_video'),asset('reference_audio')]};
+assert.equal(validateGeneration(base).assets.length,3);
+assert.throws(()=>validateGeneration({...base,mode:'frames'}));
+assert.throws(()=>validateGeneration({...base,assets:Array.from({length:4},()=>asset('reference_video'))}));
+assert.throws(()=>validateGeneration({...base,assets:[asset('first_frame')]}));
+const draft=videoDraft({...base,assets:base.assets.map(a=>({...a,duration:3,name:'test'}))});assert.equal(draft.assets.length,3);assert.equal(draft.assets[2].duration,3);
+(async()=>{let submitted;const original=global.fetch;process.env.MINIMAX_API_KEY='local-mock-only';process.env.ARK_API_KEY='local-mock-only';global.fetch=async(url,opts)=>{submitted=JSON.parse(opts.body);return new Response(JSON.stringify({task_id:'mock',id:'mock'}),{status:200});};try{for(const model of ['minimax-h3','seedance-2.0','seedance-2.5']){await submitGeneration({...base,model},id=>'https://example.invalid/'+id);assert.deepEqual(submitted.content.slice(1).map(x=>x.type),['image_url','video_url','audio_url']);assert.equal(submitted.content[2].role,'reference_video');assert.ok(submitted.content[2].video_url.url.endsWith(base.assets[1].id));assert.equal(submitted.content[3].role,'reference_audio');}}finally{global.fetch=original;}console.log('PASS reference media: mode/count guards, draft retention, typed provider payloads (mocked; no paid request)');})().catch(e=>{console.error(e);process.exitCode=1;});

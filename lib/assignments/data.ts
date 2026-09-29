@@ -48,7 +48,7 @@ export async function assetForGeneration(id: string, owner: string, c: PoolClien
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const file = path.join(directory, `${cloneId}.image`);
   try { await copyFile(source.path, file, constants.COPYFILE_EXCL); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw Error("INVALID_ASSETS"); }
-  await c.query("INSERT INTO generation_assets(id,owner_id,path,mime,filename,expires_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING", [cloneId, owner, file, source.mime, source.filename, source.expires_at]);
+  await c.query("INSERT INTO generation_assets(id,owner_id,path,mime,filename,expires_at,media_duration) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO NOTHING", [cloneId, owner, file, source.mime, source.filename, source.expires_at, source.media_duration]);
   return cloneId;
 }
 export async function assignmentList(owner: string, page = 1) {

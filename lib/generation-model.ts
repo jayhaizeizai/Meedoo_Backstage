@@ -71,7 +71,7 @@ export type GenerationInput = {
   ratio: string;
   assets: {
     id: string;
-    role: "reference_image" | "first_frame" | "last_frame";
+    role: "reference_image" | "reference_video" | "reference_audio" | "first_frame" | "last_frame";
   }[];
 };
 export const uuidPattern =
@@ -95,7 +95,10 @@ export function validateGeneration(value: unknown): GenerationInput {
     !(model.resolutions as readonly string[]).includes(v.resolution) ||
     !generationRatios.includes(v.ratio as (typeof generationRatios)[number]) ||
     !Array.isArray(v.assets) ||
-    v.assets.length > model.maxImages
+    v.assets.length > (model.provider === "ark" && v.model !== "seedance-2.5" ? 12 : model.maxImages + 6) ||
+    v.assets.filter(a => a?.role === "reference_image").length > model.maxImages ||
+    v.assets.filter(a => a?.role === "reference_video").length > 3 ||
+    v.assets.filter(a => a?.role === "reference_audio").length > 3
   )
     throw Error("INVALID_INPUT");
   if (
@@ -105,7 +108,7 @@ export function validateGeneration(value: unknown): GenerationInput {
     throw Error("INVALID_INPUT");
   if (
     v.mode === "reference" &&
-    v.assets.some((a) => a.role !== "reference_image")
+    v.assets.some((a) => !["reference_image", "reference_video", "reference_audio"].includes(a.role))
   )
     throw Error("INVALID_INPUT");
   if (

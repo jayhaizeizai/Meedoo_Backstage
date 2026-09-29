@@ -59,6 +59,7 @@ export async function generationSchema() {
       status text NOT NULL DEFAULT 'pending', attempts integer NOT NULL DEFAULT 0,
       error_code text, next_attempt_at timestamptz NOT NULL DEFAULT now(),
       expires_at timestamptz, credential_sha256 text NOT NULL);
+    ALTER TABLE generation_assets ADD COLUMN IF NOT EXISTS media_duration double precision;
     ALTER TABLE generation_assets ADD COLUMN IF NOT EXISTS expires_at timestamptz;
     ALTER TABLE generation_assets ADD COLUMN IF NOT EXISTS file_deleted boolean NOT NULL DEFAULT false;
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS provider_error jsonb;
@@ -179,6 +180,30 @@ export async function storeGenerationImage(userId: string, file: File) {
     throw Error("INVALID_IMAGE");
   }
 }
+// Reference media is validated locally; provider URLs retain the same signed access policy as images.
+export async function storeGenerationReferenceMedia(userId: string, file: File, kind: "video" | "audio") {
+  const maxBytes = (kind === "video" ? 50 : 15) * 1024 * 1024;
+  const extension = path.extname(file.name).toLowerCase();
+  if (!file.size || file.size > maxBytes || !(kind === "video" ? [".mp4", ".mov"] : [".wav", ".mp3"]).includes(extension)) throw Error("INVALID_REFERENCE_MEDIA");
+  await generationSchema();
+  const id = randomUUID(), filename = path.join(directory(), `${id}${extension}`);
+  await mkdir(directory(), {recursive:true, mode:0o700});
+  await writeFile(filename, Buffer.from(await file.arrayBuffer()), {mode:0o600, flag:"wx"});
+  try {
+    const {stdout} = await run("ffprobe", ["-v","error","-protocol_whitelist","file,pipe","-show_entries","format=duration,format_name:stream=codec_type,codec_name,width,height,r_frame_rate","-of","json",filename], {timeout:15000,maxBuffer:100000});
+    const metadata = JSON.parse(stdout), duration = Number(metadata.format?.duration);
+    const video = metadata.streams?.find((s:any)=>s.codec_type === "video");
+    const audio = metadata.streams?.find((s:any)=>s.codec_type === "audio");
+    if (!Number.isFinite(duration) || duration < 2 || duration > 15) throw Error("INVALID_REFERENCE_MEDIA");
+    if (kind === "video") {
+      const [n,d] = String(video?.r_frame_rate).split("/").map(Number), fps=n/d;
+      if (!/mov|mp4/.test(metadata.format?.format_name ?? "") || !video || !["h264","hevc"].includes(video.codec_name) || video.width<256 || video.height<256 || video.width>5760 || video.height>5760 || video.width/video.height<0.4 || video.width/video.height>2.5 || !Number.isFinite(fps) || fps<23.97 || fps>60 || (audio && !["aac","mp3"].includes(audio.codec_name))) throw Error("INVALID_REFERENCE_MEDIA");
+    } else if (!audio || video || !(extension === ".mp3" ? metadata.format?.format_name === "mp3" : metadata.format?.format_name === "wav")) throw Error("INVALID_REFERENCE_MEDIA");
+    const mime = kind === "video" ? (extension === ".mov" ? "video/quicktime" : "video/mp4") : extension === ".mp3" ? "audio/mpeg" : "audio/wav";
+    await query("INSERT INTO generation_assets(id,owner_id,path,mime,filename,media_duration,expires_at) VALUES($1,$2,$3,$4,$5,$6,now()+interval '14 days')",[id,userId,filename,mime,path.basename(file.name).slice(0,180),duration]);
+    return {id,name:file.name.slice(0,180),url:`/api/generation/assets/${id}`,duration};
+  } catch { await rm(filename,{force:true}); throw Error("INVALID_REFERENCE_MEDIA"); }
+}
 export async function createGeneration(
   user: { openId: string; name: string },
   body: unknown,
@@ -232,11 +257,23 @@ export async function createGeneration(
     if (count >= 3) throw Error("TOO_MANY_TASKS");
     const assets = (
       await client.query(
-        "SELECT id FROM generation_assets WHERE owner_id=$1 AND id=ANY($2::uuid[]) AND (expires_at IS NULL OR expires_at>now()) AND NOT file_deleted",
+        "SELECT id,mime,media_duration FROM generation_assets WHERE owner_id=$1 AND id=ANY($2::uuid[]) AND (expires_at IS NULL OR expires_at>now()) AND NOT file_deleted",
         [user.openId, input.assets.map((a) => a.id)],
       )
     ).rows;
     if (assets.length !== input.assets.length) throw Error("INVALID_ASSETS");
+    for (const asset of input.assets) {
+      const stored = assets.find(a => a.id === asset.id)!;
+      const kind = asset.role === "reference_video" ? "video/" : asset.role === "reference_audio" ? "audio/" : "image/";
+      if (!stored.mime.startsWith(kind)) throw Error("INVALID_ASSETS");
+    }
+    for (const role of ["reference_video", "reference_audio"]) {
+      const refs = input.assets.filter(a => a.role === role);
+      const durations = refs.map(a => Number(assets.find(s => s.id === a.id)?.media_duration));
+      if (durations.some(d => !Number.isFinite(d) || d < 2 || d > 15) || durations.reduce((a,b)=>a+b,0)>15.05)
+        throw Error("REFERENCE_DURATION_EXCEEDED");
+    }
+    if (generationModel(input.model).provider === "ark" && input.assets.some(a=>a.role === "reference_audio") && !input.assets.some(a=>a.role === "reference_image" || a.role === "reference_video")) throw Error("INVALID_ASSETS");
     const id = randomUUID();
     await client.query(
       "INSERT INTO generation_tasks(id,owner_id,owner_name,request_id,requirement,input,status,estimated_cost,pricing_version) VALUES($1,$2,$3,$4,$5,$6,$9,$7,$8)",
@@ -335,10 +372,11 @@ export async function prepareGeneration(
     );
     const refs = new Map<string, string>();
     try {
-      for (const asset of task.input.assets)
+      for (const asset of task.input.assets.filter((a: GenerationInput["assets"][number]) => !["reference_video", "reference_audio"].includes(a.role)))
         await enqueueImageSync(asset.id, task.owner_id);
       await drainImageSyncQueue(deadline);
       for (const asset of task.input.assets) {
+        if (["reference_video", "reference_audio"].includes(asset.role)) { refs.set(asset.id, imageUrl(asset.id)); continue; }
         const sync = await imageSyncStatus(asset.id, task.owner_id);
         if (sync.status === "failed") throw Error("INPUT_UPLOAD_FAILED");
         if (sync.status !== "ready") return;
