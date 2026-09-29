@@ -538,7 +538,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
             )}
             <div className="generation-assets">
               {assets.map((a, i) => (
-                <div key={a.id}>
+                <div key={a.id} className={["reference_video", "reference_audio"].includes(a.role) ? "generation-media-asset" : undefined}>
                   <button
                     type="button"
                     onClick={() =>

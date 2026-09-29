@@ -405,3 +405,11 @@
 .team-generation-filters button { cursor:pointer; }
 
 fieldset.generation-form { min-width:0; margin:0; }
+
+/* Keep multi-media controls inside the generation column on small screens. */
+.generation-frame-inputs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.generation-drop { min-width: 0; overflow-wrap: anywhere; }
+.generation-drop input { width: 100%; min-width: 0; }
+.generation-media-asset { width: 220px; max-width: 100%; min-width: 0; }
+.generation-media-asset > button:first-child { width: 100%; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .generation-frame-inputs { grid-template-columns: minmax(0, 1fr); } }
