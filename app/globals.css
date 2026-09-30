@@ -3117,3 +3117,7 @@ dialog.upload-checklist-dialog::backdrop { background:#17112c70; }
 .upload-checklist-dialog footer { display:flex; justify-content:flex-end; gap:12px; padding:14px 22px; border-top:1px solid #eeeaf8; flex:none; }
 .upload-checklist-dialog footer .choose,.upload-checklist-dialog footer .publish { margin:0; width:auto; padding:12px 18px; }
 @media(max-width:480px) { .upload-checklist-summary { flex-wrap:wrap; } .upload-checklist-dialog header { padding:16px; } .upload-checklist-dialog-body { padding:8px; } }
+
+dialog.upload-checklist-dialog { height:min(760px,85dvh); overflow:hidden; }
+.upload-checklist-dialog .upload-checklist-dialog-body { flex:1 1 0; min-height:0; min-width:0; overflow-y:auto; }
+.upload-checklist-dialog > header,.upload-checklist-dialog > footer { position:static; background:#fff; z-index:auto; }
