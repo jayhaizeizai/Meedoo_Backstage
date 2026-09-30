@@ -3101,3 +3101,19 @@
 .upload-checklist-items input { flex: 0 0 17px; width: 17px; height: 17px; margin: 2px 0 0; accent-color: #7254e8; }
 .upload-checklist-items span { min-width: 0; overflow-wrap: anywhere; }
 .upload-checklist:disabled label { cursor: default; opacity: .6; }
+
+.upload-checklist-summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px; margin:16px 0; border:1px solid #ddd9f4; border-radius:12px; }
+.upload-checklist-summary > div { display:flex; align-items:center; gap:12px; font-size:14px; }
+.upload-checklist-summary span { color:#7254e8; white-space:nowrap; }
+.upload-checklist-summary .choose { margin:0; }
+dialog.upload-checklist-dialog { position:fixed; inset:0; margin:auto; padding:0; width:min(680px,calc(100vw - 24px)); max-width:none; max-height:85dvh; border:1px solid #ddd9f4; border-radius:18px; background:#fff; color:#1a2238; box-shadow:0 20px 70px #19113730; }
+dialog.upload-checklist-dialog[open] { display:flex; flex-direction:column; }
+dialog.upload-checklist-dialog::backdrop { background:#17112c70; }
+.upload-checklist-dialog header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 22px 14px; border-bottom:1px solid #eeeaf8; flex:none; }
+.upload-checklist-dialog h2 { margin:0; font-size:20px; }
+.upload-checklist-dialog header p { margin:8px 0 0; color:#667085; font-size:13px; }
+.upload-checklist-dialog header > button { border:0; background:#f4f1fc; border-radius:8px; width:34px; height:34px; font-size:24px; cursor:pointer; flex:none; }
+.upload-checklist-dialog-body { overflow-y:auto; min-height:0; margin:0; padding:12px 18px; border:0; }
+.upload-checklist-dialog footer { display:flex; justify-content:flex-end; gap:12px; padding:14px 22px; border-top:1px solid #eeeaf8; flex:none; }
+.upload-checklist-dialog footer .choose,.upload-checklist-dialog footer .publish { margin:0; width:auto; padding:12px 18px; }
+@media(max-width:480px) { .upload-checklist-summary { flex-wrap:wrap; } .upload-checklist-dialog header { padding:16px; } .upload-checklist-dialog-body { padding:8px; } }

@@ -127,7 +127,7 @@ export default function UploadPage() {
 
           <section className="card form">
             <PlatformContentForm {...workflow} />
-            <UploadChecklist checked={workflow.checkedItems} toggle={workflow.toggleChecklist} disabled={publishing || !file} />
+            <UploadChecklist file={file} checked={workflow.checkedItems} toggle={workflow.toggleChecklist} disabled={publishing || !file} />
             {!file && <p>{text("先选择视频，再逐项检查；更换视频后需重新勾选。", "Choose a video, then check each item. Changing the video resets the checklist.")}</p>}
             {publishError && (
               <div className="publish-error" role="alert">
