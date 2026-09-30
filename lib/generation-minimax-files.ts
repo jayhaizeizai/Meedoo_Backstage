@@ -4,7 +4,7 @@ import { db, query } from "./db";
 import type { PoolClient } from "pg";
 
 export async function cachedMinimaxImageReference(assetId: string, ownerId: string, client: PoolClient) {
-  const asset = (await client.query("SELECT path FROM generation_assets WHERE id=$1 AND owner_id=$2", [assetId, ownerId])).rows[0];
+  const asset = (await client.query("SELECT path FROM generation_assets WHERE id=$1 AND owner_id=$2 AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())", [assetId, ownerId])).rows[0];
   if (!asset) throw Error("INVALID_ASSETS");
   const digest = createHash("sha256").update(await readFile(asset.path)).digest("hex");
   const credential = createHash("sha256").update(process.env.MINIMAX_API_KEY || "").digest("hex");
@@ -24,13 +24,13 @@ export async function minimaxImageReference(
   if (!key) throw Error("NOT_CONFIGURED");
   const asset = (
     await (connection ? connection.query.bind(connection) : query)(
-      "SELECT path,mime FROM generation_assets WHERE id=$1 AND owner_id=$2",
+      "SELECT path,mime FROM generation_assets WHERE id=$1 AND owner_id=$2 AND NOT file_deleted AND (expires_at IS NULL OR expires_at>now())",
       [assetId, ownerId],
     )
   ).rows[0];
   if (!asset) throw Error("INVALID_ASSETS");
   const bytes = await readFile(asset.path);
-  if (!bytes.length || bytes.length > 30 * 1024 * 1024)
+  if (!bytes.length || bytes.length > (asset.mime.startsWith("video/") ? 50 : asset.mime.startsWith("audio/") ? 15 : 30) * 1024 * 1024)
     throw Error("INVALID_IMAGE");
   const digest = createHash("sha256").update(bytes).digest("hex");
   const credential = createHash("sha256").update(key).digest("hex");
@@ -38,7 +38,7 @@ export async function minimaxImageReference(
   const client = connection || await db().connect();
   let locked = false;
   try {
-    // A non-blocking lock avoids exhausting the DB pool while another task uploads this image.
+    // A non-blocking lock avoids exhausting the DB pool while another task uploads this media.
     locked = (
       await client.query(
         "SELECT pg_try_advisory_lock(hashtextextended($1,7)) locked",
@@ -60,6 +60,10 @@ export async function minimaxImageReference(
       "image/png": "png",
       "image/webp": "webp",
       "image/heic": "heic",
+      "video/mp4": "mp4",
+      "video/quicktime": "mov",
+      "audio/mpeg": "mp3",
+      "audio/wav": "wav",
     };
     if (!ext[asset.mime]) throw Error("INVALID_IMAGE");
     const form = new FormData();

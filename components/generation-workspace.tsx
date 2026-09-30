@@ -109,7 +109,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
   }
   const status = (s: string) =>
     ({
-      preparing: text("正在准备参考图", "Preparing reference images"),
+      preparing: text("正在同步参考素材", "Syncing reference media"),
       submitting: text("正在提交", "Submitting"),
       queued: text("排队中", "Queued"),
       running: text("生成中", "Generating"),

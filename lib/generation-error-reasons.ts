@@ -2,6 +2,8 @@
 // Product wording only: never display the provider's unfiltered message.
 type Reason = readonly [zh: string, en: string];
 const reasons: Record<string, Reason> = {
+  INPUT_MEDIA_UNREACHABLE: ["生成平台无法完整读取参考素材。请重新提交以同步素材；若仍失败，请联系管理员。", "The provider could not fully read the reference media. Submit again to sync the media; contact an administrator if it persists."],
+  INPUT_UPLOAD_FAILED: ["参考素材同步到生成平台失败，尚未提交生成。请检查素材或联系管理员。", "Reference media could not be synced to the provider; generation was not submitted. Check the media or contact an administrator."],
   ModelNotOpen: ["该模型尚未开通，请联系管理员在火山方舟开通。", "This model is not activated. Ask an administrator to activate it in Ark."],
   "OperationDenied.ServiceNotOpen": ["模型服务尚未启用或暂不可用，请联系管理员检查。", "The model service is not enabled or available. Contact an administrator."],
   AuthenticationError: ["生成平台的密钥验证失败，请联系管理员检查配置。", "Provider authentication failed. Ask an administrator to check the API credentials."],

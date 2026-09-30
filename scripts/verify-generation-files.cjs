@@ -304,6 +304,48 @@ require.extensions[".ts"] = (m, f) =>
       const releaser = setInterval(() => { for (const release of releases.splice(0)) release(); }, 10);
       await drain.finally(() => clearInterval(releaser));
     }
+    // A >30 MB video and audio upload before generation, using platform file IDs only.
+    await query("INSERT INTO meedoo_users(open_id,name) VALUES('media-owner','Media Owner')");
+    const mediaOwner = { openId: 'media-owner', name: 'Media Owner' };
+    const videoId = randomUUID(), audioId = randomUUID();
+    for (const [id, mime, bytes] of [[videoId, 'video/mp4', Buffer.alloc(31 * 1024 * 1024, 1)], [audioId, 'audio/wav', Buffer.from('audio fixture')]]) {
+      const f = path.join(temp, id); fs.writeFileSync(f, bytes);
+      await query("INSERT INTO generation_assets(id,owner_id,path,mime,filename,media_duration,expires_at) VALUES($1,'media-owner',$2,$3,'media',5,now()+interval '14 days')", [id, f, mime]);
+    }
+    let mediaUploads = 0, mediaGenerations = 0;
+    global.fetch = async (url, options) => {
+      if (String(url).endsWith('/v1/files/upload')) {
+        mediaUploads++;
+        assert.equal(options.body.get('purpose'), 'video_generation_input');
+        assert.ok(['video/mp4', 'audio/wav'].includes(options.body.get('file').type));
+        return Response.json({ file: { file_id: 'media-' + mediaUploads }, base_resp: { status_code: 0 } });
+      }
+      assert.ok(String(url).endsWith('/v2/video_generation'));
+      const body = JSON.parse(options.body);
+      assert.equal(body.content[1].type, 'video_url');
+      assert.equal(body.content[2].type, 'audio_url');
+      for (const c of body.content.slice(1)) assert.match(c[c.type].url, /^mm_file:\/\//);
+      mediaGenerations++;
+      return Response.json({ task_id: 'media-task-' + mediaGenerations });
+    };
+    const mediaInput = { ...input, requestId: randomUUID(), assets: [{ id: videoId, role: 'reference_video' }, { id: audioId, role: 'reference_audio' }] };
+    const mediaTask = await createGeneration(mediaOwner, mediaInput);
+    assert.equal(mediaGenerations, 0);
+    await Promise.all([prepareGeneration(mediaTask), prepareGeneration(mediaTask)]);
+    assert.equal(mediaUploads, 2); assert.equal(mediaGenerations, 1);
+    const cachedTask = await createGeneration(mediaOwner, { ...mediaInput, requestId: randomUUID() });
+    await prepareGeneration(cachedTask);
+    assert.equal(mediaUploads, 2); assert.equal(mediaGenerations, 2);
+    await assert.rejects(enqueueImageSync(videoId, 'file-other'), /NOT_FOUND/);
+    const badVideo = randomUUID(), badPath = path.join(temp, badVideo);
+    fs.writeFileSync(badPath, 'bad video upload');
+    await query("INSERT INTO generation_assets(id,owner_id,path,mime,filename,media_duration) VALUES($1,'media-owner',$2,'video/mp4','bad',5)", [badVideo,badPath]);
+    global.fetch = async (url) => { assert.ok(String(url).endsWith('/v1/files/upload')); return Response.json({base_resp:{status_code:2013}}, {status:400}); };
+    const badTask = await createGeneration(mediaOwner, { ...mediaInput, requestId: randomUUID(), assets:[{id:badVideo,role:'reference_video'}] });
+    await prepareGeneration(badTask);
+    assert.equal((await query("SELECT status,error_code FROM generation_tasks WHERE id=$1",[badTask])).rows[0].error_code, 'INPUT_UPLOAD_FAILED');
+    assert.equal(mediaGenerations, 2);
+    console.log('PASS video/audio platform uploads, >30MB video, cache reuse, ownership, no public URL fallback or paid submission on upload failure');
     console.log('PASS five-slot global cap, immediate slot refill, cache hit while saturated, coalesced callbacks, eight files drained without timer');
     console.log(
       "PASS file cache: int64 IDs, content deduplication, owner isolation, key rotation, expiry, concurrent upload and submission locks, durable preparation, no paid call after upload failure, no ambiguous resubmission, readable failure code",

@@ -376,11 +376,10 @@ export async function prepareGeneration(
     }
     const refs = new Map<string, string>();
     try {
-      for (const asset of task.input.assets.filter((a: GenerationInput["assets"][number]) => !["reference_video", "reference_audio"].includes(a.role)))
+      for (const asset of task.input.assets)
         await enqueueImageSync(asset.id, task.owner_id);
       await drainImageSyncQueue(deadline);
       for (const asset of task.input.assets) {
-        if (["reference_video", "reference_audio"].includes(asset.role)) { refs.set(asset.id, imageUrl(asset.id)); continue; }
         const sync = await imageSyncStatus(asset.id, task.owner_id);
         if (sync.status === "failed") throw Error("INPUT_UPLOAD_FAILED");
         if (sync.status !== "ready") return;
