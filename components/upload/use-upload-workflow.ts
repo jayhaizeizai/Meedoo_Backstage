@@ -235,7 +235,6 @@ export function useUploadWorkflow() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           uploadSessionId: stage.id,
-          checklist,
           videoType,
           platformContent,
           platforms,

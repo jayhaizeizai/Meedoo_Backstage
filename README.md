@@ -265,4 +265,4 @@ MiniMax reference videos and audio use the same durable upload queue and owner/c
 
 ### Upload checklist
 
-`lib/upload-checklist.ts` defines the versioned 16-item bilingual pre-upload checklist. Every item must be individually checked for each selected video. Choosing another file or successfully submitting resets confirmations. Both `/api/uploads/init` and `/api/upload-post/publish` require the complete current checklist; resumable uploads still recheck before review submission. Run `node scripts/verify-upload-checklist.cjs` for validation and route-gating regression checks.
+`lib/upload-checklist.ts` defines the versioned 16-item bilingual pre-upload checklist. Every item must be individually checked for each selected video. Choosing another file or successfully submitting resets confirmations. This is a frontend-only workflow guard; upload and publish APIs remain unchanged. Run `node scripts/verify-upload-checklist.cjs` for frontend validation checks.

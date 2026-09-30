@@ -1,4 +1,3 @@
-import { validUploadChecklist } from "../../../../lib/upload-checklist";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "../../../../lib/server-auth";
 import {
@@ -15,15 +14,10 @@ export async function POST(request: NextRequest) {
       { status: 401 },
     );
   const body = (await request.json().catch(() => ({}))) as {
-    checklist?: unknown;
     filename?: string;
     contentType?: string;
     size?: number;
   };
-  if (!validUploadChecklist(body.checklist)) return NextResponse.json(
-    { success: false, code: "CHECKLIST_REQUIRED", message: "请逐项完成上传前检查清单 / Complete every pre-upload checklist item." },
-    { status: 400 },
-  );
   const filename = String(body.filename ?? "").trim();
   const contentType = String(body.contentType ?? "").toLowerCase();
   const size = Number(body.size);

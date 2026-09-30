@@ -26,7 +26,6 @@ export async function prepareVideoUpload(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        checklist,
         filename: file.name,
         contentType: file.type,
         size: file.size,
