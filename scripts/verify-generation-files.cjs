@@ -211,6 +211,20 @@ require.extensions[".ts"] = (m, f) =>
       ).status,
       "submitted_unknown",
     );
+    // Mock Ark HTTPS transport; no paid provider request leaves this test.
+    const https = require('node:https'), originalRequest = https.request;
+    https.request = (url, options, callback) => {
+      const req = new (require('node:events').EventEmitter)();
+      req.end = async () => {
+        try {
+          const result = await global.fetch(url, options);
+          const res = new (require('node:stream').PassThrough)();
+          res.statusCode = result.status; res.headers = {};
+          callback(res); res.end(Buffer.from(await result.arrayBuffer()));
+        } catch (e) { req.emit('error', e); }
+      };
+      return req;
+    };
     // Seedance is queued before any network call; two workers submit only once.
     process.env.ARK_API_KEY = "fake-ark-key";
     await query("INSERT INTO meedoo_users(open_id,name) VALUES('ark-owner','Ark Owner')");
@@ -222,7 +236,7 @@ require.extensions[".ts"] = (m, f) =>
       arkCalls++;
       return Response.json({ id: 'ark-test-id' });
     };
-    const arkInput = { ...input, model: 'seedance-2.0-fast', requestId: randomUUID(), assets: [], mode: 'reference', resolution: '720P' };
+    const arkInput = { ...input, model: 'seedance-2.0-fast', requestId: randomUUID(), assets: [], mode: 'reference', resolution: '720p' };
     const arkUser = { openId: 'ark-owner', name: 'Ark Owner' };
     try {
       const arkId = await createGeneration(arkUser, arkInput);
@@ -239,7 +253,7 @@ require.extensions[".ts"] = (m, f) =>
       await prepareGeneration(unknown);
       assert.equal(arkCalls, 2);
       assert.equal((await query("SELECT status FROM generation_tasks WHERE id=$1", [unknown])).rows[0].status, 'submitted_unknown');
-    } finally { AbortSignal.timeout = originalTimeout; }
+    } finally { AbortSignal.timeout = originalTimeout; https.request = originalRequest; }
     const parallelIds = [];
     for (let i = 0; i < 8; i++) {
       const id = randomUUID(), file = path.join(temp, id + ".png");

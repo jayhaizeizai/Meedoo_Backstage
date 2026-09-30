@@ -1,3 +1,4 @@
+import { request as httpsRequest } from "node:https";
 import { generationModel, type GenerationInput } from "./generation-model";
 
 export function safeProviderDiagnostic(data: any, requestId?: string | null) {
@@ -30,6 +31,28 @@ export function providerConfigured(model?: string) {
     ],
   );
 }
+// Native HTTPS avoids fetch's shorter implicit response-header deadline for slow Ark submissions.
+async function arkSubmission(url: string, headers: Record<string, string>, body: unknown): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(url, { method: "POST", headers, signal: AbortSignal.timeout(600000) }, res => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on("data", (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > 1024 * 1024) { req.destroy(new Error("PROVIDER_RESPONSE_TOO_LARGE")); return; }
+        chunks.push(chunk);
+      });
+      res.on("error", reject);
+      res.on("end", () => {
+        const status = res.statusCode || 502;
+        if (status >= 300 && status < 400) { reject(new Error("PROVIDER_REDIRECT")); return; }
+        resolve(new Response(Buffer.concat(chunks), { status, headers: { "x-request-id": String(res.headers["x-request-id"] || "") } }));
+      });
+    });
+    req.on("error", reject);
+    req.end(JSON.stringify(body));
+  });
+}
 async function request(
   model: string | undefined,
   endpoint: string,
@@ -38,7 +61,9 @@ async function request(
   const ark = generationModel(model).provider === "ark";
   const key = process.env[ark ? "ARK_API_KEY" : "MINIMAX_API_KEY"];
   if (!key) throw Error("NOT_CONFIGURED");
-  const response = await fetch(
+  const response = ark && body
+    ? await arkSubmission("https://ark.cn-beijing.volces.com/api/v3" + endpoint, { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body)
+    : await fetch(
     (ark
       ? "https://ark.cn-beijing.volces.com/api/v3"
       : "https://api.minimaxi.com") + endpoint,
