@@ -46,7 +46,9 @@ async function arkSubmission(url: string, headers: Record<string, string>, body:
       res.on("end", () => {
         const status = res.statusCode || 502;
         if (status >= 300 && status < 400) { reject(new Error("PROVIDER_REDIRECT")); return; }
-        resolve(new Response(Buffer.concat(chunks), { status, headers: { "x-request-id": String(res.headers["x-request-id"] || "") } }));
+        try {
+          resolve(new Response([204, 205, 304].includes(status) ? null : Buffer.concat(chunks), { status, headers: { "x-request-id": String(res.headers["x-request-id"] || "") } }));
+        } catch (error) { reject(error); }
       });
     });
     req.on("error", reject);
