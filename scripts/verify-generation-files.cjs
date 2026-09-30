@@ -211,6 +211,35 @@ require.extensions[".ts"] = (m, f) =>
       ).status,
       "submitted_unknown",
     );
+    // Seedance is queued before any network call; two workers submit only once.
+    process.env.ARK_API_KEY = "fake-ark-key";
+    await query("INSERT INTO meedoo_users(open_id,name) VALUES('ark-owner','Ark Owner')");
+    let arkCalls = 0;
+    const originalTimeout = AbortSignal.timeout, limits = [];
+    AbortSignal.timeout = (ms) => { limits.push(ms); return originalTimeout(ms); };
+    global.fetch = async (url) => {
+      assert.ok(String(url).endsWith('/contents/generations/tasks'));
+      arkCalls++;
+      return Response.json({ id: 'ark-test-id' });
+    };
+    const arkInput = { ...input, model: 'seedance-2.0-fast', requestId: randomUUID(), assets: [], mode: 'reference', resolution: '720P' };
+    const arkUser = { openId: 'ark-owner', name: 'Ark Owner' };
+    try {
+      const arkId = await createGeneration(arkUser, arkInput);
+      assert.equal(arkCalls, 0);
+      assert.equal((await query("SELECT status FROM generation_tasks WHERE id=$1", [arkId])).rows[0].status, 'preparing');
+      await Promise.all([prepareGeneration(arkId), prepareGeneration(arkId)]);
+      assert.equal(arkCalls, 1);
+      assert.ok(limits.includes(600000));
+      assert.equal((await query("SELECT status FROM generation_tasks WHERE id=$1", [arkId])).rows[0].status, 'queued');
+      assert.equal(await createGeneration(arkUser, arkInput), arkId);
+      global.fetch = async () => { arkCalls++; throw new DOMException('simulated', 'TimeoutError'); };
+      const unknown = await createGeneration(arkUser, { ...arkInput, requestId: randomUUID() });
+      await prepareGeneration(unknown);
+      await prepareGeneration(unknown);
+      assert.equal(arkCalls, 2);
+      assert.equal((await query("SELECT status FROM generation_tasks WHERE id=$1", [unknown])).rows[0].status, 'submitted_unknown');
+    } finally { AbortSignal.timeout = originalTimeout; }
     const parallelIds = [];
     for (let i = 0; i < 8; i++) {
       const id = randomUUID(), file = path.join(temp, id + ".png");

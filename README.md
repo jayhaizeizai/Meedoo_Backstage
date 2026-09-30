@@ -256,3 +256,7 @@ Deployment needs ffprobe and an HTTP upload body limit of at least 51 MB (`deplo
 Seedream 5.0 Pro accepts up to 10 ordered reference images. The image workspace supports multi-file upload and adding from upload history. Selecting a generated version makes it the sole reference for continued editing. Each reference is numbered in upload order; removing one renumbers subsequent references. `baseAssetIds` is the new input field; the worker and validator still accept historical `baseAssetId` requests. Drafts migrate the former single `base` into `bases` automatically. All references are checked for ownership, expiration, deletion and image MIME before queueing and again before submission. Multiple references use signed asset URLs to avoid large Base64 requests; the existing single-image path remains unchanged.
 
 Checks: `node scripts/verify-seedream-references.cjs` and `node scripts/verify-seedream-reference-worker.cjs`. The worker test mocks storage, database and provider: it does not consume generation credit.
+
+### Seedance background submission
+
+Seedance tasks are persisted as `preparing` and submitted by the generation worker, outside the browser request. Ark submissions wait up to 10 minutes. Interrupted submissions older than 15 minutes become uncertain and are never automatically resubmitted. The sync route/client allow 20 minutes; install `deploy/meedoo-generation.service` (1250 seconds) and daemon-reload when deploying this change. Existing uncertain tasks are not retried.

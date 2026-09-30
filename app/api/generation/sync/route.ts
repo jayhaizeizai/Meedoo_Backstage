@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncGenerationTasks } from "../../../../lib/generation";
 import { runSeedreamQueue, cleanupSeedreamImages } from "../../../../lib/seedream";
 export const runtime = "nodejs";
-export const maxDuration = 600;
+export const maxDuration = 1200;
 export async function POST(request: NextRequest) {
   if (
     !process.env.CRON_SECRET ||

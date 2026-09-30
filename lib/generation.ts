@@ -294,8 +294,7 @@ export async function createGeneration(
         generationModel(input.model).provider === "ark"
           ? "not-estimated"
           : "cn-2026-09-16",
-        generationModel(input.model).provider === "minimax" &&
-        input.assets.length
+        (generationModel(input.model).provider === "ark" || input.assets.length > 0)
           ? "preparing"
           : "submitting",
       ],
@@ -304,8 +303,7 @@ export async function createGeneration(
   });
   if (!reserved.fresh) return reserved.id;
   if (
-    generationModel(input.model).provider === "minimax" &&
-    input.assets.length
+    (generationModel(input.model).provider === "ark" || input.assets.length > 0)
   )
     return reserved.id;
   await submitReservedGeneration(reserved.id, input, imageUrl);
@@ -370,6 +368,12 @@ export async function prepareGeneration(
       "UPDATE generation_tasks SET last_checked_at=now() WHERE id=$1",
       [id],
     );
+    // Ark submission runs durably outside the browser request. The same lock prevents duplicate paid calls.
+    if (generationModel(task.input.model).provider === "ark") {
+      await client.query("UPDATE generation_tasks SET status='submitting',updated_at=now() WHERE id=$1", [id]);
+      await submitReservedGeneration(id, task.input, imageUrl);
+      return;
+    }
     const refs = new Map<string, string>();
     try {
       for (const asset of task.input.assets.filter((a: GenerationInput["assets"][number]) => !["reference_video", "reference_audio"].includes(a.role)))
@@ -650,7 +654,7 @@ export async function syncGenerationTasks() {
   await cleanupGenerationOutputs();
   if (!process.env.MINIMAX_API_KEY && !process.env.ARK_API_KEY) return;
   await query(
-    "UPDATE generation_tasks SET status='submitted_unknown',error_code='SUBMISSION_UNCERTAIN' WHERE status='submitting' AND updated_at<now()-interval '5 minutes'",
+    "UPDATE generation_tasks SET status='submitted_unknown',error_code='SUBMISSION_UNCERTAIN' WHERE status='submitting' AND updated_at<now()-interval '15 minutes'",
   );
   const tasks = await query(
     "SELECT id FROM generation_tasks WHERE provider_id IS NOT NULL AND media_deleted_at IS NULL AND (media_expires_at IS NULL OR media_expires_at>now()) AND (status IN ('queued','running') OR (status='succeeded' AND media_path IS NULL)) AND created_at>now()-interval '7 days' ORDER BY last_checked_at NULLS FIRST LIMIT 5",

@@ -7,6 +7,6 @@ Type=oneshot
 WorkingDirectory=/opt/meedoo
 EnvironmentFile=/etc/meedoo/meedoo.env
 ExecStart=/usr/bin/node /opt/meedoo/scripts/sync-generation.mjs
-TimeoutStartSec=650
+TimeoutStartSec=1250
 UMask=0077
 

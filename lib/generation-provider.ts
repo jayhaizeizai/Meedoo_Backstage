@@ -50,7 +50,7 @@ async function request(
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
       cache: "no-store",
-      signal: AbortSignal.timeout(body ? 45000 : 15000),
+      signal: AbortSignal.timeout(body ? (ark ? 600000 : 45000) : 15000),
       redirect: "error",
     },
   );
