@@ -1,4 +1,5 @@
 "use client";
+import { UploadChecklist } from "../../components/upload/upload-checklist";
 import { useRouter } from "next/navigation";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
@@ -126,6 +127,8 @@ export default function UploadPage() {
 
           <section className="card form">
             <PlatformContentForm {...workflow} />
+            <UploadChecklist checked={workflow.checkedItems} toggle={workflow.toggleChecklist} disabled={publishing || !file} />
+            {!file && <p>{text("先选择视频，再逐项检查；更换视频后需重新勾选。", "Choose a video, then check each item. Changing the video resets the checklist.")}</p>}
             {publishError && (
               <div className="publish-error" role="alert">
                 ⚠ {publishError}
@@ -156,8 +159,8 @@ export default function UploadPage() {
                       `Uploading ${uploadProgress ?? 0}%`,
                     )
                 : text(
-                    "提交已启用平台审批 →",
-                    "Submit enabled platforms for review →",
+                    workflow.checklistComplete ? "提交已启用平台审批 →" : `请完成检查清单（${workflow.checkedItems.length}/16）`,
+                    workflow.checklistComplete ? "Submit enabled platforms for review →" : `Complete checklist (${workflow.checkedItems.length}/16)`,
                   )}
             </button>
             {uploadProgress !== null && (

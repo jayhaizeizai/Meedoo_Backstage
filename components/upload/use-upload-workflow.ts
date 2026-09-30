@@ -1,4 +1,5 @@
 "use client";
+import { uploadChecklistVersion, validUploadChecklist } from "../../lib/upload-checklist";
 import { type VideoType } from "../../lib/video-type";
 import { prepareVideoUpload } from "./upload-transport";
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
@@ -28,6 +29,13 @@ export function useUploadWorkflow() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [videoType, setVideoType] = useState<VideoType | "">("");
+  const [checkedItems, setCheckedItems] = useState<string[]>([]);
+  const checklist = { version: uploadChecklistVersion, checked: checkedItems };
+  const checklistComplete = validUploadChecklist(checklist);
+  function toggleChecklist(id: string) {
+    if (publishing) return;
+    setCheckedItems(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
+  }
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [platformContent, setPlatformContent] =
@@ -78,6 +86,7 @@ export function useUploadWorkflow() {
   }, [job?.requestId, job?.status]);
 
   function chooseFile(nextFile?: File) {
+    if (publishing) return;
     if (!nextFile) {
       fileInputRef.current?.click();
       return;
@@ -139,6 +148,7 @@ export function useUploadWorkflow() {
     }
     setStagedUpload(restored);
     setFile(nextFile);
+    setCheckedItems([]);
     setPlatformContent(
       (current) =>
         Object.fromEntries(
@@ -217,6 +227,7 @@ export function useUploadWorkflow() {
         setStagedUpload,
         setUploadProgress,
         text,
+        checklist,
       );
       setUploadProgress(100);
       const publishResponse = await fetch("/api/upload-post/publish", {
@@ -224,6 +235,7 @@ export function useUploadWorkflow() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           uploadSessionId: stage.id,
+          checklist,
           videoType,
           platformContent,
           platforms,
@@ -247,6 +259,7 @@ export function useUploadWorkflow() {
       });
       setStagedUpload(null);
       setFile(null);
+      setCheckedItems([]);
       setVideoType("");
       if (fileInputRef.current) fileInputRef.current.value = "";
       window.localStorage.removeItem("meedoo_staged_upload");
@@ -287,7 +300,9 @@ export function useUploadWorkflow() {
           MAX_YOUTUBE_DESCRIPTION_BYTES
       );
     });
-  const validationError = !videoType
+  const validationError = !checklistComplete
+    ? text("请逐项勾选全部上传前检查项。", "Check every pre-upload checklist item.")
+    : !videoType
     ? text("请选择视频类型（创作目标）。", "Choose a video type (content goal).")
     : invalidPlatform
     ? text(
@@ -323,6 +338,7 @@ export function useUploadWorkflow() {
         : { zh: "等待 Upload-Post 配置", en: "Awaiting Upload-Post setup" };
 
   return {
+    checkedItems, toggleChecklist, checklistComplete,
     videoType,
     setVideoType,
     fileInputRef,

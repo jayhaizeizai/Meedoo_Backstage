@@ -1,3 +1,4 @@
+import { validUploadChecklist } from "../../../../lib/upload-checklist";
 import { isVideoType } from "../../../../lib/video-type";
 import { platformSelectionEnabled } from "../../../../lib/platform-settings";
 import { uploadTitle } from "../../../../lib/upload-title";
@@ -26,11 +27,16 @@ export async function POST(request: NextRequest) {
   if (!user)
     return error("Sign in with Lark before submitting.", 401, "AUTH_REQUIRED");
   const body = (await request.json().catch(() => ({}))) as {
+    checklist?: unknown;
     videoType?: unknown;
     uploadSessionId?: string;
     platformContent?: unknown;
     platforms?: string[];
   };
+  if (!validUploadChecklist(body.checklist)) return NextResponse.json(
+    { success: false, code: "CHECKLIST_REQUIRED", message: "请逐项完成上传前检查清单 / Complete every pre-upload checklist item." },
+    { status: 400 },
+  );
   if (!isVideoType(body.videoType))
     return error("请选择视频类型 / Choose a video type.", 400, "VIDEO_TYPE_REQUIRED");
   const id = String(body.uploadSessionId ?? "");

@@ -262,3 +262,7 @@ Checks: `node scripts/verify-seedream-references.cjs` and `node scripts/verify-s
 Seedance tasks are persisted as `preparing` and submitted by the generation worker, outside the browser request. Ark submissions wait up to 10 minutes. Interrupted submissions older than 15 minutes become uncertain and are never automatically resubmitted. The sync route/client allow 20 minutes; install `deploy/meedoo-generation.service` (1250 seconds) and daemon-reload when deploying this change. Existing uncertain tasks are not retried.
 
 MiniMax reference videos and audio use the same durable upload queue and owner/credential/content cache as images. All MiniMax reference URLs are `mm_file://` before a paid submission; media upload failures never fall back to a public URL. Limits remain 50 MB video / 15 MB audio / 30 MB image, with five shared transfer slots.
+
+### Upload checklist
+
+`lib/upload-checklist.ts` defines the versioned 16-item bilingual pre-upload checklist. Every item must be individually checked for each selected video. Choosing another file or successfully submitting resets confirmations. Both `/api/uploads/init` and `/api/upload-post/publish` require the complete current checklist; resumable uploads still recheck before review submission. Run `node scripts/verify-upload-checklist.cjs` for validation and route-gating regression checks.

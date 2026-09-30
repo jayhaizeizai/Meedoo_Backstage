@@ -3091,3 +3091,13 @@
 .metric-detail-content > header button { flex-shrink:0; width:40px; height:40px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-size:24px; cursor:pointer; }
 .metric-detail-dialog .follower-tooltip { z-index:1; }
 @media(max-width:620px) { .metric-detail-content { padding:16px; } .account-followers-card { padding:16px; } }
+
+.upload-checklist { margin: 18px 0; padding: 16px; min-width: 0; border: 1px solid #ddd9f4; border-radius: 14px; box-shadow: none; }
+.upload-checklist legend { padding: 0 6px; font-weight: 700; font-size: 15px; }
+.upload-checklist > p { margin: 0 0 12px; color: #667085; font-size: 12px; }
+.upload-checklist-items { display: grid; gap: 4px; }
+.upload-checklist-items label { display: flex; align-items: flex-start; gap: 10px; padding: 8px; font-size: 13px; line-height: 1.55; cursor: pointer; border-radius: 8px; }
+.upload-checklist-items label:has(input:checked) { background: #f3f0ff; }
+.upload-checklist-items input { flex: 0 0 17px; width: 17px; height: 17px; margin: 2px 0 0; accent-color: #7254e8; }
+.upload-checklist-items span { min-width: 0; overflow-wrap: anywhere; }
+.upload-checklist:disabled label { cursor: default; opacity: .6; }

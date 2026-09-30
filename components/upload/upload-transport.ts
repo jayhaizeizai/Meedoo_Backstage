@@ -1,3 +1,4 @@
+import { validUploadChecklist } from "../../lib/upload-checklist";
 import type { StagedUpload } from "./upload-model";
 // Browser-only transport; callbacks keep React state out of the upload protocol.
 export async function prepareVideoUpload(
@@ -6,7 +7,9 @@ export async function prepareVideoUpload(
   setStagedUpload: (stage: StagedUpload) => void,
   setUploadProgress: (progress: number) => void,
   text: (zh: string, en: string) => string,
+  checklist: { version: string; checked: string[] },
 ) {
+  if (!validUploadChecklist(checklist)) throw new Error(text("请完成上传前检查清单。", "Complete the pre-upload checklist."));
   let stage = stagedUpload;
   if (stage) {
     const response = await fetch(`/api/uploads/${stage.id}`, {
@@ -23,6 +26,7 @@ export async function prepareVideoUpload(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        checklist,
         filename: file.name,
         contentType: file.type,
         size: file.size,
