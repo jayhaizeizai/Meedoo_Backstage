@@ -364,9 +364,7 @@ export function GenerationWorkspace({ownerId,onReset,scope,readOnly=false,onBusy
                 )}
                 {task.provider_error && (
                   <p className="data-message" role="status">
-                    {task.input.model?.startsWith("seedance-")
-                      ? text(...seedanceErrorReason(task.provider_error.code))
-                      : text("生成平台返回错误，请凭下方错误码联系管理员。", "The provider returned an error. Contact an administrator with the code below.")}
+                    {text(...seedanceErrorReason(task.error_code === "INPUT_MEDIA_UNREACHABLE" ? task.error_code : task.provider_error.code))}
                     {task.provider_error.code && <><br />{text("错误码：", "Error: ")}{task.provider_error.code}</>}
                     {task.provider_error.parameter && <><br />{text("相关参数：", "Parameter: ")}{task.provider_error.parameter}</>}
                     {task.provider_error.request_id && <><br />{text("请求编号：", "Request ID: ")}{task.provider_error.request_id}</>}
