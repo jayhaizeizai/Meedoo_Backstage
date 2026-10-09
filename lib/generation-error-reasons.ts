@@ -2,6 +2,7 @@
 // Product wording only: never display the provider's unfiltered message.
 type Reason = readonly [zh: string, en: string];
 const reasons: Record<string, Reason> = {
+  "1026": ["内容审核未通过。MiniMax 拦截了此任务，但未说明是提示词、参考素材还是生成结果触发审核。如认为是误判，请凭任务编号联系平台核查。", "Content review failed. MiniMax blocked this task without specifying whether the prompt, reference media or generated output triggered moderation. Contact provider support with the task ID if this seems incorrect."],
   INPUT_MEDIA_UNREACHABLE: ["生成平台无法完整读取参考素材。请重新提交以同步素材；若仍失败，请联系管理员。", "The provider could not fully read the reference media. Submit again to sync the media; contact an administrator if it persists."],
   INPUT_UPLOAD_FAILED: ["参考素材同步到生成平台失败，尚未提交生成。请检查素材或联系管理员。", "Reference media could not be synced to the provider; generation was not submitted. Check the media or contact an administrator."],
   ModelNotOpen: ["该模型尚未开通，请联系管理员在火山方舟开通。", "This model is not activated. Ask an administrator to activate it in Ark."],

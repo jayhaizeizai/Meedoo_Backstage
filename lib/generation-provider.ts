@@ -7,7 +7,7 @@ export function safeProviderDiagnostic(data: any, requestId?: string | null) {
   const parameter = /(?:parameter|field)\s+[`'"]([^`'"]+)[`'"]/i.exec(message)?.[1];
   // Preserve only structured identifiers and known field names; never upstream prose or URLs.
   return {
-    code: token(data?.error?.code),
+    code: token(typeof data?.error?.code === "number" && Number.isSafeInteger(data.error.code) ? String(data.error.code) : data?.error?.code),
     request_id: token(requestId) || token(data?.request_id) || token(/Request id:\s*([a-zA-Z0-9_-]+)/i.exec(message)?.[1]),
     parameter: parameter && /^(model|content(?:\[\d+\])?(?:\.(?:image_url|url|text|role))?|duration|resolution|ratio|generate_audio)$/.test(parameter) ? parameter : undefined,
   };

@@ -482,3 +482,12 @@ if (process.argv.includes("--db"))
     console.error(e.name, e.message);
     process.exitCode = 1;
   });
+
+// MiniMax returns numeric or string codes. Keep identifiers, never raw provider prose.
+for (const code of [1026, "1026"]) {
+  const detail = safeProviderDiagnostic({error:{code,message:"content blocked by moderation https://private/?token=secret"}});
+  assert.equal(detail.code, "1026");
+  assert.ok(!JSON.stringify(detail).includes("secret"));
+  assert.match(seedanceErrorReason(detail.code)[0], /内容审核未通过/);
+  assert.match(seedanceErrorReason(detail.code)[1], /Content review failed/);
+}

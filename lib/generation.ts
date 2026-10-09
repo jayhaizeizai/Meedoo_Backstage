@@ -562,7 +562,7 @@ export async function refreshGeneration(id: string, userId?: string) {
             ? "INPUT_MEDIA_UNREACHABLE"
             : "GENERATION_FAILED"
           : null,
-        result.status === "failed" && generationModel(task.input.model).provider === "ark"
+        result.status === "failed"
           ? JSON.stringify(safeProviderDiagnostic(result)) : null,
       ],
     );
