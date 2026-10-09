@@ -488,6 +488,6 @@ for (const code of [1026, "1026"]) {
   const detail = safeProviderDiagnostic({error:{code,message:"content blocked by moderation https://private/?token=secret"}});
   assert.equal(detail.code, "1026");
   assert.ok(!JSON.stringify(detail).includes("secret"));
-  assert.match(seedanceErrorReason(detail.code)[0], /内容审核未通过/);
+  assert.equal(seedanceErrorReason(detail.code)[0], "审核不通过");
   assert.match(seedanceErrorReason(detail.code)[1], /Content review failed/);
 }
