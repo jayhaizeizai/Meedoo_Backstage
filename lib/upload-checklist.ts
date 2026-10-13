@@ -1,4 +1,4 @@
-export const uploadChecklistVersion = "2026-09-30-v1";
+export const uploadChecklistVersion = "2026-10-13-v1";
 export const uploadChecklistItems = [
   {
     "id": "resonance",
@@ -19,6 +19,11 @@ export const uploadChecklistItems = [
     "id": "ending",
     "zh": "结尾是否能帮助达到内容的目标？",
     "en": "Does the ending support the content goal?"
+  },
+  {
+    "id": "music-beat",
+    "zh": "音乐是否卡点？",
+    "en": "Is the editing synced to the music beats?"
   },
   {
     "id": "cover-title",
