@@ -65,7 +65,7 @@ export async function runReviewPreviews() {
       await c.query("UPDATE review_previews SET status='running',attempts=attempts+1,updated_at=now() WHERE upload_id=$1", [job.upload_id]);
       try {
         const before = await signature(job.media_path);
-        await exec("ffmpeg", ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", job.media_path,
+        await exec("nice", ["-n", "10", "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-threads", "2", "-i", job.media_path,
           "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn",
           "-vf", "scale=w='min(720,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30,setsar=1",
           "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "2M", "-bufsize", "4M",
