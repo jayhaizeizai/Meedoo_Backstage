@@ -266,3 +266,7 @@ MiniMax reference videos and audio use the same durable upload queue and owner/c
 ### Upload checklist
 
 `lib/upload-checklist.ts` defines the versioned 17-item bilingual pre-upload checklist. Every item must be individually checked for each selected video. Choosing another file or successfully submitting resets confirmations. This is a frontend-only workflow guard; upload and publish APIs remain unchanged. Run `node scripts/verify-upload-checklist.cjs` for frontend validation checks.
+
+### 审批视频流畅预览
+
+审批页支持后台生成的 720p H.264 预览与原画切换；原片继续用于发布。需要安装独立预览定时任务，详见 [预览部署与验证](docs/review-previews.md)。

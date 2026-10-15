@@ -4,6 +4,9 @@ import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "../../../../lib/server-auth";
 import { getReviewRecord } from "../../../../lib/approvals";
+import { parseByteRange } from "../../../../lib/http-byte-range";
+import { getReviewPreview } from "../../../../lib/review-preview";
+
 type Context = { params: Promise<{ id: string }> };
 export const runtime = "nodejs";
 async function serve(request: NextRequest, { params }: Context, head = false) {
@@ -15,7 +18,11 @@ async function serve(request: NextRequest, { params }: Context, head = false) {
       { success: false, message: "Media unavailable." },
       { status: 404 },
     );
-  const info = await stat(record.media_path).catch(() => null);
+  const previewRequested = request.nextUrl.searchParams.get("variant") === "preview-v1";
+  const preview = previewRequested ? await getReviewPreview(record.id, record.media_path, false).catch(() => null) : null;
+  // Never switch representations during range requests: each URL identifies one file.
+  const file = previewRequested ? preview?.path : record.media_path;
+  const info = file ? await stat(file).catch(() => null) : null;
   if (!info?.isFile() || info.size === 0)
     return NextResponse.json(
       { success: false, message: "Media unavailable." },
@@ -24,17 +31,14 @@ async function serve(request: NextRequest, { params }: Context, head = false) {
   let start = 0,
     end = info.size - 1,
     status = 200;
-  const range = request.headers.get("range");
+  const range = head ? null : request.headers.get("range");
   if (range) {
-    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-    if (!match) return new Response(null, { status: 416 });
-    start = match[1] ? Number(match[1]) : 0;
-    end = match[2] ? Number(match[2]) : info.size - 1;
-    if (start < 0 || end < start || end >= info.size)
-      return new Response(null, { status: 416 });
+    const parsed = parseByteRange(range, info.size);
+    if (!parsed) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${info.size}`, "Cache-Control": "private, no-store" } });
+    ({ start, end } = parsed);
     status = 206;
   }
-  const type = record.original_filename?.toLowerCase().endsWith(".webm")
+  const type = previewRequested ? "video/mp4" : record.original_filename?.toLowerCase().endsWith(".webm")
     ? "video/webm"
     : record.original_filename?.toLowerCase().endsWith(".mov")
       ? "video/quicktime"
@@ -50,7 +54,7 @@ async function serve(request: NextRequest, { params }: Context, head = false) {
   if (head) return new Response(null, { status, headers });
   return new Response(
     Readable.toWeb(
-      createReadStream(record.media_path, { start, end }),
+      createReadStream(file!, { start, end }),
     ) as ReadableStream<Uint8Array>,
     { status, headers },
   );

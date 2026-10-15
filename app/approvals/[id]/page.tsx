@@ -86,6 +86,10 @@ export default function ApprovalDetail() {
   const [approver, setApprover] = useState(false);
   const [history, setHistory] = useState<History[]>([]);
   const [mediaUrl, setMediaUrl] = useState("");
+  const [originalUrl, setOriginalUrl] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewStatus, setPreviewStatus] = useState("");
+  const [checkingPreview, setCheckingPreview] = useState(false);
   const [mediaUnavailable, setMediaUnavailable] = useState(false);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
@@ -111,10 +115,25 @@ export default function ApprovalDetail() {
         setApprover(payload.approver);
         setHistory(payload.history ?? []);
         setMediaUrl(payload.mediaUrl);
+        setOriginalUrl(payload.originalUrl);
+        setPreviewUrl(payload.previewUrl);
+        setPreviewStatus(payload.previewStatus);
         setMediaUnavailable(!payload.mediaUrl);
       })
       .catch((cause) => setError(cause.message));
   }, [params.id]);
+
+  async function refreshPreview() {
+    setCheckingPreview(true);
+    try {
+      const response = await fetch(`/api/approvals/${params.id}`, { cache: "no-store" });
+      if (!response.ok) throw Error("PREVIEW_CHECK_FAILED");
+      const payload = await response.json();
+      setPreviewUrl(payload.previewUrl); setPreviewStatus(payload.previewStatus);
+      if (payload.previewUrl) { setMediaUrl(payload.previewUrl); setMediaUnavailable(false); }
+    } catch { setError(text("暂时无法检查预览，请稍后再试。", "Could not check the preview. Try again shortly.")); }
+    finally { setCheckingPreview(false); }
+  }
 
   function updatePlatform(
     platform: string,
@@ -233,13 +252,26 @@ export default function ApprovalDetail() {
         {item && (
           <div className="approval-workspace">
             <section className="review-player card">
+              <div className="review-preview-controls">
+                <span>{mediaUrl === previewUrl ? text("流畅预览 · 720p", "Smooth preview · 720p") : text("原画视频", "Original video")}</span>
+                {previewUrl && <button type="button" className="choose" onClick={() => { setMediaUrl(mediaUrl === previewUrl ? originalUrl : previewUrl); setMediaUnavailable(false); }}>
+                  {mediaUrl === previewUrl ? text("查看原画", "View original") : text("切换流畅预览", "Use smooth preview")}
+                </button>}
+                {!previewUrl && previewStatus === "queued" && <>
+                  <small>{text("流畅预览准备中，可先查看原画。", "Preparing a smooth preview. The original is available now.")}</small>
+                  <button type="button" className="choose" disabled={checkingPreview} onClick={() => void refreshPreview()}>{text("检查预览", "Check preview")}</button>
+                </>}
+              </div>
               {mediaUrl && !mediaUnavailable ? (
                 <video
                   src={mediaUrl}
                   controls
                   playsInline
                   preload="metadata"
-                  onError={() => setMediaUnavailable(true)}
+                  onError={() => {
+                    if (originalUrl && mediaUrl !== originalUrl) { setMediaUrl(originalUrl); setPreviewUrl(null); setPreviewStatus("failed"); }
+                    else setMediaUnavailable(true);
+                  }}
                 />
               ) : (
                 <div className="data-message">

@@ -1,0 +1,10 @@
+[Unit]
+Description=Prepare approval video previews
+
+[Timer]
+OnBootSec=60
+OnUnitInactiveSec=15
+Unit=meedoo-review-previews.service
+
+[Install]
+WantedBy=timers.target

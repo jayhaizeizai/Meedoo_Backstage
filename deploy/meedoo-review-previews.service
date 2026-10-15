@@ -1,0 +1,11 @@
+[Unit]
+Description=MeeDoo approval preview conversion
+After=network-online.target meedoo.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/meedoo
+EnvironmentFile=/etc/meedoo/meedoo.env
+ExecStart=/usr/bin/node /opt/meedoo/scripts/sync-review-previews.mjs
+TimeoutStartSec=680
+UMask=0077

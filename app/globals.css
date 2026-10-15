@@ -3121,3 +3121,6 @@ dialog.upload-checklist-dialog::backdrop { background:#17112c70; }
 dialog.upload-checklist-dialog { height:min(760px,85dvh); overflow:hidden; }
 .upload-checklist-dialog .upload-checklist-dialog-body { flex:1 1 0; min-height:0; min-width:0; overflow-y:auto; }
 .upload-checklist-dialog > header,.upload-checklist-dialog > footer { position:static; background:#fff; z-index:auto; }
+
+.review-preview-controls { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:12px; font-size:13px; }
+.review-preview-controls small { color:#778099; }
