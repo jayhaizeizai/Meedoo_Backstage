@@ -1,6 +1,6 @@
 # MeeDoo Backstage 接手指南
 
-团队短视频后台：Lark 登录 → 上传 → 审批 → 五平台发布 → 定时回收数据 → 数据页与每周核算。技术栈为 Next.js App Router、React、TypeScript、PostgreSQL；通过 Upload-Post 对接社交平台。
+团队短视频后台：Lark 登录 → 上传 → 审批 → 多平台发布 → 定时回收数据 → 数据页与每周核算。技术栈为 Next.js App Router、React、TypeScript、PostgreSQL；通过 Upload-Post 对接社交平台。
 
 ## 接手前必读
 
@@ -86,7 +86,7 @@ docs/                        专项说明、历史发布记录
 | ------------- | -------------------------------------------------------------------------------------------- |
 | 登录/权限     | `auth.ts`、`server-auth.ts`、`safe-return-to.ts`、根目录 `proxy.ts`                          |
 | 上传/媒体     | `upload-staging.ts`、`video-probe.ts`、`media-url.ts`                                        |
-| 五平台文案    | `social-platforms.ts`、`platform-content.ts`                                                 |
+| 多平台文案    | `social-platforms.ts`、`platform-content.ts`                                                 |
 | 审批/发布     | `approvals.ts`、`publish-approved.ts`、`social-publish-fields.ts`、`facebook-destination.ts` |
 | 状态/记录     | `publication-status.ts`、`records.ts`                                                        |
 | 平台请求/同步 | `upload-post.ts`、`upload-post-sync.ts`、`profile-analytics.ts`                              |
@@ -270,3 +270,12 @@ MiniMax reference videos and audio use the same durable upload queue and owner/c
 ### 审批视频流畅预览
 
 审批页支持后台生成的 720p H.264 预览与原画切换；原片继续用于发布。需要安装独立预览定时任务，详见 [预览部署与验证](docs/review-previews.md)。
+
+
+### Threads video publishing
+
+Threads uses the same upload, shared/individual copy, checklist, approval, status and single-platform retry flow. Set `MEEDOO_PLATFORM_THREADS_ENABLED=true` in `/etc/meedoo/meedoo.env` and restart after connecting Threads to that environment's Upload-Post profile. This new flag defaults to off, so an unconnected account does not block existing installations. Existing five-platform flags retain their defaults.
+
+`threads_title` contains title + two newlines + caption; Threads has no separate description. Upload and approval validation enforce a conservative 500 UTF-16-unit combined text budget; video duration must be known and at most 300 seconds. The existing 9:16 rule still applies. Old records retain their original target platforms and are never automatically republished to Threads.
+
+Labels, filters and generic status/analytics handling use the shared catalog. Only metrics actually returned by Upload-Post are available; Threads follower gains are not estimated. Official reference: https://docs.upload-post.com/api/upload-video/#threads . Tests: `node scripts/verify-platform-settings.cjs`, `node scripts/verify-facebook-x.cjs`, and test-only isolated database coverage `node scripts/verify-facebook-x.cjs --db` (no real publication).

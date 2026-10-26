@@ -24,6 +24,7 @@ const {
   requiredPlatforms,
   socialTextLength,
 } = require("../lib/social-platforms.ts");
+process.env.MEEDOO_PLATFORM_THREADS_ENABLED = "true";
 const forms = [],
   urls = [];
 let pinned = "page-a",
@@ -105,6 +106,7 @@ const content = {
   ...legacy,
   facebook: { title: "Facebook title", caption: "Facebook caption" },
   x: { title: "X title", caption: "X caption" },
+  threads: { title: "Threads title", caption: "Threads caption" },
 };
 assert.equal(
   contentLib.validatePlatformContent(content, supportedPlatforms),
@@ -125,7 +127,7 @@ assert.equal(
 const form = new FormData();
 require("../lib/social-publish-fields.ts").appendSocialPublishFields(
   form,
-  ["facebook", "x"],
+  ["facebook", "x", "threads"],
   content,
   "fallback",
   "fallback",
@@ -135,6 +137,11 @@ assert.equal(form.get("facebook_page_id"), "page-a");
 assert.equal(form.get("facebook_media_type"), "REELS");
 assert.equal(form.get("facebook_description"), "Facebook caption");
 assert.equal(form.get("x_title"), "X title\n\nX caption");
+assert.equal(form.get("threads_title"), "Threads title\n\nThreads caption");
+assert.equal(form.has("threads_description"), false);
+for (const [length, expected] of [[497, null], [498, "THREADS_SOCIAL_TEXT_TOO_LONG"]]) {
+  assert.equal(contentLib.validatePlatformContent({...content, threads: {title: "T", caption: "a".repeat(length)}}, ["threads"]), expected);
+}
 assert.throws(
   () =>
     require("../lib/social-publish-fields.ts").appendSocialPublishFields(
@@ -185,6 +192,7 @@ async function main() {
     await assert.rejects(
       () =>
         approvals.submitForReview({
+          videoType: "likes",
           session,
           user,
           platformContent: content,
@@ -192,8 +200,11 @@ async function main() {
         }),
       /FACEBOOK_REELS_VIDEO_REQUIREMENTS/,
     );
+    duration = 301;
+    await assert.rejects(() => approvals.submitForReview({session, user, videoType: "likes", platformContent: content, platforms: ["threads"]}), /THREADS_VIDEO_DURATION_LIMIT/);
     duration = 25;
     await approvals.submitForReview({
+      videoType: "likes",
       session,
       user,
       platformContent: content,
@@ -223,7 +234,7 @@ async function main() {
           [id],
         )
       ).rows[0].n,
-      "5",
+      "6",
     );
     await require("../lib/publish-approved.ts").publishApprovedUpload(id);
     assert.deepEqual(forms[0].getAll("platform[]"), supportedPlatforms);
@@ -243,13 +254,18 @@ async function main() {
     assert.equal(response.status, 200);
     assert.deepEqual(forms[1].getAll("platform[]"), ["facebook"]);
     assert.equal(forms[1].get("facebook_page_id"), "page-a");
+    await db.query("UPDATE publications SET status='failed' WHERE upload_id=$1 AND platform='threads'", [id]);
+    const threadsRetry = await retry.POST(new Request("https://fixture/retry", {method: "POST", body: JSON.stringify({uploadId: id, platform: "threads"})}));
+    assert.equal(threadsRetry.status, 200);
+    assert.deepEqual(forms[2].getAll("platform[]"), ["threads"]);
+    assert.equal(forms[2].get("threads_title"), "Threads title\n\nThreads caption");
     await db.query(
       "UPDATE publications SET status='completed',platform_post_id='fixture-'||platform WHERE upload_id=$1",
       [id],
     );
     assert.equal(
       await require("../lib/upload-post-sync.ts").syncAnalytics(),
-      5,
+      6,
     );
     const profile = require("../lib/profile-analytics.ts");
     await profile.syncProfileAnalytics();
@@ -266,7 +282,7 @@ async function main() {
     assert.equal(dashboard.team.byPlatform.x.metrics.shares, 8);
     assert.equal(dashboard.team.byPlatform.x.metrics.followers, null);
     assert.equal(dashboard.team.byPlatform.facebook.metrics.retention, null);
-    assert.equal(dashboard.team.mix.length, 5);
+    assert.equal(dashboard.team.mix.length, 6);
     const video = dashboard.videos.find((v) => v.id === id);
     assert.ok(video, "Dashboard includes fixture video");
     const facebook = video.platforms.find((p) => p.platform === "facebook");

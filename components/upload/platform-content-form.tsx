@@ -100,6 +100,11 @@ export function PlatformContentForm({
           )}
         </p>
       )}
+      {platforms.includes("threads") && (
+        <p className="field-rule">
+          {text("Threads：视频最长 5 分钟；标题和文案合计最多 500 字符。可关闭内容同步，单独编辑 Threads 文案。", "Threads: videos up to 5 minutes; title and caption together up to 500 characters. Turn off content sync to edit Threads separately.")}
+        </p>
+      )}
       {platforms.includes("x") && (
         <p className="field-rule">
           {text(
@@ -193,6 +198,7 @@ export function PlatformContentForm({
                       / 280 (X) ·{" "}
                     </>
                   )}
+                  {platforms.includes("threads") && <>{combined} / 500 (Threads) · </>}
                   {combined} / 2,200
                 </small>
               </label>
@@ -305,8 +311,8 @@ export function PlatformContentForm({
                 "The shared title and caption are saved for enabled platforms; turn sync off to customize them.",
               )
             : text(
-                "已启用平台标题和文案必须全部填写。标题 1–100 字；每组标题与文案合计 ≤2,200 字；不可包含 < 或 >。",
-                "All five platforms’ titles and captions are required. Each title is 1–100 chars; each title + caption is ≤2,200 chars; no < or >.",
+                "已启用平台标题和文案必须全部填写。标题 1–100 字；标题与文案合计：Threads ≤500 字符、X ≤280 加权字符、其他平台 ≤2,200 字符；不可包含 < 或 >。",
+                "Titles and captions are required for all enabled platforms. Title: 1–100 characters; combined text: Threads ≤500, X ≤280 weighted, others ≤2,200; no < or >.",
               )}
       </small>
     </>

@@ -62,6 +62,8 @@ export async function submitForReview(input: {
   )
     throw new Error("X_VIDEO_DURATION_LIMIT");
   const display = input.platformContent.youtube;
+  if (input.platforms.includes("threads") && (!probe.duration || probe.duration > 300))
+    throw new Error("THREADS_VIDEO_DURATION_LIMIT");
   await transaction(async (client) => {
     const transitioned = await client.query(
       `UPDATE upload_sessions SET status='submitted',expires_at=now()+interval '60 days',updated_at=now()

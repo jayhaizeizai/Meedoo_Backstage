@@ -185,7 +185,7 @@ export async function syncProfileAnalytics() {
           ],
         );
         const attribution =
-          platform === "facebook" || platform === "x"
+          platform === "facebook" || platform === "x" || platform === "threads"
             ? { attributed: 0, estimatedAttribution: false }
             : await attributeFollowerGain(
                 client,

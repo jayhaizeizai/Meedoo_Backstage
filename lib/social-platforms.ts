@@ -5,6 +5,7 @@ export const supportedPlatforms = [
   "youtube",
   "facebook",
   "x",
+  "threads",
 ] as const;
 export const requiredPlatforms = supportedPlatforms;
 export type SocialPlatform = (typeof supportedPlatforms)[number];
@@ -19,6 +20,7 @@ export const platformMeta = {
   youtube: { name: "YouTube", icon: "▶", className: "yt", color: "#ff4c4c" },
   facebook: { name: "Facebook", icon: "f", className: "fb", color: "#1877f2" },
   x: { name: "X", icon: "𝕏", className: "x", color: "#171717" },
+  threads: { name: "Threads", icon: "@", className: "threads", color: "#6154a4" },
 } as const;
 
 export function viewMetricKeys(platform: string) {
@@ -40,4 +42,4 @@ export function socialTextLength(platform: string, value: string) {
     : value.length;
 }
 export const socialTextLimit = (platform: string) =>
-  platform === "x" ? 280 : 2200;
+  platform === "x" ? 280 : platform === "threads" ? 500 : 2200;

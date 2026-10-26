@@ -862,6 +862,7 @@ function Conversions({
     tiktok: "TikTok",
     facebook: "Facebook Reels",
     x: "X",
+    threads: "Threads",
   };
 
   return (

@@ -5,7 +5,7 @@ export function getEnabledPlatforms(): SocialPlatform[] {
   return supportedPlatforms.filter((platform) => {
     const value =
       process.env[`MEEDOO_PLATFORM_${platform.toUpperCase()}_ENABLED`];
-    if (value === undefined) return true;
+    if (value === undefined) return platform !== "threads";
     return ["true", "1", "on"].includes(value.trim().toLowerCase());
   });
 }

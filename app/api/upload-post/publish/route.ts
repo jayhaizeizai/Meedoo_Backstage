@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
   const validationCode = validatePlatformContent(platformContent, platforms);
   if (validationCode)
     return error(
-      "Each platform requires a valid title and caption. Titles must be 1–100 characters; title and caption together must be at most 2,200 characters.",
+      "各平台标题和文案必须符合限制 / Valid title and caption required: title ≤100; combined text ≤500 for Threads, ≤280 weighted characters for X, ≤2,200 for other platforms.",
       400,
       validationCode,
     );
@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
     );
   } catch (cause) {
     const code = cause instanceof Error ? cause.message : "unknown";
+    if (code === "THREADS_VIDEO_DURATION_LIMIT")
+      return error("Threads 视频不能超过 5 分钟 / Threads videos must have a known duration of no more than 5 minutes.", 400, code);
     console.error("Review submission failed", code);
     if (code === "FACEBOOK_REELS_VIDEO_REQUIREMENTS")
       return error(

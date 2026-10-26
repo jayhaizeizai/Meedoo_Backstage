@@ -3018,6 +3018,10 @@
   background: #171717;
   color: #fff;
 }
+.pi.threads {
+  background: #171717;
+  color: #fff;
+}
 .platform-selector {
   flex-wrap: wrap;
 }

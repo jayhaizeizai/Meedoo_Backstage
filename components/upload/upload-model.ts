@@ -5,6 +5,7 @@ export const platformOptions = [
   { id: "youtube", name: "YouTube Shorts", icon: "▶", className: "yt" },
   { id: "facebook", name: "Facebook Reels", icon: "f", className: "fb" },
   { id: "x", name: "X", icon: "𝕏", className: "x" },
+  { id: "threads", name: "Threads", icon: "@", className: "threads" },
 ] as const;
 
 export const MAX_VIDEO_BYTES = Math.floor(1.5 * 1024 * 1024 * 1024);
@@ -24,6 +25,7 @@ export const emptyPlatformContent = (): PlatformContentState => ({
   youtube: { title: "", caption: "" },
   facebook: { title: "", caption: "" },
   x: { title: "", caption: "" },
+  threads: { title: "", caption: "" },
 });
 
 export type ConnectionState = {

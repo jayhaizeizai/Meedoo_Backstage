@@ -16,7 +16,7 @@ const {
   platformSelectionEnabled,
 } = require("../lib/platform-settings.ts");
 const all = ["tiktok", "instagram", "youtube", "facebook", "x"];
-const keys = all.map((p) => `MEEDOO_PLATFORM_${p.toUpperCase()}_ENABLED`);
+const keys = [...all, "threads"].map((p) => `MEEDOO_PLATFORM_${p.toUpperCase()}_ENABLED`);
 const saved = keys.map((k) => process.env[k]);
 try {
   keys.forEach((k) => delete process.env[k]);
@@ -36,8 +36,13 @@ try {
   for (const key of keys) {
     keys.forEach((k) => delete process.env[k]);
     process.env[key] = "typo";
-    assert.equal(getEnabledPlatforms().length, 4);
+    assert.equal(getEnabledPlatforms().length, key.includes("THREADS") ? 5 : 4);
   }
+  keys.forEach((k) => delete process.env[k]);
+  process.env.MEEDOO_PLATFORM_THREADS_ENABLED = "true";
+  assert.deepEqual(getEnabledPlatforms(), [...all, "threads"]);
+  assert.equal(platformSelectionEnabled(all), false);
+  assert.equal(platformSelectionEnabled([...all, "threads"]), true);
   keys.forEach((k) => (process.env[k] = "false"));
   assert.equal(platformSelectionEnabled([]), false);
   console.log(
