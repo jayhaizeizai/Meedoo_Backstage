@@ -712,16 +712,7 @@ function Rules({ language }: { language: "zh" | "en" }) {
         </article>
         <article className="card bonus-rule-panel">
           <p className="eyebrow">BONUS ADJUSTMENT</p>
-          <h2>{t("团队与个人奖金", "Team and individual bonus")}</h2>
-          <div className="team-bonus">
-            <small>{t("团队成就奖金", "Team achievement bonus")}</small>
-            <strong>
-              {t(
-                "三个月净收入每达到 $370,000，奖励税前 1 个月工资",
-                "+1 month pre-tax salary per $370,000 net revenue achieved in 3 months",
-              )}
-            </strong>
-          </div>
+          <h2>{t("个人奖金", "Individual bonus")}</h2>
           <div className="ranking-list">
             {[
               [
