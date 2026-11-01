@@ -279,3 +279,10 @@ Threads uses the same upload, shared/individual copy, checklist, approval, statu
 `threads_title` contains title + two newlines + caption; Threads has no separate description. Upload and approval validation enforce a conservative 500 UTF-16-unit combined text budget; video duration must be known and at most 300 seconds. The existing 9:16 rule still applies. Old records retain their original target platforms and are never automatically republished to Threads.
 
 Labels, filters and generic status/analytics handling use the shared catalog. Only metrics actually returned by Upload-Post are available; Threads follower gains are not estimated. Official reference: https://docs.upload-post.com/api/upload-video/#threads . Tests: `node scripts/verify-platform-settings.cjs`, `node scripts/verify-facebook-x.cjs`, and test-only isolated database coverage `node scripts/verify-facebook-x.cjs --db` (no real publication).
+
+
+### Dashboard navigation (2026-11-02)
+
+The dashboard opens directly to video data. Team overview, individual score views and leaderboard have no navigation/render entry points. The marketing weekly report page redirects to `/dashboard`; its underlying historical accounting data/API are retained. Both desktop and mobile navigation omit the weekly report link.
+
+Uploader filtering uses a dropdown beside the platform filter. `lib/uploader-filter.ts` holds display-only aliases for departed members (小安/XiaoAn, Yihan/Yihan Liang, Wangziyi). Matching ignores case, whitespace, dots, underscores and hyphens. This hides options only: All uploaders still includes historical videos; no user permissions or records are deleted.

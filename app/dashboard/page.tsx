@@ -1,4 +1,5 @@
 "use client";
+import { isVisibleUploader } from "../../lib/uploader-filter";
 import { PlatformDailyChart } from "../../components/platform-daily-chart";
 import { useAuth } from "../../components/auth-provider";
 
@@ -174,7 +175,6 @@ function combinePlatforms(values: PlatformAggregate[]) {
 export default function DashboardPage() {
   const { language, text } = useLanguage();
   const [data, setData] = useState<DashboardData | null>(null);
-  const [active, setActive] = useState("team");
   const [days, setDays] = useState(30);
   const [error, setError] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -216,10 +216,6 @@ export default function DashboardPage() {
       setSyncing(false);
     }
   }
-  const person = useMemo(
-    () => data?.people.find((item) => item.id === active) ?? null,
-    [data, active],
-  );
   const status = data
     ? {
         zh: `更新于 ${new Date(data.updatedAt).toLocaleString("zh-CN", { timeZone: "Asia/Singapore" })}`,
@@ -235,8 +231,8 @@ export default function DashboardPage() {
             <h1>{text("数据看板", "Performance dashboard")}</h1>
             <p>
               {text(
-                "查看团队、成员和视频在不同时间与平台上的表现。",
-                "Explore performance by team, member, video, time and platform.",
+                "按上传者、时间和平台查看视频表现。",
+                "Explore video performance by uploader, time and platform.",
               )}
             </p>
           </div>
@@ -271,47 +267,7 @@ export default function DashboardPage() {
                 "Dates use Singapore time. Video lists and totals show cumulative metrics for videos uploaded in the selected range, not gains across all videos during that period.",
               )}
             </p>
-            <div className="tabs" role="tablist">
-              <button
-                className={active === "team" ? "active" : ""}
-                onClick={() => setActive("team")}
-              >
-                {text("团队总体", "Team overview")}
-              </button>
-              {leaderboardEnabled && (
-                <button
-                  className={active === "leaderboard" ? "active" : ""}
-                  onClick={() => setActive("leaderboard")}
-                >
-                  🏆 {text("排行榜", "Leaderboard")}
-                </button>
-              )}
-              <button
-                className={active === "videos" ? "active" : ""}
-                onClick={() => setActive("videos")}
-              >
-                ▶ {text("视频数据", "Video data")}
-              </button>
-              {data.people.map((item) => (
-                <button
-                  key={item.id}
-                  className={active === item.id ? "active" : ""}
-                  onClick={() => setActive(item.id)}
-                >
-                  {item.name}
-                </button>
-              ))}
-            </div>
-            {active === "team" && <Overview data={data} language={language} />}
-            {person && (
-              <PersonView person={person} data={data} language={language} />
-            )}
-            {leaderboardEnabled && active === "leaderboard" && (
-              <Leaderboard data={data} language={language} />
-            )}
-            {active === "videos" && (
-              <VideoData data={data} language={language} onSynced={load} />
-            )}
+            <VideoData data={data} language={language} onSynced={load} />
           </>
         )}
       </section>
@@ -1089,7 +1045,7 @@ function VideoData({
   const uploaders = useMemo(
     () => [
       ...new Map(
-        data.videos.map((video) => [
+        data.videos.filter((video) => isVisibleUploader(video.owner)).map((video) => [
           video.ownerId ?? `name:${video.owner}`,
           video.owner,
         ]),
@@ -1162,24 +1118,14 @@ function VideoData({
           </p>
         </div>
       </div>
-      <div className="uploader-tabs">
-        <button
-          className={owner === "all" ? "active" : ""}
-          onClick={() => setOwner("all")}
-        >
-          {t("全部上传者", "All uploaders")}
-        </button>
-        {uploaders.map(([key, name]) => (
-          <button
-            key={key}
-            className={owner === key ? "active" : ""}
-            onClick={() => setOwner(key)}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
       <div className="video-filters">
+        <label>
+          {t("上传者", "Uploader")}
+          <select value={owner} onChange={(event) => setOwner(event.target.value)}>
+            <option value="all">{t("全部上传者", "All uploaders")}</option>
+            {uploaders.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+          </select>
+        </label>
         <label>
           {t("平台", "Platform")}
           <select value={selectedPlatform} onChange={(event) => setPlatform(event.target.value as Platform | "all")}>

@@ -132,14 +132,7 @@ export function AppShell({ active, status, children }: AppShellProps) {
                 <i>{text("视频数据看板", "Video analytics dashboard")}</i>
               </Link>
               {role === "approver" && <Link className={active === "generation-history" ? "active" : ""} href="/generation-history" title={text("团队生成记录","Team generation history")}><span aria-hidden="true">▤</span><i>{text("团队生成记录","Team generation history")}</i></Link>}
-              <Link
-                className={active === "weekly-report" ? "active" : ""}
-                href="/weekly-report"
-                title={text("市场部每周周报", "Marketing weekly report")}
-              >
-                <span aria-hidden="true">▣</span>
-                <i>{text("市场部每周周报", "Marketing weekly report")}</i>
-              </Link>
+
             </div>
           </section>
         </nav>
