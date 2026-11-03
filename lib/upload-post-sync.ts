@@ -1,3 +1,4 @@
+import { syncShopify } from "./shopify-sync";
 import { providerPublicationState } from "./provider-publication-state";
 import { updateUploadSummary } from "./publication-status";
 import { withTikTokRetention } from "./tiktok-retention";
@@ -313,8 +314,11 @@ async function runSync() {
     milestones = { error: "MILESTONE_DETECTION_FAILED" };
   }
   await backfillTikTokRetention();
+  let shopify: unknown;
+  try { shopify = await syncShopify(); } catch { shopify = { error: "SHOPIFY_SYNC_FAILED" }; }
   await refreshDashboardCache();
   return {
+    shopify,
     cleaned,
     history,
     statuses,

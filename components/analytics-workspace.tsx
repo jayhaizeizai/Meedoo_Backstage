@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ShopifySummary } from "./shopify-summary";
 import { AppShell } from "./app-shell";
 import { useAuth } from "./auth-provider";
 import { useLanguage } from "./language-provider";
@@ -86,6 +87,7 @@ export function AnalyticsWorkspace({ mode }: { mode: "team" | "content" }) {
       {invalidDates && <div className="data-message error" role="alert">{text("请选择最近一年内有效的起止日期。", "Choose a valid date range within the last year.")}</div>}
       {!data && !error && <div className="data-message">{text("正在载入…", "Loading…")}</div>}
       {data && !invalidDates && (mode === "team" ? <>
+        <ShopifySummary from={from} to={to} platform={platform} owner={owner} />
         <section className="card analytics-table-card"><h2>{text("渠道与销售表现", "Channel & Sales Performance")}</h2><div className="analytics-table-scroll"><table className="analytics-table"><thead><tr>{[text("表现", "Performance"), "Views", text("网站访问", "Website Visits"), text("净收入", "Net Revenue"), text("订单数", "Number of Orders"), text("退款", "Refunds")].map((h,i) => <th key={h} scope="col" title={i === 3 ? text("销售额 − 退款", "Revenue − Refunds") : undefined}>{h}</th>)}</tr></thead><tbody>
           <tr className="analytics-total"><th scope="row">{text("团队总计", "Team Total")}</th>{Array.from({length:5},(_,i)=><td key={i}>—</td>)}</tr>
           <tr className="analytics-organic"><th scope="row">{text("自然流量总计", "Organic Total")}</th><td>{format(total.views)}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
