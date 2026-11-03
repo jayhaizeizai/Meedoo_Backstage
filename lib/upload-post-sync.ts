@@ -1,3 +1,4 @@
+import { syncShopifyTraffic } from "./shopify-traffic";
 import { syncShopify } from "./shopify-sync";
 import { providerPublicationState } from "./provider-publication-state";
 import { updateUploadSummary } from "./publication-status";
@@ -314,11 +315,14 @@ async function runSync() {
     milestones = { error: "MILESTONE_DETECTION_FAILED" };
   }
   await backfillTikTokRetention();
+  let shopifyTraffic: unknown;
+  try { shopifyTraffic = await syncShopifyTraffic(); } catch { shopifyTraffic = { error: "SHOPIFY_TRAFFIC_SYNC_FAILED" }; }
   let shopify: unknown;
   try { shopify = await syncShopify(); } catch { shopify = { error: "SHOPIFY_SYNC_FAILED" }; }
   await refreshDashboardCache();
   return {
     shopify,
+    shopifyTraffic,
     cleaned,
     history,
     statuses,

@@ -1,3 +1,4 @@
+import { shopifyTrafficSummary, syncShopifyTraffic } from "../../../lib/shopify-traffic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "../../../lib/server-auth";
 import { isApprover } from "../../../lib/approvals";
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
   const platform = p.get("platform") ?? "all", owner = p.get("owner") ?? "all";
   const validDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0,10) === s;
   if (!validDay(from) || !validDay(to) || from > to || !(platform === "all" || supportedPlatforms.some(v=>v===platform)) || owner.length > 200) return NextResponse.json({success:false},{status:400});
-  try { return NextResponse.json({success:true,...await shopifySummary(from,to,platform,owner)}, {headers:{"Cache-Control":"no-store"}}); }
+  try { const traffic = await shopifyTrafficSummary(from,to,platform,owner).catch(()=>({ready:false})); return NextResponse.json({success:true,...await shopifySummary(from,to,platform,owner),traffic}, {headers:{"Cache-Control":"no-store"}}); }
   catch { return NextResponse.json({success:false,message:"Shopify data unavailable"},{status:503}); }
 }
 export async function POST(request: NextRequest) {
@@ -23,6 +24,6 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({success:false},{status:401});
     if (!await isApprover(user.openId)) return NextResponse.json({success:false},{status:403});
   }
-  try { return NextResponse.json({success:true,...await syncShopify()}); }
+  try { const traffic = await syncShopifyTraffic().catch(()=>({error:"SHOPIFY_TRAFFIC_SYNC_FAILED"})); return NextResponse.json({success:true,...await syncShopify(),traffic}); }
   catch { return NextResponse.json({success:false,message:"Shopify sync failed. Check store credentials and read_orders permission."},{status:502}); }
 }

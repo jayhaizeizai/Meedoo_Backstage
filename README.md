@@ -316,3 +316,10 @@ Shopify visits/sales/refunds/orders and external channels (creators, ads, search
 - Run `node scripts/verify-shopify.cjs` and TypeScript check. Live credential, scope, GraphQL and reconciliation verification remains required before claiming connected.
 
 Shopify activation verified on TEST 2026-11-03: dedicated app 442996359169 installed with read_orders; credentials remain only in /etc/meedoo/meedoo.env. Live Admin GraphQL sync and repeat-sync idempotency passed. Test dashboard shows real received/refunded amounts. Production is not configured. No matching video UTM exists in the initial historical sample; do not retroactively attribute it.
+
+
+### Shopify traffic (2026-11-03, report permission pending)
+
+`lib/shopify-traffic.ts` queries ShopifyQL `FROM sessions` in Singapore time, excluding bots. A 59-calendar-day cache is refreshed alongside the existing background sync. Page requests read only the database cache. Sessions and pageviews are additive; unique visitors are deliberately not summed across dates/UTMs. The platform filter uses exact supported utm_source; member attribution additionally requires our organic_social/meedoo_video UUID convention and an approved upload on the same platform. No historic campaign is guessed to belong to a video.
+
+Requires read_reports and Shopify's Level 2 protected-customer-data eligibility for ShopifyQL, in addition to existing read_orders. Queries request only aggregate counts and UTM grouping, never customer identity fields. Raw arbitrary UTM text is discarded before caching. Scope/access/parser failures preserve the last successful snapshot and its timestamp; before first successful sync show unavailable, not zero. A response reaching the 10,000-row cap fails without replacing cached totals. No attempt to treat a truncated response as complete. /api/shopify returns traffic separately so missing report permission does not break order data. Run scripts/verify-shopify-traffic.cjs. The original channel matrix remains awaiting full channel classification.
