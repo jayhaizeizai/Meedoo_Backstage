@@ -3128,3 +3128,11 @@ dialog.upload-checklist-dialog { height:min(760px,85dvh); overflow:hidden; }
 
 .review-preview-controls { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:12px; font-size:13px; }
 .review-preview-controls small { color:#778099; }
+
+.video-utm-links { margin: 14px 0; min-width: 0; }
+.video-utm-links summary { cursor: pointer; font-weight: 600; }
+.video-utm-links p { font-size: 12px; }
+.video-utm-row { display: flex; gap: 8px; align-items: end; margin-top: 10px; }
+.video-utm-row label { display: grid; gap: 4px; flex: 1; min-width: 0; font-size: 12px; }
+.video-utm-row input { width: 100%; min-width: 0; box-sizing: border-box; padding: 8px; border: 1px solid #dddfea; border-radius: 6px; }
+.video-utm-row button { flex-shrink: 0; padding: 8px 12px; border: 1px solid #dddfea; border-radius: 6px; background: #f6f5ff; cursor: pointer; }

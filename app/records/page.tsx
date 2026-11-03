@@ -1,9 +1,12 @@
 "use client";
+import { VideoUtmLinks } from "../../components/video-utm-links";
+import type { VideoUtmLink } from "../../lib/video-utm";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "../../components/app-shell";
 import { useLanguage } from "../../components/language-provider";
 type RecordItem = {
+  utmLinks?: VideoUtmLink[];
   uploader_name: string | null;
   media_available: boolean;
   id: string;
@@ -126,6 +129,7 @@ export default function RecordsPage() {
                     <i key={p}>{p}</i>
                   ))}
                 </div>
+                <VideoUtmLinks links={item.utmLinks} />
                 <div className="record-actions">
                   {item.media_available && !unavailable.includes(item.id) ? (
                     <button

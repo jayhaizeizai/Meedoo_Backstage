@@ -1,3 +1,4 @@
+import { approvedVideoUtmLinks } from "./video-utm";
 import { isVideoType, type VideoType } from "./video-type";
 import { assertFacebookDestination } from "./facebook-destination";
 import { invalidateDashboardCache } from "./dashboard-cache";
@@ -153,6 +154,7 @@ export async function listReviewRecords(user: MeeDooUser, pendingOnly = false) {
     result.rows.map(async (record) => ({
       ...record,
       title: uploadTitle(record),
+      utmLinks: approvedVideoUtmLinks(record),
       media_available: Boolean(
         !record.file_deleted_at &&
           record.media_path &&
@@ -188,7 +190,7 @@ export async function getReviewRecord(id: string, user: MeeDooUser) {
   return {
     approver,
     record: result.rows[0]
-      ? { ...result.rows[0], title: uploadTitle(result.rows[0]) }
+      ? { ...result.rows[0], title: uploadTitle(result.rows[0]), utmLinks: approvedVideoUtmLinks(result.rows[0]) }
       : null,
     history: history.rows,
   };

@@ -1,4 +1,6 @@
 "use client";
+import { VideoUtmLinks } from "../../../components/video-utm-links";
+import type { VideoUtmLink } from "../../../lib/video-utm";
 
 import { videoTypes } from "../../../lib/video-type";
 import Link from "next/link";
@@ -15,6 +17,7 @@ type PostContent = { title: string; caption: string };
 type PlatformContent = Record<string, PostContent>;
 type Decision = "approved" | "rejected";
 type RecordItem = {
+  utmLinks?: VideoUtmLink[];
   video_type: string | null;
   id: string;
   title: string;
@@ -287,6 +290,7 @@ export default function ApprovalDetail() {
                 {item.review_status}
               </span>
               <h1>{heading}</h1>
+              <VideoUtmLinks links={item.utmLinks} />
               <p>{text("视频类型：", "Video type: ")}{(() => {
                 const type = videoTypes.find((value) => value.value === item.video_type);
                 return type ? text(type.zh, type.en) : text("未分类", "Unclassified");

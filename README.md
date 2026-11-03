@@ -286,3 +286,10 @@ Labels, filters and generic status/analytics handling use the shared catalog. On
 The dashboard opens directly to video data. Team overview, individual score views and leaderboard have no navigation/render entry points. The marketing weekly report page redirects to `/dashboard`; its underlying historical accounting data/API are retained. Both desktop and mobile navigation omit the weekly report link.
 
 Uploader filtering uses a dropdown beside the platform filter. `lib/uploader-filter.ts` holds display-only aliases for departed members (小安/XiaoAn, Yihan/Yihan Liang, Wangziyi). Matching ignores case, whitespace, dots, underscores and hyphens. This hides options only: All uploaders still includes historical videos; no user permissions or records are deleted.
+
+
+### Homepage UTM links (2026-11-03)
+
+Authorized review-records and approval-detail responses include `utmLinks` for approved videos only. Links are deterministically generated from the immutable upload ID and stored target platforms: `https://meedoo.fun/?utm_source=<platform>&utm_medium=organic_social&utm_campaign=meedoo_video&utm_content=<upload-id>`. Retries/title edits do not change them; historical approved records are supported. No database migration or backfill is needed. Pending/rejected/withdrawn records expose no links.
+
+Upload history and approval detail show expandable copyable links. Links do not automatically modify publishing copy, repost videos, or prove a platform successfully published. This release does not collect storefront visits or Shopify orders; Shopify integration remains a separate step. Run `node scripts/verify-video-utm.cjs`.
