@@ -15,7 +15,11 @@ const labels: Record<PerformanceKey, [string, string]> = {
   views: ["浏览量", "Views"], averageRetention: ["平均留存", "Average Retention"], reposts: ["转发", "Reposts"], shares: ["分享", "Shares"], saves: ["收藏", "Bookmark"], comments: ["评论", "Comments"], likes: ["点赞", "Likes"],
 };
 const ownerKey = (v: Video) => v.ownerId ?? `name:${v.owner}`;
-const singaporeDay = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Singapore", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+const singaporeDay = (date: Date) => {
+  const parts = new Intl.DateTimeFormat("en", { timeZone: "Asia/Singapore", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const part = (type: string) => parts.find(p => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
 function format(value: number | null, key?: PerformanceKey) {
   return value === null ? "—" : key === "averageRetention" ? `${value.toFixed(1)}%` : new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
 }
