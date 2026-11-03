@@ -1,3 +1,4 @@
+import { contentPerformance } from "./content-performance";
 import { supportedPlatforms, viewMetricKeys } from "./social-platforms";
 import { query } from "./db";
 import { loadFollowerHistory } from "./follower-history";
@@ -490,6 +491,7 @@ export async function getDashboardData(days = 30) {
           status: row.publication_status,
           error: row.error_message,
           metrics: normalize(row),
+          contentMetrics: contentPerformance(row.platform, row.metrics, row.video_duration_seconds),
         })),
         metrics: aggregate(videoRows).metrics,
       };

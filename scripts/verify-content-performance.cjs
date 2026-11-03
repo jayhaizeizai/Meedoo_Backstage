@@ -1,0 +1,16 @@
+const fs=require('fs'),ts=require('typescript'),assert=require('assert/strict');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+const {contentPerformance,aggregateContentPerformance}=require('../lib/content-performance.ts');
+const a=contentPerformance('tiktok',{views:100,shares:7,reposts:3,average_time_watched:5},10);
+assert.equal(a.shares,7);assert.equal(a.reposts,3);assert.equal(a.averageRetention,50);
+const b=contentPerformance('youtube',{views:300,average_view_percentage:10,likes:0},null);
+assert.equal(aggregateContentPerformance([a,b]).averageRetention,20);
+assert.equal(aggregateContentPerformance([a,b]).likes,0);
+assert.equal(contentPerformance('facebook',{reach:99,impressions:500},10).views,null);
+assert.equal(contentPerformance('tiktok',{retention:[{second:1,percentage:.5}],full_video_watched_rate:.8},10).averageRetention,null);
+assert.equal(contentPerformance('x',{retweets:4},10).shares,null);
+assert.equal(contentPerformance('x',{retweets:4},10).reposts,4);
+assert.equal(contentPerformance('threads',{views:'',likes:-1},10).views,null);
+assert.equal(aggregateContentPerformance([]).views,null);
+assert.equal(aggregateContentPerformance([a,contentPerformance('threads',{views:1000},10)]).averageRetention,50);
+console.log('PASS distinct shares/reposts, view-weighted actual retention, missing-vs-zero, no reach/score substitution');

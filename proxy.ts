@@ -29,6 +29,7 @@ export const config = {
     "/generation-history/:path*",
     "/upload/:path*",
     "/dashboard/:path*",
+    "/content-analysis/:path*",
     "/records/:path*",
     "/approvals/:path*",
   ],

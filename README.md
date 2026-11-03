@@ -293,3 +293,12 @@ Uploader filtering uses a dropdown beside the platform filter. `lib/uploader-fil
 Authorized review-records and approval-detail responses include `utmLinks` for approved videos only. Links are deterministically generated from the immutable upload ID and stored target platforms: `https://meedoo.fun/?utm_source=<platform>&utm_medium=organic_social&utm_campaign=meedoo_video&utm_content=<upload-id>`. Retries/title edits do not change them; historical approved records are supported. No database migration or backfill is needed. Pending/rejected/withdrawn records expose no links.
 
 Upload history and approval detail show expandable copyable links. Links do not automatically modify publishing copy, repost videos, or prove a platform successfully published. This release does not collect storefront visits or Shopify orders; Shopify integration remains a separate step. Run `node scripts/verify-video-utm.cjs`.
+
+
+### Team Dashboard and Content Analysis (2026-11-03)
+
+`/dashboard` now shows channel/sales and team-content tables; `/content-analysis` shows video detail rows. Both use `components/analytics-workspace.tsx` and the cached 365-day dashboard response with upload-date filters in Singapore time (initial last 30 calendar days), platform/name selectors, All/Everyone and Albert retained. Departed members remain hidden in selectors; their history rolls into a Historical members row to keep totals reconcilable. Content rows paginate at 25 and link to unchanged retention/video details.
+
+The API adds publication `contentMetrics` through `lib/content-performance.ts`. Reposts and shares are separate; Views uses actual views, never reach/impressions. Average Retention is the view-weighted actual average watch percentage (TikTok average watch seconds / duration, or provider percentage), not completion rate or the existing curve score; missing data remains null. Legacy metrics and scoring APIs remain compatible. Cache prefix v7 prevents older cached shapes.
+
+Shopify visits/sales/refunds/orders and external channels (creators, ads, search) are not integrated. They and the all-channel total display unavailable, never sample numbers or zero. Net Revenue is Revenue minus Refunds. Organic represents tracked video publications, not a complete store/channel attribution model. Tests: `node scripts/verify-content-performance.cjs`.

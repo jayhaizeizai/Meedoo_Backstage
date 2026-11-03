@@ -11,6 +11,7 @@ type AppShellProps = {
     | "generate"
     | "upload"
     | "dashboard"
+    | "content-analysis"
     | "generation-history"
     | "weekly-report"
     | "records"
@@ -126,10 +127,13 @@ export function AppShell({ active, status, children }: AppShellProps) {
               <Link
                 className={active === "dashboard" ? "active" : ""}
                 href="/dashboard"
-                title={text("视频数据看板", "Video analytics dashboard")}
+                title={text("团队看板", "Team Dashboard")}
               >
                 <span aria-hidden="true">⌁</span>
-                <i>{text("视频数据看板", "Video analytics dashboard")}</i>
+                <i>{text("团队看板", "Team Dashboard")}</i>
+              </Link>
+              <Link className={active === "content-analysis" ? "active" : ""} href="/content-analysis" title={text("内容分析", "Content Analysis")}>
+                <span aria-hidden="true">▥</span><i>{text("内容分析", "Content Analysis")}</i>
               </Link>
               {role === "approver" && <Link className={active === "generation-history" ? "active" : ""} href="/generation-history" title={text("团队生成记录","Team generation history")}><span aria-hidden="true">▤</span><i>{text("团队生成记录","Team generation history")}</i></Link>}
 
