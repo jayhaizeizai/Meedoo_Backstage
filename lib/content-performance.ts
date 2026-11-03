@@ -7,6 +7,7 @@ function numberFrom(raw: Record<string, unknown> | null, keys: string[]) {
 }
 export function contentPerformance(platform: string, raw: Record<string, unknown> | null, duration: number | string | null): ContentPerformance {
   let averageRetention = numberFrom(raw, ["average_view_percentage", "avg_view_percentage"]);
+  if (platform === "youtube" && averageRetention === 0 && numberFrom(raw, ["average_view_duration_seconds", "watch_time_minutes"]) === null) averageRetention = null;
   if (averageRetention === null && platform === "tiktok") {
     const seconds = numberFrom(raw, ["average_time_watched", "average_view_duration_seconds"]);
     if (seconds !== null && Number(duration) > 0) averageRetention = seconds / Number(duration) * 100;
